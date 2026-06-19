@@ -10,3 +10,4 @@ pillow
 pillow-heif
 httpx
 python-dotenv
+itsdangerous

@@ -1,7 +1,7 @@
 """
-Stub heavy ML dependencies that are absent in the minimal dev install so that
-engine modules can be imported and mocked in unit tests.  When the real package
-is present (CI / full install) sys.modules.setdefault is a no-op.
+Stub heavy ML / image-processing dependencies that are absent in the minimal
+dev install so that modules can be imported and mocked in unit tests.
+When the real package is present (CI / full install), setdefault is a no-op.
 """
 
 import sys
@@ -14,5 +14,9 @@ for _mod in (
     "ultralytics",
     "onnxruntime",
     "torch",
+    "PIL",
+    "PIL.Image",
+    "httpx",
+    "pillow_heif",
 ):
     sys.modules.setdefault(_mod, MagicMock())

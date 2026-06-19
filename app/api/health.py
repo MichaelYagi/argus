@@ -1,16 +1,15 @@
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter
 
 from app import __version__
-from app.core.auth import require_api_key
 from app.core.engine_registry import registry
 
 router = APIRouter()
 
 
 @router.get("/api/health")
-async def health(_: str = Depends(require_api_key)):
+async def health():
     try:
         import onnxruntime as ort
 

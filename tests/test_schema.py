@@ -28,7 +28,11 @@ def _query(sql: str, params: tuple = ()) -> list:
 
 def test_all_tables_exist():
     tables = {r[0] for r in _query("SELECT name FROM sqlite_master WHERE type='table'")}
-    expected = {"identities", "face_embeddings", "source_images", "detections", "models", "settings"}
+    expected = {
+        "users", "api_keys",
+        "identities", "face_embeddings", "source_images", "detections",
+        "models", "settings",
+    }
     assert expected <= tables
 
 
@@ -37,8 +41,8 @@ def test_detections_indexes_exist():
         "SELECT name FROM sqlite_master WHERE type='index' AND tbl_name='detections'"
     )}
     assert {
-        "idx_detections_identity",
-        "idx_detections_type",
+        "idx_detections_user_identity",
+        "idx_detections_user_type",
         "idx_detections_review",
         "idx_detections_source_image",
     } <= indexes
@@ -49,6 +53,13 @@ def test_face_embeddings_model_index_exists():
         "SELECT name FROM sqlite_master WHERE type='index' AND tbl_name='face_embeddings'"
     )}
     assert "idx_face_embeddings_model" in indexes
+
+
+def test_api_keys_hash_index_exists():
+    indexes = {r[0] for r in _query(
+        "SELECT name FROM sqlite_master WHERE type='index' AND tbl_name='api_keys'"
+    )}
+    assert "idx_api_keys_hash" in indexes
 
 
 # ---------------------------------------------------------------------------
