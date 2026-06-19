@@ -18,7 +18,7 @@ pytest -v
 # Run a single test
 pytest -v tests/path/to/test_file.py::test_name
 
-# Run the app natively (no Docker)
+# Run the app natively (no Docker) — binds to port 8100 by default (100 eyes)
 python -m app
 
 # Run via Docker (primary mode)
@@ -45,7 +45,7 @@ If something Shashin-specific comes up later, solve it from Shashin's side (Shas
 - Jinja2 templates, vanilla JS/CSS (no React/Vue) — keep frontend deps at zero beyond what ships in browsers
 - InsightFace for faces (RetinaFace detection + ArcFace embeddings), used directly — not via CompreFace
 - Ultralytics YOLO for objects
-- `onnxruntime` AND `onnxruntime-gpu` both available; GPU usage is a real runtime setting (`system.use_gpu`, default `false`), not a build-time CPU-only decision. See "GPU support" in `DESIGN.md` §2.
+- `onnxruntime-gpu` — includes both `CUDAExecutionProvider` and `CPUExecutionProvider`. The engine auto-detects GPU capability at startup via `onnxruntime.get_available_providers()` and uses GPU if available, CPU otherwise. No user-facing toggle; no build-time variant selection needed.
 - Raw `sqlite3` (stdlib) — no SQLAlchemy, no ORM
 - numpy cosine similarity for face matching — no faiss (revisit only past tens of thousands of enrolled faces)
 - No Celery, no Redis, no job queue framework — use `BackgroundTasks` or asyncio for model downloads
@@ -94,14 +94,12 @@ Full endpoint list in `DESIGN.md` §5. Key things to preserve:
 5. **Multi-face tagging per image** — hover a face bbox on `/tag/{source_image_id}` to see its label, click to assign/correct. Bbox overlays are absolutely-positioned divs computed from stored bbox coordinates scaled to the displayed image size.
 6. **Review queue is faces-only for now.** Objects get the simple inline-correct affordance, no dedicated queue, no ranked suggestions.
 7. **Detection and enrollment accept file upload, URL, or base64 — exactly one.** Every `/api/detect/*` and `/api/*/enroll` endpoint takes one of three: a `file` multipart upload, an `image_url` field, or an `image_base64` field (raw base64 or a `data:image/...;base64,` URI — strip the prefix before decoding). Zero or more than one of the three is a 400. URL fetching deliberately allows private/local IP ranges (192.168.x.x, 10.x.x.x, localhost) — this is a LAN tool meant to pull images from things like a local camera or Pi-hosted service, so **do not add SSRF/private-IP blocking**. Fetch timeout and max size are NOT hardcoded — they're `system.url_fetch_timeout_seconds` (default 10) and `system.url_fetch_max_size_mb` (default 25) in the `settings` table, read from the same live settings cache as every other threshold, editable via the same `/api/settings/*` endpoints and settings page UI — no special-casing required, the settings page is driven generically off the table. Do add Content-Type/content-sniffing validation before decode regardless of source. All three input paths converge to the same `image_bytes` → Pillow `Image.open` step immediately after acquisition — no downstream branching on input source. Supported formats: JPEG, PNG, WEBP, BMP, GIF, TIFF, HEIC/HEIF — validate by sniffing actual content (Pillow format detection), never by trusting file extension or declared Content-Type alone.
-8. **GPU is a runtime toggle, not a build-time decision.** `system.use_gpu` (default `false`) selects `CUDAExecutionProvider` vs `CPUExecutionProvider` for onnxruntime at engine-load time. Toggling it goes through the same hot-swap lock as model switching — no restart. If GPU is requested but unavailable (no card, drivers, or passthrough not configured), fall back to CPU automatically and log it clearly — never fail the request outright. The actual active provider (CPU or GPU) must be visible via `GET /api/health` so it's never silently wrong. Docker GPU passthrough on Windows requires the Docker Desktop WSL2 backend specifically — do not assume this is configured; if `onnxruntime` and `onnxruntime-gpu` turn out to conflict at install time, flag that tradeoff explicitly rather than silently resolving it (see `DESIGN.md` §2 "GPU support" for the fallback approach).
+8. **GPU auto-detected; user can force CPU, never force GPU on incapable hardware.** `system.use_gpu` (default `true`) is a bool setting. The engine uses `CUDAExecutionProvider` only when `system.use_gpu = true` AND `CUDAExecutionProvider` is in `onnxruntime.get_available_providers()`. Setting `system.use_gpu = false` forces CPU even on capable hardware. Setting it to `true` on a system where GPU is not available is rejected by `PUT /api/settings/system.use_gpu` with a 400. The active provider must be visible in `GET /api/health`.
 
 ## Open decisions flagged for you
 
 These are called out in `DESIGN.md` §7 — resolve sensibly, but flag the choice made in your PR/commit description rather than silently picking one:
 
-- GPU passthrough status on this specific Docker Desktop install (the `system.use_gpu` setting and fallback logic are designed; whether the WSL2/CUDA prerequisite is actually configured on this machine still needs confirming when this gets implemented)
-- Whether `onnxruntime` and `onnxruntime-gpu` can coexist in the same install without conflict — if not, resolve via build arg (see `DESIGN.md` §2) and flag it
 - Exact async mechanism for model downloads (BackgroundTasks vs. simple asyncio task)
 - Whether model activation should be synchronous (blocks until swapped) or return a job id, based on observed weight-load time
 - Crop padding application details (`system.crop_padding`, default 0.2, expand bbox before crop, clamp to image bounds)

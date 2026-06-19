@@ -1,0 +1,12 @@
+fastapi
+uvicorn[standard]
+jinja2
+python-multipart
+insightface
+onnxruntime-gpu
+ultralytics
+numpy
+pillow
+pillow-heif
+httpx
+python-dotenv
