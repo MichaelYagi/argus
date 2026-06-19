@@ -1,0 +1,82 @@
+{% extends "base.html" %}
+{% block title %}Enroll — Argus{% endblock %}
+
+{% block content %}
+<h1 style="margin-bottom:20px">Enroll a face</h1>
+<div class="card" style="max-width:480px">
+  <div class="form-group">
+    <label class="lbl">Name</label>
+    <input type="text" id="name-input" placeholder="Full name">
+  </div>
+  <div class="form-group">
+    <label class="lbl">Image</label>
+    <div class="drop-zone" id="drop-zone">
+      <p>Drop an image here or click to browse</p>
+      <p class="muted" style="font-size:12px">One clear face per photo works best</p>
+      <input type="file" id="file-input" accept="image/*" hidden>
+    </div>
+    <div id="preview" hidden style="margin-top:8px">
+      <img id="preview-img" style="max-width:220px;border-radius:4px;display:block">
+    </div>
+  </div>
+  <div class="form-group">
+    <label class="lbl">Or image URL</label>
+    <input type="url" id="url-input" placeholder="http://…">
+  </div>
+  <button class="btn btn-primary" id="enroll-btn">Enroll</button>
+  <div id="result" style="margin-top:12px"></div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+(async () => {
+  const dz  = document.getElementById('drop-zone');
+  const fi  = document.getElementById('file-input');
+  const ui  = document.getElementById('url-input');
+
+  dz.addEventListener('dragover', e => { e.preventDefault(); dz.classList.add('over'); });
+  dz.addEventListener('dragleave', () => dz.classList.remove('over'));
+  dz.addEventListener('drop', e => {
+    e.preventDefault(); dz.classList.remove('over');
+    if (e.dataTransfer.files[0]) { fi.files = e.dataTransfer.files; preview(e.dataTransfer.files[0]); }
+  });
+  dz.addEventListener('click', () => fi.click());
+  fi.addEventListener('change', () => { if (fi.files[0]) preview(fi.files[0]); });
+
+  function preview(file) {
+    const r = new FileReader();
+    r.onload = e => { document.getElementById('preview-img').src = e.target.result; document.getElementById('preview').hidden = false; };
+    r.readAsDataURL(file);
+  }
+
+  document.getElementById('enroll-btn').addEventListener('click', async () => {
+    const name = document.getElementById('name-input').value.trim();
+    if (!name) { msg('Name is required.', 'error'); return; }
+    const fd = new FormData();
+    fd.append('name', name);
+    if (fi.files[0]) fd.append('file', fi.files[0]);
+    else if (ui.value.trim()) fd.append('image_url', ui.value.trim());
+    else { msg('Upload a file or enter a URL.', 'error'); return; }
+
+    msg('Enrolling…', '');
+    const resp = await fetch('/api/faces/enroll', { method: 'POST', body: fd });
+    const data = await resp.json();
+    if (resp.ok) {
+      msg(`Enrolled "${name}" successfully (identity #${data.identity_id}).`, 'success');
+      document.getElementById('name-input').value = '';
+      document.getElementById('preview').hidden = true;
+      fi.value = ''; ui.value = '';
+    } else {
+      msg(data.detail || 'Enrollment failed.', 'error');
+    }
+  });
+
+  function msg(text, type) {
+    const el = document.getElementById('result');
+    el.className = type === 'error' ? 'alert alert-error' : type === 'success' ? 'alert alert-success' : 'muted';
+    el.textContent = text;
+  }
+})();
+</script>
+{% endblock %}

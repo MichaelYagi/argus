@@ -1,0 +1,134 @@
+"""Identity CRUD, gallery, and unknown-detections routes."""
+
+from __future__ import annotations
+
+import sqlite3
+from typing import Optional
+
+from fastapi import APIRouter, Depends, HTTPException, Query
+from pydantic import BaseModel
+
+from app.core import settings_cache
+from app.core.auth import require_auth
+from app.db import store
+
+router = APIRouter()
+
+
+class _CreateBody(BaseModel):
+    label: str
+    type: str
+
+
+# ---------------------------------------------------------------------------
+# Identity CRUD
+# ---------------------------------------------------------------------------
+
+@router.get("/api/identities")
+async def list_identities(
+    type: Optional[str] = Query(None),
+    q: Optional[str] = Query(None),
+    user_id: int = Depends(require_auth),
+):
+    if type and type not in ("face", "object"):
+        raise HTTPException(400, "type must be 'face' or 'object'")
+    rows = store.list_identities(user_id, identity_type=type, q=q)
+    return [_fmt(r) for r in rows]
+
+
+@router.get("/api/identities/{identity_id}")
+async def get_identity(identity_id: int, user_id: int = Depends(require_auth)):
+    row = store.get_identity_with_counts(identity_id, user_id)
+    if not row:
+        raise HTTPException(404, "Identity not found")
+    result = _fmt(row)
+    result["detection_count"] = row["detection_count"]
+    result["embedding_count"] = row["embedding_count"]
+    crop = row["thumbnail_crop"]
+    result["thumbnail_url"] = f"/media/crops/{crop}" if crop else None
+    return result
+
+
+@router.post("/api/identities", status_code=201)
+async def create_identity(body: _CreateBody, user_id: int = Depends(require_auth)):
+    if body.type not in ("face", "object"):
+        raise HTTPException(400, "type must be 'face' or 'object'")
+    label = body.label.strip()
+    if not label:
+        raise HTTPException(400, "label is required")
+    try:
+        identity_id = store.create_identity(user_id, body.type, label)
+    except sqlite3.IntegrityError:
+        raise HTTPException(409, f"Identity '{label}' ({body.type}) already exists")
+    return {"id": identity_id, "type": body.type, "label": label}
+
+
+@router.delete("/api/identities/{identity_id}", status_code=204)
+async def delete_identity(identity_id: int, user_id: int = Depends(require_auth)):
+    if not store.delete_identity(identity_id, user_id):
+        raise HTTPException(404, "Identity not found")
+
+
+# ---------------------------------------------------------------------------
+# Galleries
+# ---------------------------------------------------------------------------
+
+@router.get("/api/identities/{identity_id}/gallery")
+async def identity_gallery(
+    identity_id: int,
+    cursor: Optional[str] = Query(None),
+    limit: Optional[int] = Query(None),
+    user_id: int = Depends(require_auth),
+):
+    if not store.get_identity(identity_id, user_id):
+        raise HTTPException(404, "Identity not found")
+    page_size = limit or settings_cache.cache.get_or("system.gallery_page_size", 30)
+    rows = store.get_identity_gallery(identity_id, user_id, cursor=cursor, limit=page_size)
+    return _paginate(rows, page_size, lambda r: {
+        "detection_id": r["id"],
+        "source_image_id": r["source_image_id"],
+        "crop_url": f"/media/crops/{r['crop_path']}",
+        "confidence": r["confidence"],
+        "detected_at": r["detected_at"],
+        "review_status": r["review_status"],
+    })
+
+
+@router.get("/api/detections/unknown")
+async def unknown_detections(
+    type: Optional[str] = Query(None),
+    cursor: Optional[str] = Query(None),
+    limit: Optional[int] = Query(None),
+    user_id: int = Depends(require_auth),
+):
+    if type and type not in ("face", "object"):
+        raise HTTPException(400, "type must be 'face' or 'object'")
+    page_size = limit or settings_cache.cache.get_or("system.gallery_page_size", 30)
+    rows = store.get_unknown_detections(user_id, detection_type=type, cursor=cursor, limit=page_size)
+    return _paginate(rows, page_size, lambda r: {
+        "detection_id": r["id"],
+        "type": r["type"],
+        "crop_url": f"/media/crops/{r['crop_path']}",
+        "confidence": r["confidence"],
+        "detected_at": r["detected_at"],
+    })
+
+
+# ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
+
+def _fmt(row) -> dict:
+    return {
+        "id": row["id"],
+        "type": row["type"],
+        "label": row["label"],
+        "created_at": row["created_at"],
+    }
+
+
+def _paginate(rows: list, limit: int, serialize) -> dict:
+    has_more = len(rows) > limit
+    items = rows[:limit]
+    next_cursor = items[-1]["detected_at"] if has_more and items else None
+    return {"items": [serialize(r) for r in items], "next_cursor": next_cursor, "has_more": has_more}

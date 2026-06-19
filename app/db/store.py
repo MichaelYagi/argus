@@ -46,8 +46,31 @@ def init_db() -> None:
     with _connect() as conn:
         # executescript issues an implicit COMMIT first, then runs all DDL
         conn.executescript(_SCHEMA_PATH.read_text())
+        _migrate(conn)
         _seed_models(conn)
         _seed_settings(conn)
+
+
+def _migrate(conn: sqlite3.Connection) -> None:
+    """Additive migrations for columns not covered by CREATE TABLE IF NOT EXISTS."""
+    # Schema column additions
+    existing_cols = {r[1] for r in conn.execute("PRAGMA table_info(detections)")}
+    if "embedding" not in existing_cols:
+        conn.execute("ALTER TABLE detections ADD COLUMN embedding BLOB")
+
+    # Insert missing seed settings and refresh descriptions on every startup
+    existing_keys = {r[0] for r in conn.execute("SELECT key FROM settings")}
+    missing = [row for row in _SETTINGS_SEED if row[0] not in existing_keys]
+    if missing:
+        conn.executemany(
+            "INSERT INTO settings (key, value, value_type, category, description) VALUES (?, ?, ?, ?, ?)",
+            missing,
+        )
+    # Always sync descriptions so UI labels stay up to date
+    conn.executemany(
+        "UPDATE settings SET description = ? WHERE key = ?",
+        [(row[4], row[0]) for row in _SETTINGS_SEED],
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -137,6 +160,31 @@ def revoke_api_key(key_id: int, user_id: int) -> bool:
 # Models (shared — no user_id)
 # ---------------------------------------------------------------------------
 
+def list_models(model_type: str | None = None) -> list[sqlite3.Row]:
+    with _connect() as conn:
+        if model_type:
+            return conn.execute(
+                "SELECT * FROM models WHERE type = ? ORDER BY type, name", (model_type,)
+            ).fetchall()
+        return conn.execute("SELECT * FROM models ORDER BY type, name").fetchall()
+
+
+def get_model(model_id: int) -> sqlite3.Row | None:
+    with _connect() as conn:
+        return conn.execute("SELECT * FROM models WHERE id = ?", (model_id,)).fetchone()
+
+
+def set_model_downloaded(model_id: int, downloaded: bool) -> None:
+    with _connect() as conn:
+        if downloaded:
+            conn.execute("UPDATE models SET is_downloaded = 1 WHERE id = ?", (model_id,))
+        else:
+            conn.execute(
+                "UPDATE models SET is_downloaded = 0, is_active = 0 WHERE id = ?",
+                (model_id,),
+            )
+
+
 def get_active_model(model_type: str) -> sqlite3.Row | None:
     with _connect() as conn:
         return conn.execute(
@@ -154,6 +202,109 @@ def set_model_active(model_id: int, model_type: str) -> None:
 # ---------------------------------------------------------------------------
 # Identities (per-user)
 # ---------------------------------------------------------------------------
+
+def list_identities(
+    user_id: int, identity_type: str | None = None, q: str | None = None
+) -> list[sqlite3.Row]:
+    with _connect() as conn:
+        sql = "SELECT * FROM identities WHERE user_id = ?"
+        params: list = [user_id]
+        if identity_type:
+            sql += " AND type = ?"
+            params.append(identity_type)
+        if q:
+            sql += " AND label LIKE ?"
+            params.append(f"%{q}%")
+        sql += " ORDER BY label"
+        return conn.execute(sql, params).fetchall()
+
+
+def create_identity(user_id: int, identity_type: str, label: str) -> int:
+    with _connect() as conn:
+        conn.execute(
+            "INSERT INTO identities (user_id, type, label) VALUES (?, ?, ?)",
+            (user_id, identity_type, label),
+        )
+        return conn.execute("SELECT last_insert_rowid()").fetchone()[0]
+
+
+def delete_identity(identity_id: int, user_id: int) -> bool:
+    with _connect() as conn:
+        conn.execute(
+            "DELETE FROM identities WHERE id = ? AND user_id = ?",
+            (identity_id, user_id),
+        )
+        return conn.execute("SELECT changes()").fetchone()[0] > 0
+
+
+def get_identity_with_counts(identity_id: int, user_id: int) -> sqlite3.Row | None:
+    with _connect() as conn:
+        return conn.execute(
+            """SELECT i.*,
+                      COUNT(DISTINCT d.id)  AS detection_count,
+                      COUNT(DISTINCT fe.id) AS embedding_count,
+                      (SELECT d2.crop_path FROM detections d2
+                       WHERE d2.identity_id = i.id AND d2.user_id = i.user_id
+                       ORDER BY d2.detected_at DESC LIMIT 1) AS thumbnail_crop
+               FROM identities i
+               LEFT JOIN detections d  ON d.identity_id = i.id
+               LEFT JOIN face_embeddings fe ON fe.identity_id = i.id
+               WHERE i.id = ? AND i.user_id = ?
+               GROUP BY i.id""",
+            (identity_id, user_id),
+        ).fetchone()
+
+
+def get_identity_gallery(
+    identity_id: int, user_id: int, cursor: str | None = None, limit: int = 30
+) -> list[sqlite3.Row]:
+    with _connect() as conn:
+        sql = """SELECT id, crop_path, confidence, detected_at, review_status, source_image_id
+                 FROM detections WHERE identity_id = ? AND user_id = ?"""
+        params: list = [identity_id, user_id]
+        if cursor:
+            sql += " AND detected_at < ?"
+            params.append(cursor)
+        sql += " ORDER BY detected_at DESC LIMIT ?"
+        params.append(limit + 1)
+        return conn.execute(sql, params).fetchall()
+
+
+def get_unknown_detections(
+    user_id: int,
+    detection_type: str | None = None,
+    cursor: str | None = None,
+    limit: int = 30,
+) -> list[sqlite3.Row]:
+    with _connect() as conn:
+        sql = """SELECT id, type, crop_path, confidence, detected_at
+                 FROM detections WHERE user_id = ? AND identity_id IS NULL"""
+        params: list = [user_id]
+        if detection_type:
+            sql += " AND type = ?"
+            params.append(detection_type)
+        if cursor:
+            sql += " AND detected_at < ?"
+            params.append(cursor)
+        sql += " ORDER BY detected_at DESC LIMIT ?"
+        params.append(limit + 1)
+        return conn.execute(sql, params).fetchall()
+
+
+def insert_face_embedding(
+    identity_id: int,
+    model_id: int | None,
+    embedding_bytes: bytes,
+    source_image_path: str | None = None,
+) -> int:
+    with _connect() as conn:
+        conn.execute(
+            """INSERT INTO face_embeddings (identity_id, model_id, embedding, source_image_path)
+               VALUES (?, ?, ?, ?)""",
+            (identity_id, model_id, embedding_bytes, source_image_path),
+        )
+        return conn.execute("SELECT last_insert_rowid()").fetchone()[0]
+
 
 def get_or_create_identity(user_id: int, identity_type: str, label: str) -> int:
     with _connect() as conn:
@@ -178,6 +329,33 @@ def get_identity(identity_id: int, user_id: int) -> sqlite3.Row | None:
 # ---------------------------------------------------------------------------
 # Source images (per-user)
 # ---------------------------------------------------------------------------
+
+def get_source_image(source_image_id: int, user_id: int) -> sqlite3.Row | None:
+    with _connect() as conn:
+        return conn.execute(
+            "SELECT * FROM source_images WHERE id = ? AND user_id = ?",
+            (source_image_id, user_id),
+        ).fetchone()
+
+
+def get_image_detections(
+    source_image_id: int, user_id: int, det_type: str | None = None
+) -> list[sqlite3.Row]:
+    with _connect() as conn:
+        sql = """SELECT d.id, d.type, d.identity_id, d.confidence,
+                        d.bbox_x, d.bbox_y, d.bbox_w, d.bbox_h,
+                        d.crop_path, d.review_status,
+                        i.label AS identity_label
+                 FROM detections d
+                 LEFT JOIN identities i ON d.identity_id = i.id
+                 WHERE d.source_image_id = ? AND d.user_id = ?"""
+        params: list = [source_image_id, user_id]
+        if det_type:
+            sql += " AND d.type = ?"
+            params.append(det_type)
+        sql += " ORDER BY d.id"
+        return conn.execute(sql, params).fetchall()
+
 
 def get_or_create_source_image(user_id: int, file_path: str, width: int, height: int) -> int:
     with _connect() as conn:
@@ -208,24 +386,34 @@ def insert_detection(
     bbox_w: int,
     bbox_h: int,
     crop_path: str,
+    embedding: bytes | None = None,
+    review_status: str = "pending",
 ) -> int:
     with _connect() as conn:
         conn.execute(
             """INSERT INTO detections
                (user_id, identity_id, source_image_id, type, model_id, confidence,
-                bbox_x, bbox_y, bbox_w, bbox_h, crop_path)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                bbox_x, bbox_y, bbox_w, bbox_h, crop_path, embedding, review_status)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
             (user_id, identity_id, source_image_id, detection_type, model_id, confidence,
-             bbox_x, bbox_y, bbox_w, bbox_h, crop_path),
+             bbox_x, bbox_y, bbox_w, bbox_h, crop_path, embedding, review_status),
         )
         return conn.execute("SELECT last_insert_rowid()").fetchone()[0]
+
+
+def get_detection(detection_id: int, user_id: int) -> sqlite3.Row | None:
+    with _connect() as conn:
+        return conn.execute(
+            "SELECT * FROM detections WHERE id = ? AND user_id = ?",
+            (detection_id, user_id),
+        ).fetchone()
 
 
 def get_face_embeddings_for_model(model_id: int, user_id: int) -> list[sqlite3.Row]:
     """Return embeddings for the active model scoped to this user's identities."""
     with _connect() as conn:
         return conn.execute(
-            """SELECT fe.identity_id, fe.embedding
+            """SELECT fe.identity_id, fe.embedding, i.label
                FROM face_embeddings fe
                JOIN identities i ON fe.identity_id = i.id
                WHERE fe.model_id = ? AND i.user_id = ?""",
@@ -233,14 +421,111 @@ def get_face_embeddings_for_model(model_id: int, user_id: int) -> list[sqlite3.R
         ).fetchall()
 
 
+def count_pending_review(user_id: int) -> int:
+    with _connect() as conn:
+        return conn.execute(
+            """SELECT COUNT(*) FROM detections
+               WHERE user_id = ? AND review_status = 'pending' AND type = 'face'""",
+            (user_id,),
+        ).fetchone()[0]
+
+
+def get_review_queue(
+    user_id: int,
+    cursor: str | None = None,
+    limit: int = 20,
+) -> list[sqlite3.Row]:
+    """Pending face detections, lowest confidence first. Cursor = 'confidence_id'."""
+    with _connect() as conn:
+        if cursor:
+            try:
+                c_conf, c_id = cursor.rsplit("_", 1)
+                conf_val = float(c_conf)
+                id_val = int(c_id)
+            except ValueError:
+                conf_val, id_val = 0.0, 0
+            rows = conn.execute(
+                """SELECT d.id, d.source_image_id, d.model_id, d.confidence,
+                          d.crop_path, d.detected_at, d.identity_id, d.embedding,
+                          i.label AS current_label
+                   FROM detections d
+                   LEFT JOIN identities i ON d.identity_id = i.id
+                   WHERE d.user_id = ? AND d.review_status = 'pending' AND d.type = 'face'
+                     AND (d.confidence > ? OR (d.confidence = ? AND d.id > ?))
+                   ORDER BY d.confidence ASC, d.id ASC LIMIT ?""",
+                (user_id, conf_val, conf_val, id_val, limit + 1),
+            ).fetchall()
+        else:
+            rows = conn.execute(
+                """SELECT d.id, d.source_image_id, d.model_id, d.confidence,
+                          d.crop_path, d.detected_at, d.identity_id, d.embedding,
+                          i.label AS current_label
+                   FROM detections d
+                   LEFT JOIN identities i ON d.identity_id = i.id
+                   WHERE d.user_id = ? AND d.review_status = 'pending' AND d.type = 'face'
+                   ORDER BY d.confidence ASC, d.id ASC LIMIT ?""",
+                (user_id, limit + 1),
+            ).fetchall()
+        return rows
+
+
+def confirm_detection(detection_id: int, user_id: int) -> bool:
+    with _connect() as conn:
+        conn.execute(
+            """UPDATE detections SET review_status = 'confirmed', reviewed_at = datetime('now')
+               WHERE id = ? AND user_id = ?""",
+            (detection_id, user_id),
+        )
+        return conn.execute("SELECT changes()").fetchone()[0] > 0
+
+
+def reject_detection(detection_id: int, user_id: int) -> bool:
+    with _connect() as conn:
+        conn.execute(
+            """UPDATE detections SET review_status = 'rejected', identity_id = NULL,
+               reviewed_at = datetime('now') WHERE id = ? AND user_id = ?""",
+            (detection_id, user_id),
+        )
+        return conn.execute("SELECT changes()").fetchone()[0] > 0
+
+
+def reassign_detection(detection_id: int, user_id: int, identity_id: int) -> bool:
+    with _connect() as conn:
+        conn.execute(
+            """UPDATE detections SET review_status = 'reassigned', identity_id = ?,
+               reviewed_at = datetime('now') WHERE id = ? AND user_id = ?""",
+            (identity_id, detection_id, user_id),
+        )
+        return conn.execute("SELECT changes()").fetchone()[0] > 0
+
+
+def label_detection(detection_id: int, user_id: int, identity_id: int) -> bool:
+    """Casual correction: set identity and mark confirmed."""
+    with _connect() as conn:
+        conn.execute(
+            """UPDATE detections SET identity_id = ?, review_status = 'confirmed',
+               reviewed_at = datetime('now') WHERE id = ? AND user_id = ?""",
+            (identity_id, detection_id, user_id),
+        )
+        return conn.execute("SELECT changes()").fetchone()[0] > 0
+
+
 # ---------------------------------------------------------------------------
 # Settings (shared — no user_id)
 # ---------------------------------------------------------------------------
 
+def get_setting(key: str) -> sqlite3.Row | None:
+    with _connect() as conn:
+        return conn.execute(
+            "SELECT key, value, value_type, category, description, updated_at FROM settings WHERE key = ?",
+            (key,),
+        ).fetchone()
+
+
 def get_all_settings() -> list[sqlite3.Row]:
     with _connect() as conn:
         return conn.execute(
-            "SELECT key, value, value_type, category, description FROM settings ORDER BY category, key"
+            "SELECT key, value, value_type, category, description, updated_at FROM settings ORDER BY category, key"
         ).fetchall()
 
 
@@ -268,19 +553,54 @@ _MODEL_SEED: list[tuple] = [
 ]
 
 _SETTINGS_SEED: list[tuple] = [
-    ("face.match_threshold",             "0.5",   "float",  "face",   "min cosine similarity to count as a match"),
-    ("face.detection_confidence",        "0.6",   "float",  "face",   "min RetinaFace detection confidence"),
-    ("face.min_face_size",               "40",    "int",    "face",   "ignore faces smaller than N px"),
-    ("object.detection_confidence",      "0.5",   "float",  "object", "min YOLO confidence"),
-    ("object.iou_threshold",             "0.45",  "float",  "object", "NMS overlap threshold"),
-    ("object.classes_enabled",           "*",     "string", "object", "comma list or * for all COCO classes"),
-    ("system.gallery_page_size",         "30",    "int",    "system", "infinite scroll batch size"),
-    ("system.save_unknown_detections",   "true",  "bool",   "system", "log unmatched faces/objects to gallery"),
-    ("system.crop_padding",              "0.2",   "float",  "system", "padding % around bbox when saving crop"),
-    ("system.url_fetch_timeout_seconds", "10",    "int",    "system", "max wait when fetching an image_url"),
-    ("system.url_fetch_max_size_mb",     "25",    "int",    "system", "reject fetched images larger than this"),
-    ("system.use_gpu",                   "true",  "bool",   "system", "use GPU if available; false forces CPU"),
+    ("face.match_threshold",
+     "0.5",   "float",  "face",
+     "Match Threshold | Minimum similarity score (0–1) for a face detection to be assigned to an enrolled person"),
+    ("face.auto_confirm",
+     "true",  "bool",   "face",
+     "Auto-Confirm | Automatically confirm high-confidence matches without requiring manual review"),
+    ("face.auto_confirm_threshold",
+     "0.80",  "float",  "face",
+     "Auto-Confirm Threshold | Matches at or above this similarity score are confirmed automatically"),
+    ("face.detection_confidence",
+     "0.6",   "float",  "face",
+     "Detection Confidence | Minimum confidence for a face region to be reported at all"),
+    ("face.min_face_size",
+     "40",    "int",    "face",
+     "Minimum Face Size | Faces smaller than this many pixels wide or tall are ignored"),
+    ("object.detection_confidence",
+     "0.5",   "float",  "object",
+     "Detection Confidence | Minimum confidence for a detected object to be reported"),
+    ("object.iou_threshold",
+     "0.45",  "float",  "object",
+     "Overlap Threshold | How much bounding boxes can overlap before the weaker one is suppressed (NMS)"),
+    ("object.classes_enabled",
+     "*",     "string", "object",
+     "Enabled Classes | Which COCO object classes to detect; * means all 80, or enter a comma-separated list"),
+    ("system.gallery_page_size",
+     "30",    "int",    "system",
+     "Gallery Page Size | Number of crop thumbnails loaded per scroll batch in galleries"),
+    ("system.save_unknown_detections",
+     "true",  "bool",   "system",
+     "Save Unknown Detections | Keep detections that didn't match any enrolled person or object class"),
+    ("system.crop_padding",
+     "0.2",   "float",  "system",
+     "Crop Padding | Extra space added around a detection's bounding box before saving the thumbnail"),
+    ("system.url_fetch_timeout_seconds",
+     "10",    "int",    "system",
+     "URL Timeout | Seconds to wait when downloading an image from a URL"),
+    ("system.url_fetch_max_size_mb",
+     "25",    "int",    "system",
+     "URL Size Limit | Maximum image size in MB when fetching from a URL; larger images are rejected"),
+    ("system.use_gpu",
+     "true",  "bool",   "system",
+     "Use GPU | Enable GPU inference when a CUDA device is available; disable to force CPU"),
 ]
+
+
+def get_settings_defaults() -> dict[str, str]:
+    """Return {key: default_value} from seed data — used by the reset endpoint."""
+    return {row[0]: row[1] for row in _SETTINGS_SEED}
 
 
 def _seed_models(conn: sqlite3.Connection) -> None:

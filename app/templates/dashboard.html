@@ -1,0 +1,60 @@
+{% extends "base.html" %}
+{% block title %}Dashboard — Argus{% endblock %}
+
+{% block content %}
+<div class="page-header" style="margin-bottom:16px">
+  <h1>Dashboard</h1>
+  <span class="nav-spacer"></span>
+  <a href="/enroll" class="btn btn-primary">Enroll face</a>
+  <a href="/detect" class="btn btn-ghost"  style="margin-left:8px">Detect</a>
+</div>
+
+<div class="stat-grid" id="stats">
+  <div class="stat"><div class="num" id="s-ident">—</div><div class="lbl">Identities</div></div>
+  <div class="stat"><div class="num" id="s-faces">—</div><div class="lbl">Face identities</div></div>
+  <div class="stat"><div class="num" id="s-review">—</div><div class="lbl">Pending review</div></div>
+</div>
+
+<h2>Enrolled identities</h2>
+<div class="card-grid" id="identity-grid">
+  <p class="muted loading">Loading…</p>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+(async () => {
+  const [idResp, rvResp] = await Promise.all([
+    fetch('/api/identities'),
+    fetch('/api/review/count'),
+  ]);
+  const identities = await idResp.json();
+  const rv = await rvResp.json();
+
+  document.getElementById('s-ident').textContent  = identities.length;
+  document.getElementById('s-faces').textContent  = identities.filter(i => i.type === 'face').length;
+  document.getElementById('s-review').textContent = rv.count ?? 0;
+
+  const grid = document.getElementById('identity-grid');
+  if (!identities.length) {
+    grid.innerHTML = '<p class="muted">No identities yet. <a href="/enroll">Enroll a face</a> to get started.</p>';
+    return;
+  }
+
+  grid.innerHTML = '';
+  await Promise.all(identities.map(async id => {
+    const d = await fetch('/api/identities/' + id.id).then(r => r.json());
+    const img = d.thumbnail_url
+      ? `<img src="${d.thumbnail_url}" alt="${d.label}">`
+      : `<div class="it-ph">?</div>`;
+    const a = document.createElement('a');
+    a.href = '/identities/' + id.id;
+    a.className = 'identity-thumb';
+    a.innerHTML = img +
+      `<div class="it-name">${d.label}</div>` +
+      `<div class="it-count">${d.detection_count} detection${d.detection_count !== 1 ? 's' : ''}</div>`;
+    grid.appendChild(a);
+  }));
+})();
+</script>
+{% endblock %}

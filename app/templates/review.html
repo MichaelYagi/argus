@@ -1,0 +1,24 @@
+{% extends "base.html" %}
+{% block title %}Review — Argus{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <h1>Review queue</h1>
+  <span class="muted" style="font-size:13px">Face detections · lowest confidence first</span>
+</div>
+
+<div style="background:#1a1a1a;color:#fff;padding:10px 16px;border-radius:6px;margin-bottom:16px;display:flex;align-items:center;gap:12px">
+  <label style="display:flex;align-items:center;gap:6px;font-size:13px;cursor:pointer">
+    <input type="checkbox" id="select-all-cb" onchange="doSelectAll(this)"> Select all
+  </label>
+  <span class="muted" style="font-size:13px;color:#aaa"><span id="bulk-count">0</span> selected</span>
+  <button id="bulk-confirm-btn" class="btn btn-success" onclick="doBulkConfirm()" disabled>Confirm selected</button>
+  <button id="bulk-reject-btn"  class="btn btn-danger"  onclick="doBulkReject()"  disabled>Reject selected</button>
+</div>
+
+<div id="review-list"></div>
+{% endblock %}
+
+{% block scripts %}
+<script src="/static/js/review.js"></script>
+{% endblock %}

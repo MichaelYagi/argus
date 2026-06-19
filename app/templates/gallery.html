@@ -1,0 +1,45 @@
+{% extends "base.html" %}
+{% block title %}{{ identity.label }} — Argus{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <a href="/" style="font-size:13px;margin-right:4px">&larr;</a>
+  <h1>{{ identity.label }}</h1>
+  <span class="badge badge-{{ identity.type }}">{{ identity.type }}</span>
+  <span class="muted" style="font-size:12px">
+    {{ identity.detection_count }} detection{{ 's' if identity.detection_count != 1 else '' }}
+    &middot; {{ identity.embedding_count }} embedding{{ 's' if identity.embedding_count != 1 else '' }}
+  </span>
+  <span class="nav-spacer"></span>
+  <a href="/enroll" class="btn btn-ghost">Enroll more</a>
+  <button class="btn btn-danger" id="delete-identity-btn" style="margin-left:6px">Delete identity</button>
+</div>
+
+<div id="gallery-bulk-bar"
+     style="display:none;align-items:center;gap:10px;background:#1a1a1a;color:#fff;padding:10px 16px;border-radius:6px;margin-bottom:12px">
+  <span><span id="gallery-bulk-count">0</span> selected</span>
+  <button id="bulk-change-btn" class="btn btn-primary" onclick="bulkChangeIdentity()">Change identity</button>
+  <button class="btn btn-danger" onclick="bulkDelete()">Delete selected</button>
+  <button class="btn btn-ghost" onclick="clearSelection()" style="color:#fff;border-color:#555">Clear</button>
+</div>
+
+<div id="gallery" data-identity-id="{{ identity.id }}"></div>
+<p id="gallery-loading" class="loading" hidden>Loading…</p>
+<p id="gallery-empty" class="muted" hidden style="text-align:center;padding:48px">No detections yet.</p>
+{% endblock %}
+
+{% block scripts %}
+<script src="/static/js/gallery.js"></script>
+<script>
+document.getElementById('delete-identity-btn').addEventListener('click', () => {
+  showConfirm(
+    'Delete "{{ identity.label }}" and all its detections and embeddings? This cannot be undone.',
+    async () => {
+      const resp = await fetch('/api/identities/{{ identity.id }}', { method: 'DELETE' });
+      if (resp.ok || resp.status === 204) location.href = '/';
+    },
+    { confirmText: 'Delete', danger: true }
+  );
+});
+</script>
+{% endblock %}

@@ -1,0 +1,93 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Tag image — Argus</title>
+  <link rel="stylesheet" href="/static/css/style.css">
+</head>
+<body>
+<script src="/static/js/autocomplete.js"></script>
+<nav>
+  <span class="brand">Argus</span>
+  <a href="/">Dashboard</a>
+  <span class="nav-spacer"></span>
+  <span class="nav-user">{{ username }}</span>
+</nav>
+<main>
+  <div class="page-header" style="margin-bottom:12px">
+    <a href="/">&larr; Dashboard</a>
+    <span class="muted" style="font-size:13px;margin-left:8px">
+      Click a face box to assign or correct a label. Orange = unlabeled, green = labeled.
+    </span>
+    <span class="nav-spacer"></span>
+    <span id="tag-status" class="muted" style="font-size:12px"></span>
+  </div>
+  <div id="tag-wrap">
+    <img id="tag-photo" src="{{ image_url }}" alt="" onload="renderBoxes()">
+  </div>
+</main>
+<script>
+const NAT_W = {{ nat_w }}, NAT_H = {{ nat_h }};
+const FACES = {{ faces_json | safe }};
+
+function renderBoxes() {
+  const img = document.getElementById('tag-photo');
+  const sx = img.clientWidth / NAT_W;
+  const sy = img.clientHeight / NAT_H;
+  const wrap = document.getElementById('tag-wrap');
+
+  FACES.forEach(f => {
+    const div = document.createElement('div');
+    div.className = 't-box' + (f.label ? ' labeled' : '');
+    div.style.left   = Math.max(0, f.x * sx) + 'px';
+    div.style.top    = Math.max(0, f.y * sy) + 'px';
+    div.style.width  = (f.w * sx) + 'px';
+    div.style.height = (f.h * sy) + 'px';
+    div.dataset.id    = f.id;
+    div.dataset.label = f.label;
+
+    const tip = document.createElement('div');
+    tip.className = 't-tip';
+    tip.textContent = (f.label || 'Unknown') + ' (' + f.confidence + ')';
+    div.appendChild(tip);
+
+    div.addEventListener('click', () => labelBox(div, tip));
+    wrap.appendChild(div);
+  });
+}
+
+function labelBox(div, tip) {
+  showLabelPopup(div, async label => {
+    if (!label) {
+      const r = await fetch('/api/review/' + div.dataset.id + '/reject', { method: 'POST' });
+      if (r.ok) {
+        div.dataset.label = '';
+        tip.textContent = 'Unknown';
+        div.classList.remove('labeled');
+        setStatus('Cleared label.');
+      }
+      return;
+    }
+    const resp = await fetch('/api/detections/' + div.dataset.id + '/label', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ label }),
+    });
+    if (resp.ok) {
+      const d = await resp.json();
+      div.dataset.label = d.label;
+      tip.textContent = d.label;
+      div.classList.add('labeled');
+      addFaceLabel(d.label);
+      setStatus('Labeled: ' + d.label);
+    } else {
+      setStatus('Error saving label.');
+    }
+  }, div.dataset.label ? `Rename "${div.dataset.label}" (blank to clear)` : 'Assign name (blank to clear)');
+}
+
+function setStatus(msg) { document.getElementById('tag-status').textContent = msg; }
+</script>
+</body>
+</html>

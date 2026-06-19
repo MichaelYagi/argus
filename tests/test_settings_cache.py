@@ -108,7 +108,7 @@ def test_all_returns_all_entries():
     c = SettingsCache()
     c.load()
     result = c.all()
-    assert len(result) == 12
+    assert len(result) == 14
 
 
 def test_all_returns_independent_copy():

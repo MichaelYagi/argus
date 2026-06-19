@@ -62,8 +62,8 @@ async def acquire_image(request: Request) -> bytes:
     if file_bytes is not None:
         return file_bytes
     if image_url is not None:
-        return await _fetch_url(image_url)
-    return _decode_base64(image_base64)  # type: ignore[arg-type]
+        return await fetch_url(image_url)
+    return decode_base64(image_base64)  # type: ignore[arg-type]
 
 
 def open_and_validate(image_bytes: bytes) -> Any:
@@ -100,7 +100,7 @@ def to_rgb_array(img: Any) -> Any:
 # Private helpers
 # ---------------------------------------------------------------------------
 
-async def _fetch_url(url: str) -> bytes:
+async def fetch_url(url: str) -> bytes:
     import httpx
 
     timeout = settings_cache.cache.get_or("system.url_fetch_timeout_seconds", 10)
@@ -129,7 +129,7 @@ async def _fetch_url(url: str) -> bytes:
         raise HTTPException(400, f"Failed to fetch image URL: {exc}") from exc
 
 
-def _decode_base64(data: str) -> bytes:
+def decode_base64(data: str) -> bytes:
     if "," in data:
         data = data.split(",", 1)[1]
     try:

@@ -1,0 +1,82 @@
+{% extends "base.html" %}
+{% block title %}Settings — Argus{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <h1>Settings</h1>
+  <span class="nav-spacer"></span>
+  <div id="settings-alert" class="alert" hidden style="margin:0"></div>
+</div>
+
+{% for category, rows in settings.items() %}
+<div class="card" style="margin-bottom:16px">
+  <h2 style="margin-bottom:0;text-transform:capitalize">{{ category }}</h2>
+  {% for s in rows %}
+  <div class="setting-row" id="srow-{{ s.key | replace('.', '-') }}"
+    {% if s.key == 'face.auto_confirm' %}style="border-bottom:none;padding-bottom:4px"{% endif %}
+    {% if s.key == 'face.auto_confirm_threshold' %}style="padding-left:24px;padding-top:4px"{% endif %}>
+    <div class="s-label">
+      {% set parts = s.description.split('|') if s.description and '|' in s.description else [s.description or s.key, ''] %}
+      <strong>{{ parts[0].strip() }}</strong>
+      {% if parts[1].strip() %}<small>{{ parts[1].strip() }}</small>{% endif %}
+    </div>
+    <div class="s-ctrl">
+      {% if s.value_type == 'bool' %}
+        <label class="toggle">
+          <input type="checkbox" data-key="{{ s.key }}"
+            {% if s.key == 'face.auto_confirm' %}data-controls="face.auto_confirm_threshold"{% endif %}
+            {% if s.value == 'true' %}checked{% endif %}>
+          <span class="tog-track"></span>
+        </label>
+
+      {% elif s.key == 'object.classes_enabled' %}
+        {# rendered below #}
+        <span class="muted" style="font-size:12px">See below</span>
+
+      {% elif s.value_type == 'float' and s.key in slider_ranges %}
+        {% set rng = slider_ranges[s.key] %}
+        <input type="range" data-key="{{ s.key }}"
+               min="{{ rng[0] }}" max="{{ rng[1] }}" step="{{ rng[2] }}"
+               value="{{ s.value }}">
+        <span class="range-val" id="v-{{ s.key | replace('.', '-') }}">{{ s.value }}</span>
+
+      {% elif s.value_type == 'int' %}
+        <input type="number" data-key="{{ s.key }}" value="{{ s.value }}" style="width:90px">
+
+      {% else %}
+        <input type="text" data-key="{{ s.key }}" value="{{ s.value }}" style="width:180px">
+      {% endif %}
+    </div>
+  </div>
+  {% endfor %}
+</div>
+{% endfor %}
+
+{# COCO classes grid #}
+{% if 'object' in settings %}
+<div class="card">
+  <h2>Object classes</h2>
+  <p class="muted" style="font-size:12px;margin-bottom:8px">
+    Which COCO classes to detect. Unchecking all keeps the current value unchanged.
+  </p>
+  {% set cur = settings['object'] | selectattr('key', 'equalto', 'object.classes_enabled') | list %}
+  {% set cur_val = cur[0].value if cur else '*' %}
+  <label style="display:flex;align-items:center;gap:6px;margin-bottom:8px;font-weight:500;font-size:13px">
+    <input type="checkbox" id="coco-all" {% if cur_val == '*' %}checked{% endif %}> All classes (*)
+  </label>
+  <div class="coco-grid">
+    {% for cls in coco_classes %}
+    <label>
+      <input type="checkbox" class="coco-cb" value="{{ cls }}"
+        {% if cur_val == '*' or cls in cur_val.split(',') %}checked{% endif %}>
+      {{ cls }}
+    </label>
+    {% endfor %}
+  </div>
+</div>
+{% endif %}
+{% endblock %}
+
+{% block scripts %}
+<script src="/static/js/settings.js"></script>
+{% endblock %}

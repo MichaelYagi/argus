@@ -1,0 +1,59 @@
+{% extends "base.html" %}
+{% block title %}Models — Argus{% endblock %}
+
+{% block content %}
+<h1 style="margin-bottom:20px">Models</h1>
+
+<h2>Face models</h2>
+<div class="card-grid" style="margin-bottom:28px">
+{% for m in models %}{% if m.type == 'face' %}
+<div class="model-card">
+  <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px">
+    <h3>{{ m.name }}</h3>
+    {% if m.is_active %}<span class="badge badge-active">Active</span>{% endif %}
+  </div>
+  <div class="m-meta">
+    {% if m.embedding_dim %}{{ m.embedding_dim }}d &middot; {% endif %}
+    {% if m.is_downloaded %}Downloaded{% else %}Not downloaded{% endif %}
+  </div>
+  <div class="m-actions">
+    {% if not m.is_downloaded %}
+      <button class="btn btn-primary" data-download="{{ m.id }}">Download</button>
+    {% elif not m.is_active %}
+      <button class="btn btn-ghost" data-activate="{{ m.id }}">Activate</button>
+      <button class="btn btn-danger" data-delete-model="{{ m.id }}" style="margin-left:4px" title="Remove weights from disk">Remove</button>
+    {% else %}
+      <span class="muted" style="font-size:12px">In use</span>
+    {% endif %}
+  </div>
+</div>
+{% endif %}{% endfor %}
+</div>
+
+<h2>Object models</h2>
+<div class="card-grid">
+{% for m in models %}{% if m.type == 'object' %}
+<div class="model-card">
+  <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px">
+    <h3>{{ m.name }}</h3>
+    {% if m.is_active %}<span class="badge badge-active">Active</span>{% endif %}
+  </div>
+  <div class="m-meta">{% if m.is_downloaded %}Downloaded{% else %}Not downloaded{% endif %}</div>
+  <div class="m-actions">
+    {% if not m.is_downloaded %}
+      <button class="btn btn-primary" data-download="{{ m.id }}">Download</button>
+    {% elif not m.is_active %}
+      <button class="btn btn-ghost" data-activate="{{ m.id }}">Activate</button>
+      <button class="btn btn-danger" data-delete-model="{{ m.id }}" style="margin-left:4px" title="Remove weights from disk">Remove</button>
+    {% else %}
+      <span class="muted" style="font-size:12px">In use</span>
+    {% endif %}
+  </div>
+</div>
+{% endif %}{% endfor %}
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="/static/js/models.js"></script>
+{% endblock %}

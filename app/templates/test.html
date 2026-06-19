@@ -1,0 +1,37 @@
+{% extends "base.html" %}
+{% block title %}Test — Argus{% endblock %}
+
+{% block content %}
+<h1 style="margin-bottom:20px">Test detection</h1>
+<div class="card" style="max-width:580px">
+  <form id="detect-form">
+    <div class="form-group" style="display:flex;align-items:center;gap:12px">
+      <label class="lbl" style="margin:0;white-space:nowrap">Detect</label>
+      <select id="detect-mode" style="width:auto">
+        <option value="faces">Faces</option>
+        <option value="objects">Objects</option>
+        <option value="all">Faces + Objects</option>
+      </select>
+    </div>
+    <div class="form-group">
+      <div class="drop-zone" id="drop-zone">
+        <p>Drop an image here or click to browse</p>
+        <input type="file" id="file-input" accept="image/*" hidden>
+      </div>
+      <div id="preview" hidden style="margin-top:8px">
+        <img id="preview-img" style="max-width:100%;border-radius:4px;display:block">
+      </div>
+    </div>
+    <div class="form-group">
+      <label class="lbl">Or image URL</label>
+      <input type="url" id="url-input" placeholder="http://…">
+    </div>
+    <button type="submit" class="btn btn-primary">Detect</button>
+  </form>
+</div>
+<div id="result-area" style="margin-top:24px"></div>
+{% endblock %}
+
+{% block scripts %}
+<script src="/static/js/test.js"></script>
+{% endblock %}

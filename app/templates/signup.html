@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Sign up — Argus</title>
+  <link rel="stylesheet" href="/static/css/style.css">
+</head>
+<body>
+<div class="auth-page">
+  <div class="auth-box">
+    <h2>Create account</h2>
+    {% if error %}<p class="auth-error">{{ error }}</p>{% endif %}
+    <form method="post">
+      <div class="form-group">
+        <label class="lbl">Username</label>
+        <input type="text" name="username" autofocus autocomplete="username">
+      </div>
+      <div class="form-group">
+        <label class="lbl">Password <small style="color:var(--muted)">(min 8 chars)</small></label>
+        <input type="password" name="password" autocomplete="new-password">
+      </div>
+      <div class="form-group">
+        <label class="lbl">Confirm password</label>
+        <input type="password" name="confirm" autocomplete="new-password">
+      </div>
+      <button type="submit" class="btn btn-primary">Create account</button>
+    </form>
+    <div class="auth-footer">
+      <a href="/login">Already have an account?</a>
+    </div>
+  </div>
+</div>
+</body>
+</html>

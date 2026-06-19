@@ -72,6 +72,7 @@ CREATE TABLE IF NOT EXISTS detections (
     bbox_w          INTEGER NOT NULL,
     bbox_h          INTEGER NOT NULL,
     crop_path       TEXT    NOT NULL,
+    embedding       BLOB,              -- face detections only; used for review-queue suggested matches
     review_status   TEXT    NOT NULL DEFAULT 'pending'
                             CHECK(review_status IN ('pending', 'confirmed', 'rejected', 'reassigned')),
     reviewed_at     TEXT,

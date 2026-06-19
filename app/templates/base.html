@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}Argus{% endblock %}</title>
+  <link rel="stylesheet" href="/static/css/style.css">
+  {% block head %}{% endblock %}
+</head>
+<body>
+<script src="/static/js/autocomplete.js"></script>
+<script>
+fetch('/api/review/count')
+  .then(r => r.ok ? r.json() : null)
+  .then(data => {
+    if (!data || !data.count) return;
+    const badge = document.getElementById('review-count-badge');
+    if (badge) {
+      badge.textContent = data.count > 99 ? '99+' : data.count;
+      badge.style.display = 'inline';
+    }
+  })
+  .catch(() => {});
+</script>
+<nav>
+  <span class="brand">Argus</span>
+  <a href="/"        class="{% if active == 'dashboard' %}active{% endif %}">Dashboard</a>
+  <a href="/enroll"  class="{% if active == 'enroll'    %}active{% endif %}">Enroll</a>
+  <a href="/detect"  class="{% if active == 'detect'    %}active{% endif %}">Detect</a>
+  <a href="/review"  class="{% if active == 'review'    %}active{% endif %}">
+    Review <span id="review-count-badge"
+      style="display:none;background:#e53e3e;color:#fff;border-radius:99px;
+             padding:1px 6px;font-size:10px;font-weight:700;margin-left:3px;
+             vertical-align:middle;line-height:16px"></span>
+  </a>
+  <a href="/models"  class="{% if active == 'models'    %}active{% endif %}">Models</a>
+  <a href="/settings" class="{% if active == 'settings' %}active{% endif %}">Settings</a>
+  <span class="nav-spacer"></span>
+  <span class="nav-user">{{ username }}</span>
+  <form method="post" action="/logout">
+    <button type="submit">Sign out</button>
+  </form>
+</nav>
+<main>
+  {% block content %}{% endblock %}
+</main>
+{% block scripts %}{% endblock %}
+</body>
+</html>

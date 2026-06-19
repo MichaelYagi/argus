@@ -1,0 +1,47 @@
+{% extends "base.html" %}
+{% block title %}Detect — Argus{% endblock %}
+
+{% block content %}
+<h1 style="margin-bottom:20px">Bulk upload</h1>
+
+<div class="card" style="max-width:680px">
+  <div style="display:flex;align-items:center;gap:12px;margin-bottom:16px">
+    <label class="lbl" style="margin:0;white-space:nowrap">Detect</label>
+    <select id="detect-mode" style="width:auto">
+      <option value="faces">Faces</option>
+      <option value="objects">Objects</option>
+      <option value="all" selected>Faces + Objects</option>
+    </select>
+  </div>
+
+  <div class="drop-zone" id="drop-zone">
+    <p>Drop images here or click to browse</p>
+    <p class="muted" style="font-size:12px">Multiple files supported — JPEG, PNG, WEBP, HEIC and more</p>
+    <input type="file" id="file-input" accept="image/*" multiple hidden>
+  </div>
+
+  <div id="url-area" style="margin-top:12px">
+    <label class="lbl">Or paste image URLs (one per line)</label>
+    <textarea id="url-input" rows="3" placeholder="https://&#10;https://&#10;https://"
+              style="font-size:13px;resize:vertical"></textarea>
+  </div>
+
+  <div style="display:flex;align-items:center;gap:12px;margin-top:14px">
+    <button class="btn btn-primary" id="run-btn" disabled>Detect all</button>
+    <span id="queue-count" class="muted" style="font-size:13px"></span>
+  </div>
+</div>
+
+<div id="progress-bar-wrap" hidden style="max-width:680px;margin-top:8px">
+  <div style="background:var(--border);border-radius:99px;height:6px;overflow:hidden">
+    <div id="progress-bar" style="background:var(--accent);height:100%;width:0;transition:width .3s"></div>
+  </div>
+  <div class="muted" style="font-size:12px;margin-top:4px" id="progress-label"></div>
+</div>
+
+<div id="results" style="max-width:680px;margin-top:16px"></div>
+{% endblock %}
+
+{% block scripts %}
+<script src="/static/js/bulk.js"></script>
+{% endblock %}

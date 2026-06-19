@@ -11,7 +11,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from app.core import settings_cache
 from app.core.auth import require_auth
 from app.core.engine_registry import registry
-from app.core.image_input import acquire_image, open_and_validate, to_rgb_array
+from app.core.image_input import acquire_image, fetch_url, open_and_validate, to_rgb_array
 from app.core.paths import crops_dir, sources_dir
 from app.db import store
 
@@ -53,6 +53,69 @@ async def detect_all(request: Request, user_id: int = Depends(require_auth)):
     }
 
 
+@router.post("/api/detect/bulk")
+async def detect_bulk(request: Request, user_id: int = Depends(require_auth)):
+    """Batch detect across multiple images.
+
+    Multipart: one or more ``file`` fields plus optional ``type`` field.
+    JSON: ``{"image_urls": [...], "type": "faces|objects|all"}``
+    """
+    content_type = request.headers.get("content-type", "")
+    detect_type = "all"
+    jobs: list[tuple[str, bytes]] = []  # (label, raw_bytes)
+
+    if "multipart/form-data" in content_type:
+        form = await request.form()
+        detect_type = str(form.get("type", "all"))
+        files = form.getlist("file")
+        if not files:
+            raise HTTPException(400, "No files provided")
+        for f in files:
+            jobs.append((getattr(f, "filename", "") or "upload", await f.read()))
+    elif "application/json" in content_type:
+        try:
+            body = await request.json()
+        except Exception:
+            raise HTTPException(400, "Invalid JSON body")
+        detect_type = body.get("type", "all")
+        urls = body.get("image_urls", [])
+        if not urls:
+            raise HTTPException(400, "No image_urls provided")
+        for url in urls:
+            try:
+                jobs.append((url, await fetch_url(url)))
+            except HTTPException as exc:
+                jobs.append((url, b"__error__:" + exc.detail.encode()))
+    else:
+        raise HTTPException(400, "Content-Type must be multipart/form-data or application/json")
+
+    if detect_type not in ("faces", "objects", "all"):
+        raise HTTPException(400, "type must be faces, objects, or all")
+
+    results = []
+    for i, (label, raw) in enumerate(jobs):
+        base: dict = {"index": i, "filename": label}
+        if raw.startswith(b"__error__:"):
+            base["error"] = raw[len(b"__error__:"):].decode()
+            results.append(base)
+            continue
+        try:
+            img = open_and_validate(raw)
+            _, src_id = _save_source_image(user_id, raw, img)
+            base["source_image_id"] = src_id
+            if detect_type in ("faces", "all"):
+                base["faces"] = _run_faces(user_id, img, src_id)
+            if detect_type in ("objects", "all"):
+                base["objects"] = _run_objects(user_id, img, src_id)
+        except HTTPException as exc:
+            base["error"] = exc.detail
+        except Exception as exc:
+            base["error"] = str(exc)
+        results.append(base)
+
+    return {"total": len(results), "type": detect_type, "results": results}
+
+
 # ---------------------------------------------------------------------------
 # Detection pipelines
 # ---------------------------------------------------------------------------
@@ -67,6 +130,8 @@ def _run_faces(user_id: int, img: Any, source_id: int) -> list[dict]:
         raise HTTPException(503, "Face engine not loaded. Activate a model via /api/models/{id}/activate.")
 
     threshold = settings_cache.cache.get_or("face.match_threshold", 0.5)
+    auto_confirm_on = settings_cache.cache.get_or("face.auto_confirm", True)
+    auto_confirm = settings_cache.cache.get_or("face.auto_confirm_threshold", 0.80)
     padding = settings_cache.cache.get_or("system.crop_padding", 0.2)
     save_unknown = settings_cache.cache.get_or("system.save_unknown_detections", True)
 
@@ -75,10 +140,16 @@ def _run_faces(user_id: int, img: Any, source_id: int) -> list[dict]:
 
     results = []
     for det in detections:
-        identity_id, _sim = _match_face(det.embedding, model_row["id"], user_id, threshold)
+        identity_id, sim = _match_face(det.embedding, model_row["id"], user_id, threshold)
 
         if identity_id is None and not save_unknown:
             continue
+
+        review_status = (
+            "confirmed"
+            if identity_id is not None and auto_confirm_on and sim >= auto_confirm
+            else "pending"
+        )
 
         crop_filename = _save_crop(img, det.bbox, padding)
         detection_id = store.insert_detection(
@@ -93,6 +164,8 @@ def _run_faces(user_id: int, img: Any, source_id: int) -> list[dict]:
             bbox_w=det.bbox[2],
             bbox_h=det.bbox[3],
             crop_path=crop_filename,
+            embedding=_embedding_to_bytes(det.embedding),
+            review_status=review_status,
         )
 
         label = None
@@ -107,7 +180,7 @@ def _run_faces(user_id: int, img: Any, source_id: int) -> list[dict]:
             "identity_id": identity_id,
             "label": label,
             "crop_url": f"/media/crops/{crop_filename}",
-            "review_status": "pending",
+            "review_status": review_status,
         })
 
     return results
@@ -189,6 +262,15 @@ def _save_crop(img: Any, bbox: tuple[int, int, int, int], padding: float) -> str
     filename = f"{uuid.uuid4().hex}.jpg"
     crop.save(crop_dir / filename, "JPEG")
     return filename
+
+
+def _embedding_to_bytes(embedding: Any) -> bytes | None:
+    try:
+        import numpy as np
+        result = np.asarray(embedding, dtype=np.float32).tobytes()
+        return result if isinstance(result, bytes) else None
+    except Exception:
+        return None
 
 
 def _match_face(
