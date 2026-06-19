@@ -69,7 +69,7 @@ jobs:
       - name: Build image tags
         id: tags
         run: |
-          IMAGE="${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}"
+          IMAGE="${{ env.REGISTRY }}/$(echo '${{ env.IMAGE_NAME }}' | tr '[:upper:]' '[:lower:]')"
           TAGS="${IMAGE}:${{ steps.version.outputs.version }}"
           if [ "${{ steps.prerelease.outputs.is_prerelease }}" = "false" ]; then
             TAGS="${TAGS},${IMAGE}:latest"
