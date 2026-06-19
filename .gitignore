@@ -1,0 +1,24 @@
+# Design docs — kept locally, not pushed
+DESIGN.md
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+*.egg-info/
+
+# Environment
+.env
+
+# Data & models (mounted volumes, not committed)
+/data/
+/models/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Editors
+.vscode/
+.idea/
