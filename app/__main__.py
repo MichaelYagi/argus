@@ -4,7 +4,13 @@ from __future__ import annotations
 
 import argparse
 
-import uvicorn
+# Load .env before app.main is imported so all env vars (SECRET_KEY, etc.)
+# are in the environment when the FastAPI app and its middleware are created.
+from dotenv import load_dotenv
+
+load_dotenv()
+
+import uvicorn  # noqa: E402
 
 
 def main() -> None:

@@ -6,7 +6,6 @@ import logging
 import os
 from contextlib import asynccontextmanager
 
-from dotenv import load_dotenv
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 from starlette.middleware.sessions import SessionMiddleware
@@ -23,7 +22,6 @@ log = logging.getLogger(__name__)
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    load_dotenv()
     if os.environ.get("SECRET_KEY", "change-me") == "change-me":
         log.warning("SECRET_KEY is not set — sessions are insecure. Set SECRET_KEY in .env.")
     store.init_db()

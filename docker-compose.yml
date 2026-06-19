@@ -1,0 +1,21 @@
+services:
+  argus:
+    build: .
+    ports:
+      - "8100:8100"
+    volumes:
+      - ./data:/app/data
+      - ./models:/app/models
+    env_file:
+      - .env
+    restart: unless-stopped
+
+    # GPU support — uncomment if you have the NVIDIA Container Toolkit installed
+    # and Docker Desktop is using the WSL2 backend with CUDA drivers configured.
+    # deploy:
+    #   resources:
+    #     reservations:
+    #       devices:
+    #         - driver: nvidia
+    #           count: all
+    #           capabilities: [gpu]
