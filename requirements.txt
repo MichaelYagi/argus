@@ -9,5 +9,6 @@ numpy
 pillow
 pillow-heif
 httpx
+httpx2
 python-dotenv
 itsdangerous
