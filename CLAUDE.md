@@ -30,6 +30,10 @@ If something Shashin-specific comes up later, solve it from Shashin's side (Shas
 
 **Minimal dependencies is a hard project value, not a soft preference.** Before adding any new dependency, ask whether stdlib or a few lines of code covers it.
 
+## Run modes — Docker and CLI, one codebase
+
+Argus must run two ways: `docker compose up` (primary) and directly on the host via `python -m app` (no Docker). **Both call the exact same `app/main.py` FastAPI app object** — `app/__main__.py` and the Docker image's entrypoint are both thin `uvicorn.run(app, ...)` wrappers, nothing more. Never let route/business logic differ between the two, and never branch config (API key, host, port, model/data paths) on "am I in Docker or not" — both read the same environment variables / `.env` the same way. Use stdlib `argparse` for any CLI flags before reaching for `click`/`typer`, per the minimal-deps value. Full detail in `DESIGN.md` §2 ("Run modes"). This is separate from the native OS installers (Windows/macOS/Linux) described in the Platform Distribution Roadmap below — `python -m app` is available from day one; packaged installers are a distinct, later phase.
+
 ## Versioning & CI/CD
 
 Project starts at **`0.1.0`** (alpha — use `0.1.0-alpha.1` style pre-release tags while in alpha). Full scheme in `DESIGN.md` §3. Key points:
@@ -89,7 +93,7 @@ These are called out in `DESIGN.md` §7 — resolve sensibly, but flag the choic
 
 ## Suggested build order
 
-1. Repo skeleton: `LICENSE` (MIT), `app/__init__.py` with `__version__ = "0.1.0"`, directory layout per `DESIGN.md` §8, `requirements.txt`, `pyproject.toml` (ruff config)
+1. Repo skeleton: `LICENSE` (MIT), `app/__init__.py` with `__version__ = "0.1.0"`, `app/__main__.py` (CLI entry point, see Run modes above), directory layout per `DESIGN.md` §8, `requirements.txt`, `pyproject.toml` (ruff config)
 2. `.github/workflows/test.yml` (lint + pytest, even with near-zero tests at this point — establish the gate immediately) and `.github/workflows/release.yml` (tag-triggered build/push/release)
 3. Schema + `db/store.py` raw sqlite access layer, seed data for `models`/`settings`; first real tests (schema application test)
 4. `core/settings_cache.py`, `core/engine_registry.py` skeletons (no real models loaded yet); tests for settings cache get/set/reset
@@ -102,4 +106,5 @@ These are called out in `DESIGN.md` §7 — resolve sensibly, but flag the choic
 11. Multi-face tagging endpoint + page
 12. Jinja pages and static JS/CSS last, once the API is solid — dashboard, gallery (justified + infinite scroll), test page, review page, tag page, models page, settings page
 13. Dockerfile + docker-compose, volumes for `models/` and `data/`
-14. Tag `v0.1.0-alpha.1` once the above is functional end to end — first release workflow run
+14. Verify both run modes work identically: `python -m app` locally AND `docker compose up` — same routes, same behavior, before tagging the first release
+15. Tag `v0.1.0-alpha.1` once the above is functional end to end — first release workflow run
