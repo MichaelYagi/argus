@@ -151,6 +151,26 @@
         tagLink.addEventListener('click', e => e.stopPropagation());
         el.appendChild(tagLink);
 
+        // Delete button (bottom-left alongside badge, hover only)
+        const delBtn = document.createElement('button');
+        delBtn.title = 'Delete this detection';
+        delBtn.className = 'g-del-btn';
+        delBtn.textContent = '✕';
+        delBtn.addEventListener('click', async e => {
+          e.stopPropagation();
+          showConfirm('Delete this detection permanently?', async () => {
+            const resp = await fetch(`/api/detections/${item.detection_id}`, { method: 'DELETE' });
+            if (resp.ok || resp.status === 204) {
+              const idx = allItems.findIndex(i => i.detection_id === item.detection_id);
+              if (idx !== -1) allItems.splice(idx, 1);
+              selected.delete(item.detection_id);
+              updateBulkBar();
+              render();
+            }
+          }, { confirmText: 'Delete', danger: true });
+        });
+        el.appendChild(delBtn);
+
         // Set-cover button (bottom-right, hover only)
         const coverBtn = document.createElement('button');
         coverBtn.title = 'Set as cover photo';

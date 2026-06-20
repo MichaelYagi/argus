@@ -125,6 +125,16 @@ async def bulk_review(items: list[_BulkItem], user_id: int = Depends(require_aut
 
 
 # ---------------------------------------------------------------------------
+# Delete a single detection permanently
+# ---------------------------------------------------------------------------
+
+@router.delete("/api/detections/{detection_id}", status_code=204)
+async def delete_detection(detection_id: int, user_id: int = Depends(require_auth)):
+    if not store.delete_detection(detection_id, user_id):
+        raise HTTPException(404, "Detection not found")
+
+
+# ---------------------------------------------------------------------------
 # Casual inline correction — shared between faces, objects, and all UI surfaces
 # ---------------------------------------------------------------------------
 

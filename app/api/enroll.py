@@ -16,6 +16,30 @@ from app.db import store
 
 router = APIRouter()
 
+
+@router.delete("/api/face_embeddings/{embedding_id}", status_code=204)
+async def delete_embedding(embedding_id: int, user_id: int = Depends(require_auth)):
+    if not store.delete_face_embedding(embedding_id, user_id):
+        raise HTTPException(404, "Embedding not found")
+
+
+@router.get("/api/face_embeddings")
+async def list_embeddings(
+    identity_id: int,
+    user_id: int = Depends(require_auth),
+):
+    """List reference embeddings for an identity (without the raw vectors)."""
+    from app.db import store as _s
+    if not _s.get_identity(identity_id, user_id):
+        raise HTTPException(404, "Identity not found")
+    with store._connect() as conn:
+        rows = conn.execute(
+            """SELECT id, identity_id, model_id, source_image_path, created_at
+               FROM face_embeddings WHERE identity_id = ? ORDER BY created_at""",
+            (identity_id,),
+        ).fetchall()
+    return [dict(r) for r in rows]
+
 _FMT_EXT = {"JPEG": "jpg", "PNG": "png", "WEBP": "webp", "BMP": "bmp",
              "GIF": "gif", "TIFF": "tif", "HEIF": "heif"}
 

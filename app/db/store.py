@@ -481,6 +481,18 @@ def get_detection(detection_id: int, user_id: int) -> sqlite3.Row | None:
         ).fetchone()
 
 
+def delete_face_embedding(embedding_id: int, user_id: int) -> bool:
+    """Delete a single reference embedding. Verifies ownership via the identity's user_id."""
+    with _connect() as conn:
+        conn.execute(
+            """DELETE FROM face_embeddings
+               WHERE id = ?
+                 AND identity_id IN (SELECT id FROM identities WHERE user_id = ?)""",
+            (embedding_id, user_id),
+        )
+        return conn.execute("SELECT changes()").fetchone()[0] > 0
+
+
 def get_face_embeddings_for_model(model_id: int, user_id: int) -> list[sqlite3.Row]:
     """Return embeddings for the active model scoped to this user's identities."""
     with _connect() as conn:
@@ -567,6 +579,15 @@ def reassign_detection(detection_id: int, user_id: int, identity_id: int) -> boo
             """UPDATE detections SET review_status = 'reassigned', identity_id = ?,
                reviewed_at = datetime('now') WHERE id = ? AND user_id = ?""",
             (identity_id, detection_id, user_id),
+        )
+        return conn.execute("SELECT changes()").fetchone()[0] > 0
+
+
+def delete_detection(detection_id: int, user_id: int) -> bool:
+    with _connect() as conn:
+        conn.execute(
+            "DELETE FROM detections WHERE id = ? AND user_id = ?",
+            (detection_id, user_id),
         )
         return conn.execute("SELECT changes()").fetchone()[0] > 0
 
