@@ -343,8 +343,13 @@ async function openExportModal() {
     const blob = await resp.blob();
     const url  = URL.createObjectURL(blob);
     const a    = document.createElement('a');
-    a.href = url; a.download = 'argus_export.zip'; a.click();
-    URL.revokeObjectURL(url);
+    a.href = url;
+    a.download = 'argus_export.zip';
+    a.style.display = 'none';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    setTimeout(() => URL.revokeObjectURL(url), 500);
     close();
   });
 }

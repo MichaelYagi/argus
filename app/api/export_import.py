@@ -101,22 +101,28 @@ async def export_data(body: _ExportBody, user_id: int = Depends(require_auth)):
             })
 
     buf = io.BytesIO()
-    with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
-        zf.writestr("argus_export.json", json.dumps({
-            "version": __version__,
-            "exported_at": datetime.now(timezone.utc).isoformat(),
-            "identities": identities_data,
-        }, indent=2))
+    with zipfile.ZipFile(buf, "w") as zf:
+        # JSON compresses well
+        zf.writestr(
+            zipfile.ZipInfo("argus_export.json"),
+            json.dumps({
+                "version": __version__,
+                "exported_at": datetime.now(timezone.utc).isoformat(),
+                "identities": identities_data,
+            }, indent=2).encode(),
+            zipfile.ZIP_DEFLATED,
+        )
 
+        # Images are already compressed — ZIP_STORED skips pointless re-compression
         for filename in source_files:
             path = sources_dir() / filename
             if path.exists():
-                zf.write(path, f"sources/{filename}")
+                zf.write(path, f"sources/{filename}", zipfile.ZIP_STORED)
 
         for filename in crop_files:
             path = crops_dir() / filename
             if path.exists():
-                zf.write(path, f"crops/{filename}")
+                zf.write(path, f"crops/{filename}", zipfile.ZIP_STORED)
 
     buf.seek(0)
     return StreamingResponse(
