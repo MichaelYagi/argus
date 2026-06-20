@@ -2,9 +2,12 @@ FROM python:3.11-slim
 
 WORKDIR /app
 
-# libgomp1 is required by onnxruntime (OpenMP threading)
+# libgomp1  — onnxruntime (OpenMP threading)
+# libxcb1, libx11-6 — linked by insightface/ultralytics even in headless mode
 RUN apt-get update && apt-get install -y --no-install-recommends \
         libgomp1 \
+        libxcb1 \
+        libx11-6 \
     && rm -rf /var/lib/apt/lists/*
 
 COPY requirements.txt .
