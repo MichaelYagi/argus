@@ -82,6 +82,10 @@ fetch('/api/review/count')
 <main>
   <div class="main-content">
     {% block content %}{% endblock %}
+    <footer style="margin-top:40px;padding-top:12px;border-top:1px solid var(--border);
+                   text-align:right;font-size:11px;color:var(--muted)">
+      Argus {{ version }}
+    </footer>
   </div>
 </main>
 {% block scripts %}{% endblock %}

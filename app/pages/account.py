@@ -6,6 +6,7 @@ from fastapi import APIRouter, Form, Request
 from fastapi.responses import RedirectResponse
 from fastapi.templating import Jinja2Templates
 
+from app import __version__
 from app.core.auth import get_session_user
 from app.core.security import generate_api_key, hash_api_key, hash_password, verify_password
 from app.db import store
@@ -63,6 +64,7 @@ def _render(request: Request, user, error: str = "", success: str = ""):
         "success": success,
         "user_tz": _safe_col(user, "timezone", "UTC"),
         "user_locale": _safe_col(user, "locale", "en-US"),
+        "version": __version__,
         "timezones": TIMEZONES,
         "locales": LOCALES,
     })

@@ -170,6 +170,14 @@
 </div>
 {% endif %}
 
+{% if is_admin %}
+<!-- System health (admin only) -->
+<div class="card" style="margin-bottom:16px">
+  <h2 style="margin-bottom:14px">System health</h2>
+  <div id="health-status"><span class="muted" style="font-size:13px">Loading…</span></div>
+</div>
+{% endif %}
+
 <!-- Export -->
 <div class="card" style="margin-bottom:16px">
   <h2 style="margin-bottom:8px">Export data</h2>
@@ -222,6 +230,39 @@ function copyKey() {
     fallback();
   }
 }
+
+// ---------------------------------------------------------------------------
+// Health status (admin only)
+// ---------------------------------------------------------------------------
+{% if is_admin %}
+(async () => {
+  const el = document.getElementById('health-status');
+  if (!el) return;
+  try {
+    const d = await fetch('/api/health').then(r => r.json());
+    const gpu = d.gpu_available === true ? 'Available' : d.gpu_available === false ? 'Not available' : '—';
+    const dot = ok => `<span style="display:inline-block;width:8px;height:8px;border-radius:50%;
+      background:${ok ? 'var(--success)' : 'var(--muted)'};margin-right:6px"></span>`;
+    el.innerHTML = `
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px 24px;font-size:13px">
+        <div><div class="muted" style="font-size:11px;margin-bottom:2px">Status</div>
+          ${dot(d.status === 'ok')}<strong>${d.status}</strong></div>
+        <div><div class="muted" style="font-size:11px;margin-bottom:2px">Version</div>
+          <strong>${d.version}</strong></div>
+        <div><div class="muted" style="font-size:11px;margin-bottom:2px">GPU</div>
+          ${dot(d.gpu_available)}<strong>${gpu}</strong></div>
+        <div><div class="muted" style="font-size:11px;margin-bottom:2px">Provider</div>
+          <strong>${d.active_provider || '—'}</strong></div>
+        <div><div class="muted" style="font-size:11px;margin-bottom:2px">Face model</div>
+          <strong>${d.face_model || 'None loaded'}</strong></div>
+        <div><div class="muted" style="font-size:11px;margin-bottom:2px">Object model</div>
+          <strong>${d.object_model || 'None loaded'}</strong></div>
+      </div>`;
+  } catch {
+    el.innerHTML = '<span class="muted" style="font-size:13px">Could not fetch health status.</span>';
+  }
+})();
+{% endif %}
 
 // ---------------------------------------------------------------------------
 // Export modal

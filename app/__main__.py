@@ -47,6 +47,38 @@ if os.environ.get("SECRET_KEY", "change-me") == "change-me":
 
     os.environ["SECRET_KEY"] = _key
 
+# Pre-load CUDA shared libraries from pip-installed nvidia packages.
+# Setting LD_LIBRARY_PATH alone is unreliable on WSL2 — dlopen() may not
+# re-read it after process start. ctypes.RTLD_GLOBAL injects the libraries
+# into the global symbol table so onnxruntime-gpu finds them at import time.
+import ctypes as _ctypes  # noqa: E402
+import glob as _glob  # noqa: E402
+import site as _site  # noqa: E402
+
+_nvidia_lib_dirs: list[str] = []
+for _sp in _site.getsitepackages():
+    _nvidia = os.path.join(_sp, "nvidia")
+    if os.path.isdir(_nvidia):
+        for _pkg in os.listdir(_nvidia):
+            _lib_dir = os.path.join(_nvidia, _pkg, "lib")
+            if os.path.isdir(_lib_dir):
+                _nvidia_lib_dirs.append(_lib_dir)
+
+# Pre-load every versioned .so found in nvidia pip packages into the global
+# symbol table so onnxruntime-gpu's dlopen() finds them regardless of
+# LD_LIBRARY_PATH (unreliable in WSL2 after process start).
+for _lib_dir in _nvidia_lib_dirs:
+    for _so in sorted(_glob.glob(os.path.join(_lib_dir, "*.so.*"))):
+        if os.path.isfile(_so):
+            try:
+                _ctypes.CDLL(_so, mode=_ctypes.RTLD_GLOBAL)
+            except OSError:
+                pass
+
+if _nvidia_lib_dirs:
+    _existing = os.environ.get("LD_LIBRARY_PATH", "")
+    os.environ["LD_LIBRARY_PATH"] = ":".join(_nvidia_lib_dirs) + (":" + _existing if _existing else "")
+
 import uvicorn  # noqa: E402
 
 

@@ -44,7 +44,7 @@ def _autoload_engines() -> None:
             from app.core import face_index
             face_index.build_all(face_row["id"])
         except Exception as exc:
-            log.warning("Failed to load face model %s: %s", face_row["name"], exc)
+            log.warning("Failed to load face model %s: %s", face_row["name"], exc, exc_info=True)
 
     obj_row = store.get_active_model("object")
     if obj_row and obj_row["is_downloaded"]:

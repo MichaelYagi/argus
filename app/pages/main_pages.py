@@ -6,6 +6,7 @@ from fastapi import APIRouter, Request
 from fastapi.responses import RedirectResponse
 from fastapi.templating import Jinja2Templates
 
+from app import __version__
 from app.core.auth import get_session_user
 from app.db import store
 
@@ -55,6 +56,7 @@ def _base(request: Request, active: str = "") -> dict | None:
         "active": active,
         "user_tz": _col(user, "timezone", "UTC"),
         "user_locale": _col(user, "locale", "en-US"),
+        "version": __version__,
     }
 
 
