@@ -119,6 +119,8 @@ async def set_cover(identity_id: int, body: _CoverBody, user_id: int = Depends(r
 async def delete_identity(identity_id: int, user_id: int = Depends(require_auth)):
     if not store.delete_identity(identity_id, user_id):
         raise HTTPException(404, "Identity not found")
+    from app.core import face_index as _fi
+    _fi.rebuild_user(user_id)
 
 
 # ---------------------------------------------------------------------------

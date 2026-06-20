@@ -29,7 +29,8 @@ CREATE TABLE IF NOT EXISTS identities (
     user_id            INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     type               TEXT    NOT NULL CHECK(type IN ('face', 'object')),
     label              TEXT    NOT NULL,
-    cover_detection_id INTEGER REFERENCES detections(id) ON DELETE SET NULL,
+    cover_detection_id      INTEGER REFERENCES detections(id) ON DELETE SET NULL,
+    representative_embedding BLOB,   -- mean of all face_embeddings for the active model
     created_at         TEXT    NOT NULL DEFAULT (datetime('now')),
     UNIQUE(user_id, type, label)
 );

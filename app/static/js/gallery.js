@@ -3,7 +3,8 @@
   const container = document.getElementById('gallery');
   if (!container) return;
 
-  const identityId = container.dataset.identityId;
+  const identityId   = container.dataset.identityId;
+  const identityType = container.dataset.identityType;
   const PAGE = 30;
   const GAP = 4;
   const TARGET_H = 200;
@@ -170,6 +171,24 @@
           }, { confirmText: 'Delete', danger: true });
         });
         el.appendChild(delBtn);
+
+        // Add-to-references button (bottom-right, hover only, face identities only)
+        if (identityType === 'face') {
+          const enrollBtn = document.createElement('button');
+          enrollBtn.title = 'Add to reference set';
+          enrollBtn.className = 'g-enroll-btn';
+          enrollBtn.textContent = '+';
+          enrollBtn.addEventListener('click', async e => {
+            e.stopPropagation();
+            const resp = await fetch(`/api/detections/${item.detection_id}/enroll`, { method: 'POST' });
+            if (resp.ok) {
+              const d = await resp.json();
+              enrollBtn.classList.add('enrolled');
+              enrollBtn.title = d.added ? 'Added to reference set' : 'Already in reference set';
+            }
+          });
+          el.appendChild(enrollBtn);
+        }
 
         // Set-cover button (bottom-right, hover only)
         const coverBtn = document.createElement('button');

@@ -41,6 +41,8 @@ def _autoload_engines() -> None:
             from app.core.face_engine import FaceEngine
             registry.swap_face_engine(FaceEngine(face_row["name"], models_dir()))
             log.info("Loaded face model: %s", face_row["name"])
+            from app.core import face_index
+            face_index.build_all(face_row["id"])
         except Exception as exc:
             log.warning("Failed to load face model %s: %s", face_row["name"], exc)
 

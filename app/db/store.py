@@ -73,6 +73,8 @@ def _migrate(conn: sqlite3.Connection) -> None:
         conn.execute(
             "ALTER TABLE identities ADD COLUMN cover_detection_id INTEGER REFERENCES detections(id) ON DELETE SET NULL"
         )
+    if "representative_embedding" not in existing_identity_cols:
+        conn.execute("ALTER TABLE identities ADD COLUMN representative_embedding BLOB")
 
     # Insert missing seed settings and refresh descriptions on every startup
     existing_keys = {r[0] for r in conn.execute("SELECT key FROM settings")}
@@ -537,6 +539,43 @@ def delete_face_embedding(embedding_id: int, user_id: int) -> bool:
         return conn.execute("SELECT changes()").fetchone()[0] > 0
 
 
+def compute_and_store_representative(identity_id: int, model_id: int) -> None:
+    """Compute the mean of all embeddings for (identity, model) and store it."""
+    import numpy as np
+    with _connect() as conn:
+        rows = conn.execute(
+            "SELECT embedding FROM face_embeddings WHERE identity_id = ? AND model_id = ?",
+            (identity_id, model_id),
+        ).fetchall()
+        if not rows:
+            conn.execute(
+                "UPDATE identities SET representative_embedding = NULL WHERE id = ?",
+                (identity_id,),
+            )
+            return
+        vecs = [np.frombuffer(bytes(r["embedding"]), dtype=np.float32) for r in rows]
+        mean_vec = np.mean(vecs, axis=0).astype(np.float32)
+        conn.execute(
+            "UPDATE identities SET representative_embedding = ? WHERE id = ?",
+            (mean_vec.tobytes(), identity_id),
+        )
+
+
+def get_representative_embeddings(model_id: int, user_id: int) -> list[sqlite3.Row]:
+    """Return identities with a representative embedding for this model."""
+    with _connect() as conn:
+        return conn.execute(
+            """SELECT i.id AS identity_id, i.representative_embedding
+               FROM identities i
+               WHERE i.user_id = ? AND i.representative_embedding IS NOT NULL
+                 AND EXISTS (
+                   SELECT 1 FROM face_embeddings fe
+                   WHERE fe.identity_id = i.id AND fe.model_id = ?
+                 )""",
+            (user_id, model_id),
+        ).fetchall()
+
+
 def get_face_embeddings_for_model(model_id: int, user_id: int) -> list[sqlite3.Row]:
     """Return embeddings for the active model scoped to this user's identities."""
     with _connect() as conn:
@@ -699,6 +738,9 @@ _SETTINGS_SEED: list[tuple] = [
     ("face.auto_confirm_threshold",
      "0.80",  "float",  "face",
      "Auto-Confirm Threshold | Matches at or above this similarity score are confirmed automatically"),
+    ("face.auto_enroll_threshold",
+     "0.92",  "float",  "face",
+     "Auto-Enroll Threshold | Add confirmed detections to the reference set above this confidence; 0 disables"),
     ("face.detection_confidence",
      "0.6",   "float",  "face",
      "Detection Confidence | Minimum confidence for a face region to be reported at all"),

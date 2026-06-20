@@ -23,7 +23,7 @@
   <button class="btn btn-ghost" onclick="clearSelection()" style="color:#fff;border-color:#555">Clear</button>
 </div>
 
-<div id="gallery" data-identity-id="{{ identity.id }}"></div>
+<div id="gallery" data-identity-id="{{ identity.id }}" data-identity-type="{{ identity.type }}"></div>
 <p id="gallery-loading" class="loading" hidden>Loading…</p>
 <p id="gallery-empty" class="muted" hidden style="text-align:center;padding:48px">No detections yet.</p>
 {% endblock %}

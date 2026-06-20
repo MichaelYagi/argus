@@ -94,6 +94,8 @@ async def activate_model(model_id: int, user_id: int = Depends(require_auth)):
 
     if row["type"] == "face":
         registry.swap_face_engine(engine)
+        from app.core import face_index as _fi
+        _fi.build_all(model_id)
     else:
         registry.swap_object_engine(engine)
 

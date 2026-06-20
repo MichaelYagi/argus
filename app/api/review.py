@@ -11,6 +11,18 @@ from app.core import settings_cache
 from app.core.auth import require_auth
 from app.db import store
 
+
+def _auto_enroll(detection_id: int, user_id: int) -> None:
+    """Enroll a detection's embedding if its confidence exceeds the threshold."""
+    threshold = settings_cache.cache.get_or("face.auto_enroll_threshold", 0.92)
+    if threshold <= 0:
+        return
+    det = store.get_detection(detection_id, user_id)
+    if not det or det["type"] != "face" or det["confidence"] < threshold:
+        return
+    from app.api.enroll import enroll_from_detection
+    enroll_from_detection(det, user_id)
+
 router = APIRouter()
 
 
@@ -56,6 +68,7 @@ async def get_review_queue(
 async def confirm(detection_id: int, user_id: int = Depends(require_auth)):
     if not store.confirm_detection(detection_id, user_id):
         raise HTTPException(404, "Detection not found")
+    _auto_enroll(detection_id, user_id)
     return {"detection_id": detection_id, "review_status": "confirmed"}
 
 
@@ -87,6 +100,11 @@ async def reassign(
         raise HTTPException(404, "Detection not found")
 
     store.reassign_detection(detection_id, user_id, identity_id)
+    # Human explicitly named this face — enroll unconditionally (bypass threshold)
+    det = store.get_detection(detection_id, user_id)
+    if det:
+        from app.api.enroll import enroll_from_detection
+        enroll_from_detection(det, user_id)
     return {"detection_id": detection_id, "identity_id": identity_id, "review_status": "reassigned"}
 
 
@@ -103,6 +121,7 @@ async def bulk_review(items: list[_BulkItem], user_id: int = Depends(require_aut
     for item in items:
         if item.action == "confirm":
             store.confirm_detection(item.detection_id, user_id)
+            _auto_enroll(item.detection_id, user_id)
             results.append({"detection_id": item.detection_id, "status": "confirmed"})
         elif item.action == "reject":
             store.reject_detection(item.detection_id, user_id)
@@ -116,6 +135,10 @@ async def bulk_review(items: list[_BulkItem], user_id: int = Depends(require_aut
                                  "detail": "Provide identity_id or label"})
                 continue
             store.reassign_detection(item.detection_id, user_id, iid)
+            det = store.get_detection(item.detection_id, user_id)
+            if det:
+                from app.api.enroll import enroll_from_detection
+                enroll_from_detection(det, user_id)
             results.append({"detection_id": item.detection_id, "status": "reassigned",
                              "identity_id": iid})
         else:
@@ -161,6 +184,7 @@ async def label_detection(
         )
 
     store.label_detection(detection_id, user_id, identity_id)
+    _auto_enroll(detection_id, user_id)
     identity = store.get_identity(identity_id, user_id)
     return {
         "detection_id": detection_id,
@@ -199,23 +223,17 @@ def _suggested_matches(
 ) -> list[dict]:
     import numpy as np
 
-    rows = store.get_face_embeddings_for_model(model_id, user_id)
-    if not rows:
-        return []
+    from app.core import face_index
 
-    query = np.frombuffer(embedding_bytes, dtype=np.float32)
-    best: dict[int, tuple[float, str]] = {}
-
-    for row in rows:
-        stored = np.frombuffer(bytes(row["embedding"]), dtype=np.float32)
-        norm = np.linalg.norm(query) * np.linalg.norm(stored)
-        sim = float(np.dot(query, stored) / norm) if norm > 0 else 0.0
-        iid = row["identity_id"]
-        if iid not in best or sim > best[iid][0]:
-            best[iid] = (sim, row["label"])
-
-    ranked = sorted(best.items(), key=lambda x: x[1][0], reverse=True)[:top_n]
-    return [
-        {"identity_id": iid, "label": label, "similarity": round(sim, 4)}
-        for iid, (sim, label) in ranked
-    ]
+    embedding = np.frombuffer(embedding_bytes, dtype=np.float32)
+    results   = face_index.search(embedding, user_id, threshold=0.0, k=top_n)
+    output    = []
+    for identity_id, sim in results:
+        identity = store.get_identity(identity_id, user_id)
+        if identity:
+            output.append({
+                "identity_id": identity_id,
+                "label": identity["label"],
+                "similarity": round(sim, 4),
+            })
+    return output

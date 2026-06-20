@@ -42,7 +42,7 @@ def test_list_settings_grouped(client):
     assert r.status_code == 200
     data = r.json()
     assert set(data.keys()) == {"face", "object", "system"}
-    assert len(data["face"]) == 5
+    assert len(data["face"]) == 6
     assert len(data["object"]) == 3
     assert len(data["system"]) == 6
 
@@ -167,7 +167,7 @@ def test_reset_category(client):
 
     r = client.post("/api/settings/reset?category=face", headers=h)
     assert r.status_code == 200
-    assert len(r.json()) == 5
+    assert len(r.json()) == 6
     assert settings_cache.cache.get("face.match_threshold") == 0.5
     assert settings_cache.cache.get("face.min_face_size") == 40
 

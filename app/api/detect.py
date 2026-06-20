@@ -276,20 +276,10 @@ def _embedding_to_bytes(embedding: Any) -> bytes | None:
 def _match_face(
     embedding: Any, model_id: int, user_id: int, threshold: float
 ) -> tuple[int | None, float]:
-    import numpy as np
-
-    rows = store.get_face_embeddings_for_model(model_id, user_id)
-    if not rows:
-        return None, 0.0
-
-    best_id: int | None = None
-    best_sim = 0.0
-    for row in rows:
-        stored = np.frombuffer(bytes(row["embedding"]), dtype=np.float32)
-        norm = np.linalg.norm(embedding) * np.linalg.norm(stored)
-        sim = float(np.dot(embedding, stored) / norm) if norm > 0 else 0.0
-        if sim > best_sim:
-            best_sim = sim
-            best_id = row["identity_id"]
-
-    return (best_id, best_sim) if best_sim >= threshold else (None, best_sim)
+    from app.core import face_index
+    results = face_index.search(embedding, user_id, threshold=threshold, k=1)
+    if results:
+        return results[0]
+    # Below threshold — get best anyway for review queue context
+    best = face_index.search(embedding, user_id, threshold=0.0, k=1)
+    return (None, best[0][1]) if best else (None, 0.0)
