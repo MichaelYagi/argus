@@ -23,7 +23,7 @@ log = logging.getLogger(__name__)
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     if os.environ.get("SECRET_KEY", "change-me") == "change-me":
-        log.warning("SECRET_KEY is not set — sessions are insecure. Set SECRET_KEY in .env.")
+        log.warning("SECRET_KEY is not set — sessions are insecure.")
     store.init_db()
     settings_cache.cache.load()
     _autoload_engines()

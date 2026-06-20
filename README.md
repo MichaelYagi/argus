@@ -14,25 +14,14 @@ Self-hosted face and object recognition. Single Docker container, runs on your L
 
 ## Quick start (Docker)
 
-**1. Clone and create your `.env`**
+**1. Clone**
 
 ```bash
 git clone https://github.com/MichaelYagi/argus.git
 cd argus
-cp .env.example .env
 ```
 
-Open `.env` and set a `SECRET_KEY`:
-
-```bash
-python -c "import secrets; print(secrets.token_hex(32))"
-```
-
-Paste the output into `.env`:
-
-```
-SECRET_KEY=a3f9c2d8e1b4...
-```
+No `.env` file needed — `SECRET_KEY` is auto-generated on first startup and persisted automatically. See `.env.example` if you want to override it or set other options.
 
 **2. Build and start**
 
@@ -77,8 +66,6 @@ Requires Python 3.11+.
 
 ```bash
 pip install -r requirements.txt
-cp .env.example .env
-# Edit .env and set SECRET_KEY
 python -m app
 ```
 
