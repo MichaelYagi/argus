@@ -72,7 +72,7 @@ def test_login_valid_credentials(client):
     client.post("/signup", data={"username": "alice", "password": "password123", "confirm": "password123"})
     r = client.post("/login", data={"username": "alice", "password": "password123"})
     assert r.status_code == 303
-    assert r.headers["location"] == "/"
+    assert r.headers["location"] in ("/", "/account")
 
 
 def test_login_invalid_password(client):
@@ -122,8 +122,8 @@ def test_list_keys_empty_initially(client):
     headers = _auth_header(client)
     r = client.get("/api/keys", headers=headers)
     assert r.status_code == 200
-    # The key we created for auth is already listed
-    assert len(r.json()) == 1
+    # First user gets an auto-generated "Default key" on signup + the "test key" we created
+    assert len(r.json()) == 2
 
 
 def test_create_key_returns_plaintext_once(client):

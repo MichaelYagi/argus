@@ -1,0 +1,22 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
+  <rect width="100" height="100" rx="18" fill="#0d1117"/>
+
+  <g fill="none" stroke="#5b8af5" stroke-linecap="round" transform="translate(50,54)">
+
+    <!-- Core dot -->
+    <circle cx="0" cy="0" r="3.5" fill="#5b8af5"/>
+
+    <!-- Ring 1 -->
+    <path d="M -7,0 A 7,7 0 1 1 7,0" stroke-width="2.2"/>
+
+    <!-- Ring 2 -->
+    <path d="M -14,2 A 14,14 0 1 1 14,2" stroke-width="2.1"/>
+
+    <!-- Ring 3 -->
+    <path d="M -21,5 A 21,21 0 1 1 10,19" stroke-width="2.0"/>
+
+    <!-- Ring 4 -->
+    <path d="M -28,8 A 28,28 0 0 1 28,8 A 28,28 0 0 1 20,24" stroke-width="1.9"/>
+
+  </g>
+</svg>

@@ -1,0 +1,160 @@
+{% extends "base.html" %}
+{% block title %}Account — Argus{% endblock %}
+
+{% block content %}
+<h1 style="margin-bottom:24px">Account</h1>
+
+{% if error %}<div class="alert alert-error">{{ error }}</div>{% endif %}
+{% if success %}<div class="alert alert-success">{{ success }}</div>{% endif %}
+
+{% if new_key %}
+<div class="card" style="border:2px solid var(--success);margin-bottom:16px">
+  <h2 style="color:var(--success);margin-bottom:8px">Your API key</h2>
+  <p class="muted" style="font-size:13px;margin-bottom:10px">
+    This is the only time this key will be shown. Copy it now.
+  </p>
+  <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+    <code id="key-display"
+          style="background:#f5f5f5;padding:8px 12px;border-radius:4px;font-size:13px;
+                 word-break:break-all;flex:1">{{ new_key }}</code>
+    <button class="btn btn-ghost" onclick="copyKey()">Copy</button>
+  </div>
+  <p id="copy-msg" style="font-size:12px;color:var(--success);margin-top:6px;display:none">Copied!</p>
+</div>
+{% endif %}
+
+<!-- API Key management -->
+<div class="card" style="margin-bottom:16px">
+  <h2 style="margin-bottom:12px">API key</h2>
+  {% set active_keys  = keys | selectattr('is_active') | list %}
+  {% set revoked_keys = keys | rejectattr('is_active') | list %}
+
+  {% if active_keys %}
+  <table style="width:100%;font-size:13px;border-collapse:collapse;margin-bottom:8px">
+    <thead>
+      <tr style="border-bottom:1px solid var(--border)">
+        <th style="text-align:left;padding:6px 0">Label</th>
+        <th style="text-align:left;padding:6px 0">Created</th>
+        <th style="text-align:left;padding:6px 0">Last used</th>
+        <th></th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for k in active_keys %}
+      <tr style="border-bottom:1px solid var(--border)">
+        <td style="padding:8px 0"><strong>{{ k.label or 'Unnamed' }}</strong></td>
+        <td style="padding:8px 0;color:var(--muted)">{{ k.created_at[:10] }}</td>
+        <td style="padding:8px 0;color:var(--muted)">{{ k.last_used_at[:10] if k.last_used_at else 'Never' }}</td>
+        <td style="padding:8px 0;text-align:right;display:flex;gap:4px;justify-content:flex-end">
+          <form method="post" action="/account/key/{{ k.id }}/revoke" style="display:inline">
+            <button class="btn btn-ghost" style="padding:3px 10px;font-size:12px"
+                    title="Disable this key (keeps it in history)">Revoke</button>
+          </form>
+          <button class="btn btn-danger" style="padding:3px 10px;font-size:12px"
+                  onclick="showConfirm('Delete key &quot;{{ k.label or 'Unnamed' }}&quot;? This cannot be undone.',
+                    () => document.getElementById('del-{{ k.id }}').submit(),
+                    {confirmText:'Delete', danger:true})">Delete</button>
+          <form id="del-{{ k.id }}" method="post" action="/account/key/{{ k.id }}/delete" style="display:none"></form>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <p class="muted" style="margin-bottom:8px">No active keys.</p>
+  {% endif %}
+
+  {% if revoked_keys %}
+  <details style="margin-bottom:8px">
+    <summary class="muted" style="cursor:pointer;font-size:12px">{{ revoked_keys|length }} revoked key{{ 's' if revoked_keys|length != 1 }}</summary>
+    <table style="width:100%;font-size:12px;border-collapse:collapse;margin-top:6px;opacity:.7">
+      <tbody>
+        {% for k in revoked_keys %}
+        <tr style="border-bottom:1px solid var(--border)">
+          <td style="padding:6px 0;color:var(--muted)">{{ k.label or 'Unnamed' }}</td>
+          <td style="padding:6px 0;color:var(--muted)">{{ k.created_at[:10] }}</td>
+          <td style="padding:6px 0;text-align:right">
+            <button class="btn btn-ghost" style="padding:2px 8px;font-size:11px"
+                    onclick="showConfirm('Permanently delete this key?',
+                      () => document.getElementById('del-{{ k.id }}').submit(),
+                      {confirmText:'Delete', danger:true})">Delete</button>
+            <form id="del-{{ k.id }}" method="post" action="/account/key/{{ k.id }}/delete" style="display:none"></form>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </details>
+  {% endif %}
+  <div style="margin-top:14px;display:flex;flex-direction:column;gap:10px">
+    <form method="post" action="/account/key/create" style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+      <input type="text" name="label" placeholder="Key label (e.g. Shashin, Home server…)"
+             style="width:280px" maxlength="80">
+      <button type="submit" class="btn btn-primary">Create key</button>
+    </form>
+    {% if keys | selectattr('is_active') | list %}
+    <button type="button" class="btn btn-ghost"
+            onclick="showConfirm('Revoke all active keys?', () => document.getElementById('revoke-all-form').submit(), {confirmText:'Revoke all', danger:true})">
+      Revoke all keys
+    </button>
+    <form id="revoke-all-form" method="post" action="/account/key/revoke-all" style="display:none"></form>
+    {% endif %}
+  </div>
+</div>
+
+<!-- Password change -->
+<div class="card" style="margin-bottom:16px">
+  <h2 style="margin-bottom:16px">Change password</h2>
+  <form method="post" action="/account/password" style="max-width:380px">
+    <div class="form-group">
+      <label class="lbl">Current password</label>
+      <input type="password" name="current" autocomplete="current-password">
+    </div>
+    <div class="form-group">
+      <label class="lbl">New password <small style="color:var(--muted)">(min 8 chars)</small></label>
+      <input type="password" name="new_password" autocomplete="new-password">
+    </div>
+    <div class="form-group">
+      <label class="lbl">Confirm new password</label>
+      <input type="password" name="confirm" autocomplete="new-password">
+    </div>
+    <button type="submit" class="btn btn-primary">Update password</button>
+  </form>
+</div>
+
+{% if is_admin %}
+<!-- Admin: pending registrations -->
+<div class="card">
+  <h2 style="margin-bottom:12px">Pending registrations</h2>
+  {% if pending_users %}
+    {% for u in pending_users %}
+    <div style="display:flex;align-items:center;gap:12px;padding:10px 0;border-bottom:1px solid var(--border)">
+      <strong style="font-size:14px">{{ u.username }}</strong>
+      <span class="muted" style="font-size:12px">Registered {{ u.created_at[:10] }}</span>
+      <span style="flex:1"></span>
+      <form method="post" action="/admin/approve/{{ u.id }}" style="display:inline">
+        <button class="btn btn-success" style="padding:5px 12px;font-size:12px">Approve</button>
+      </form>
+      <form method="post" action="/admin/reject/{{ u.id }}" style="display:inline">
+        <button class="btn btn-danger" style="padding:5px 12px;font-size:12px">Reject</button>
+      </form>
+    </div>
+    {% endfor %}
+  {% else %}
+    <p class="muted">No pending registrations.</p>
+  {% endif %}
+</div>
+{% endif %}
+{% endblock %}
+
+{% block scripts %}
+<script>
+function copyKey() {
+  const text = document.getElementById('key-display').textContent;
+  navigator.clipboard.writeText(text).then(() => {
+    document.getElementById('copy-msg').style.display = 'block';
+    setTimeout(() => { document.getElementById('copy-msg').style.display = 'none'; }, 2000);
+  });
+}
+</script>
+{% endblock %}

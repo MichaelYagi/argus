@@ -58,6 +58,10 @@ def _migrate(conn: sqlite3.Connection) -> None:
     if "embedding" not in existing_cols:
         conn.execute("ALTER TABLE detections ADD COLUMN embedding BLOB")
 
+    existing_user_cols = {r[1] for r in conn.execute("PRAGMA table_info(users)")}
+    if "is_approved" not in existing_user_cols:
+        conn.execute("ALTER TABLE users ADD COLUMN is_approved INTEGER NOT NULL DEFAULT 1")
+
     # Insert missing seed settings and refresh descriptions on every startup
     existing_keys = {r[0] for r in conn.execute("SELECT key FROM settings")}
     missing = [row for row in _SETTINGS_SEED if row[0] not in existing_keys]
@@ -82,13 +86,38 @@ def count_users() -> int:
         return conn.execute("SELECT COUNT(*) FROM users").fetchone()[0]
 
 
-def create_user(username: str, password_hash: str, is_admin: bool = False) -> int:
+def create_user(username: str, password_hash: str, is_admin: bool = False, is_approved: bool = True) -> int:
     with _connect() as conn:
         conn.execute(
-            "INSERT INTO users (username, password_hash, is_admin) VALUES (?, ?, ?)",
-            (username, password_hash, 1 if is_admin else 0),
+            "INSERT INTO users (username, password_hash, is_admin, is_approved) VALUES (?, ?, ?, ?)",
+            (username, password_hash, 1 if is_admin else 0, 1 if is_approved else 0),
         )
         return conn.execute("SELECT last_insert_rowid()").fetchone()[0]
+
+
+def update_password(user_id: int, password_hash: str) -> None:
+    with _connect() as conn:
+        conn.execute(
+            "UPDATE users SET password_hash = ? WHERE id = ?",
+            (password_hash, user_id),
+        )
+
+
+def get_pending_users() -> list[sqlite3.Row]:
+    with _connect() as conn:
+        return conn.execute(
+            "SELECT id, username, created_at FROM users WHERE is_approved = 0 ORDER BY created_at"
+        ).fetchall()
+
+
+def approve_user(user_id: int) -> None:
+    with _connect() as conn:
+        conn.execute("UPDATE users SET is_approved = 1 WHERE id = ?", (user_id,))
+
+
+def reject_user(user_id: int) -> None:
+    with _connect() as conn:
+        conn.execute("DELETE FROM users WHERE id = ? AND is_approved = 0", (user_id,))
 
 
 def get_user_by_username(username: str) -> sqlite3.Row | None:
@@ -147,10 +176,20 @@ def list_api_keys(user_id: int) -> list[sqlite3.Row]:
 
 
 def revoke_api_key(key_id: int, user_id: int) -> bool:
-    """Deactivate a key. Returns True if a row was updated (key belonged to user)."""
+    """Deactivate a key (keeps the row for audit history)."""
     with _connect() as conn:
         conn.execute(
             "UPDATE api_keys SET is_active = 0 WHERE id = ? AND user_id = ?",
+            (key_id, user_id),
+        )
+        return conn.execute("SELECT changes()").fetchone()[0] > 0
+
+
+def delete_api_key(key_id: int, user_id: int) -> bool:
+    """Permanently delete a key."""
+    with _connect() as conn:
+        conn.execute(
+            "DELETE FROM api_keys WHERE id = ? AND user_id = ?",
             (key_id, user_id),
         )
         return conn.execute("SELECT changes()").fetchone()[0] > 0

@@ -11,6 +11,8 @@ from fastapi.templating import Jinja2Templates
 from app.core.security import (
     REMEMBER_MAX_AGE,
     create_remember_token,
+    generate_api_key,
+    hash_api_key,
     hash_password,
     verify_password,
 )
@@ -48,10 +50,22 @@ async def signup(
         return templates.TemplateResponse(request, "signup.html", {"error": err})
 
     is_first = store.count_users() == 0
-    user_id = store.create_user(username, hash_password(password), is_admin=is_first)
-    request.session["user_id"] = user_id
-    request.session["username"] = username
-    return RedirectResponse("/", status_code=303)
+    user_id = store.create_user(
+        username, hash_password(password),
+        is_admin=is_first, is_approved=is_first,
+    )
+
+    if is_first:
+        # First user (admin) — log them in immediately and auto-generate their first key
+        plaintext = generate_api_key()
+        store.create_api_key(user_id, hash_api_key(plaintext), "Default key")
+        request.session["user_id"] = user_id
+        request.session["username"] = username
+        request.session["new_key"] = plaintext
+        return RedirectResponse("/account", status_code=303)
+
+    # Subsequent users wait for admin approval
+    return templates.TemplateResponse(request, "pending.html", {"request": request})
 
 
 @router.get("/login")
@@ -72,9 +86,22 @@ async def login(
             request, "login.html", {"error": "Invalid username or password."}
         )
 
+    if not row["is_approved"]:
+        return templates.TemplateResponse(request, "pending.html", {"request": request})
+
     request.session["user_id"] = row["id"]
     request.session["username"] = row["username"]
-    response = RedirectResponse("/", status_code=303)
+
+    # Auto-generate first API key if the user has none yet; redirect to account so they see it
+    if not store.list_api_keys(row["id"]):
+        plaintext = generate_api_key()
+        store.create_api_key(row["id"], hash_api_key(plaintext), "Default key")
+        request.session["new_key"] = plaintext
+        redirect_to = "/account"
+    else:
+        redirect_to = "/"
+
+    response = RedirectResponse(redirect_to, status_code=303)
 
     if remember:
         secret = os.environ.get("SECRET_KEY", "change-me")
@@ -82,6 +109,11 @@ async def login(
         response.set_cookie(_COOKIE, token, max_age=REMEMBER_MAX_AGE, httponly=True, samesite="lax")
 
     return response
+
+
+@router.get("/pending")
+async def pending_page(request: Request):
+    return templates.TemplateResponse(request, "pending.html", {"request": request})
 
 
 @router.post("/logout")

@@ -4,6 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>{% block title %}Argus{% endblock %}</title>
+  <link rel="icon" type="image/svg+xml" href="/static/favicon.svg">
   <link rel="stylesheet" href="/static/css/style.css">
   {% block head %}{% endblock %}
 </head>
@@ -23,7 +24,10 @@ fetch('/api/review/count')
   .catch(() => {});
 </script>
 <nav>
-  <span class="brand">Argus</span>
+  <a href="/" style="display:flex;align-items:center;gap:7px;text-decoration:none;margin-right:4px">
+    <img src="/static/favicon.svg" width="24" height="24" alt="Argus">
+    <span class="brand">Argus</span>
+  </a>
   <a href="/"        class="{% if active == 'dashboard' %}active{% endif %}">Dashboard</a>
   <a href="/enroll"  class="{% if active == 'enroll'    %}active{% endif %}">Enroll</a>
   <a href="/detect"  class="{% if active == 'detect'    %}active{% endif %}">Detect</a>
@@ -36,7 +40,8 @@ fetch('/api/review/count')
   <a href="/models"  class="{% if active == 'models'    %}active{% endif %}">Models</a>
   <a href="/settings" class="{% if active == 'settings' %}active{% endif %}">Settings</a>
   <span class="nav-spacer"></span>
-  <span class="nav-user">{{ username }}</span>
+  <a href="/account" style="color:#aaa;font-size:12px">{{ username }}</a>
+  <a href="/docs" target="_blank" style="color:#aaa;font-size:12px">API docs</a>
   <form method="post" action="/logout">
     <button type="submit">Sign out</button>
   </form>

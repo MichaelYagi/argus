@@ -14,7 +14,7 @@ from app import __version__
 from app.api import detect, enroll, health, identities, images, keys, media, models, review, settings
 from app.core import settings_cache
 from app.db import store
-from app.pages import auth, bulk, main_pages, tag
+from app.pages import account, auth, bulk, main_pages, tag
 from app.pages import keys as keys_page
 
 log = logging.getLogger(__name__)
@@ -84,4 +84,5 @@ app.include_router(main_pages.router)
 app.include_router(bulk.router)
 app.include_router(tag.router)
 app.include_router(auth.router)
+app.include_router(account.router)
 app.include_router(keys_page.router)
