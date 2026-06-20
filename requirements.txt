@@ -3,7 +3,8 @@ uvicorn[standard]
 jinja2
 python-multipart
 insightface
-onnxruntime-gpu
+onnxruntime-gpu; platform_machine == "x86_64"
+onnxruntime; platform_machine != "x86_64"
 ultralytics
 numpy
 pillow
