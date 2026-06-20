@@ -175,10 +175,28 @@
 <script>
 function copyKey() {
   const text = document.getElementById('key-display').textContent;
-  navigator.clipboard.writeText(text).then(() => {
+
+  function showCopied() {
     document.getElementById('copy-msg').style.display = 'block';
     setTimeout(() => { document.getElementById('copy-msg').style.display = 'none'; }, 2000);
-  });
+  }
+
+  function fallback() {
+    const ta = document.createElement('textarea');
+    ta.value = text;
+    ta.style.cssText = 'position:fixed;opacity:0;pointer-events:none;top:0;left:0';
+    document.body.appendChild(ta);
+    ta.focus();
+    ta.select();
+    try { document.execCommand('copy'); showCopied(); } catch (_) {}
+    document.body.removeChild(ta);
+  }
+
+  if (navigator.clipboard && window.isSecureContext) {
+    navigator.clipboard.writeText(text).then(showCopied).catch(fallback);
+  } else {
+    fallback();
+  }
 }
 </script>
 {% endblock %}
