@@ -23,6 +23,12 @@
     <label class="lbl">Or image URL</label>
     <input type="url" id="url-input" placeholder="http://…">
   </div>
+  <div class="form-group">
+    <label class="lbl">Or base64 image</label>
+    <textarea id="b64-input" rows="2"
+              placeholder="data:image/jpeg;base64,... or raw base64 string"
+              style="font-size:12px;font-family:monospace;resize:vertical"></textarea>
+  </div>
   <button class="btn btn-primary" id="enroll-btn">Enroll</button>
   <div id="result" style="margin-top:12px"></div>
 </div>
@@ -34,6 +40,7 @@
   const dz  = document.getElementById('drop-zone');
   const fi  = document.getElementById('file-input');
   const ui  = document.getElementById('url-input');
+  const b64 = document.getElementById('b64-input');
 
   dz.addEventListener('dragover', e => { e.preventDefault(); dz.classList.add('over'); });
   dz.addEventListener('dragleave', () => dz.classList.remove('over'));
@@ -55,9 +62,10 @@
     if (!name) { msg('Name is required.', 'error'); return; }
     const fd = new FormData();
     fd.append('name', name);
-    if (fi.files[0]) fd.append('file', fi.files[0]);
-    else if (ui.value.trim()) fd.append('image_url', ui.value.trim());
-    else { msg('Upload a file or enter a URL.', 'error'); return; }
+    if (fi.files[0])          fd.append('file',         fi.files[0]);
+    else if (ui.value.trim()) fd.append('image_url',    ui.value.trim());
+    else if (b64?.value.trim()) fd.append('image_base64', b64.value.trim());
+    else { msg('Upload a file, enter a URL, or paste base64.', 'error'); return; }
 
     msg('Enrolling…', '');
     const resp = await fetch('/api/faces/enroll', { method: 'POST', body: fd });

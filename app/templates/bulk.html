@@ -2,7 +2,7 @@
 {% block title %}Detect — Argus{% endblock %}
 
 {% block content %}
-<h1 style="margin-bottom:20px">Bulk upload</h1>
+<h1 style="margin-bottom:20px">Detect faces and objects</h1>
 
 <div class="card" style="max-width:680px">
   <div style="display:flex;align-items:center;gap:12px;margin-bottom:16px">
@@ -24,6 +24,13 @@
     <label class="lbl">Or paste image URLs (one per line)</label>
     <textarea id="url-input" rows="3" placeholder="https://&#10;https://&#10;https://"
               style="font-size:13px;resize:vertical"></textarea>
+  </div>
+
+  <div style="margin-top:12px">
+    <label class="lbl">Or paste a base64 image</label>
+    <textarea id="b64-input" rows="2"
+              placeholder="data:image/jpeg;base64,... or raw base64 string"
+              style="font-size:12px;resize:vertical;font-family:monospace"></textarea>
   </div>
 
   <div style="display:flex;align-items:center;gap:12px;margin-top:14px">

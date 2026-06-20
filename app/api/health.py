@@ -8,7 +8,7 @@ from app.core.engine_registry import registry
 router = APIRouter()
 
 
-@router.get("/api/health")
+@router.api_route("/api/health", methods=["GET", "HEAD"])
 async def health():
     try:
         import onnxruntime as ort

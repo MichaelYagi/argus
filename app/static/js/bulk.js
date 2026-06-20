@@ -15,6 +15,7 @@ async function _pool(items, concurrency, fn) {
   const dropZone   = document.getElementById('drop-zone');
   const fileInput  = document.getElementById('file-input');
   const urlInput   = document.getElementById('url-input');
+  const b64Input   = document.getElementById('b64-input');
   const modeSelect = document.getElementById('detect-mode');
   const runBtn     = document.getElementById('run-btn');
   const queueCount = document.getElementById('queue-count');
@@ -43,13 +44,19 @@ async function _pool(items, concurrency, fn) {
   }
 
   urlInput.addEventListener('input', updateQueue);
+  if (b64Input) b64Input.addEventListener('input', updateQueue);
 
   function getUrls() {
     return urlInput.value.split('\n').map(s => s.trim()).filter(Boolean);
   }
 
+  function getB64() {
+    const v = b64Input?.value.trim();
+    return v ? [v] : [];
+  }
+
   function updateQueue() {
-    const total = fileList.length + getUrls().length;
+    const total = fileList.length + getUrls().length + getB64().length;
     runBtn.disabled = total === 0;
     queueCount.textContent = total ? `${total} image${total === 1 ? '' : 's'} queued` : '';
   }
@@ -93,16 +100,19 @@ async function _pool(items, concurrency, fn) {
     }
 
     // Build job list then process in parallel (max 3 concurrent)
+    const b64List = getB64();
     const jobs = [
-      ...fileList.map((f, idx) => ({ i: idx,                  type: 'file', payload: f,       label: f.name })),
-      ...urls.map((u, idx)     => ({ i: fileList.length + idx, type: 'url',  payload: u,       label: u      })),
+      ...fileList.map((f, idx) => ({ i: idx,                               type: 'file',   payload: f, label: f.name })),
+      ...urls.map((u, idx)     => ({ i: fileList.length + idx,             type: 'url',    payload: u, label: u      })),
+      ...b64List.map((b, idx)  => ({ i: fileList.length + urls.length + idx, type: 'base64', payload: b, label: 'base64 image' })),
     ];
 
     await _pool(jobs, 3, async job => {
       setStatus(job.i, job.type === 'file' ? 'Processing…' : 'Fetching…', 'muted');
       const fd = new FormData();
-      if (job.type === 'file') fd.append('file', job.payload);
-      else fd.append('image_url', job.payload);
+      if (job.type === 'file')        fd.append('file',          job.payload);
+      else if (job.type === 'url')    fd.append('image_url',     job.payload);
+      else if (job.type === 'base64') fd.append('image_base64',  job.payload);
       const resp = await fetch(`/api/detect/${mode}`, { method: 'POST', body: fd });
       const data = await resp.json();
       done++;

@@ -18,5 +18,7 @@ for _mod in (
     "PIL.Image",
     "httpx",
     "pillow_heif",
+    "faiss",
+    "faiss.swigfaiss",
 ):
     sys.modules.setdefault(_mod, MagicMock())

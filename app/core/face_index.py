@@ -55,7 +55,6 @@ def build_for_user(model_id: int, user_id: int) -> None:
             import faiss
             use_faiss = True
         except ImportError:
-            log.warning("faiss not available — falling back to numpy similarity search")
             use_faiss = False
 
         vectors, id_map = [], []
@@ -86,6 +85,11 @@ def build_for_user(model_id: int, user_id: int) -> None:
 
 def build_all(model_id: int) -> None:
     """Rebuild index for every user that has face data for this model."""
+    try:
+        import faiss  # noqa: F401
+    except ImportError:
+        log.warning("faiss not available — falling back to numpy similarity search")
+
     from app.db import store
     with store._connect() as conn:
         user_ids = [r[0] for r in conn.execute(
