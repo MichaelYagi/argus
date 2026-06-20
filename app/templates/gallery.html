@@ -33,7 +33,7 @@
 <script>
 document.getElementById('delete-identity-btn').addEventListener('click', () => {
   showConfirm(
-    'Delete "{{ identity.label }}" and all its detections and embeddings? This cannot be undone.',
+    'Delete "{{ identity.label }}"?\n\n{{ identity.detection_count }} detection{{ "s" if identity.detection_count != 1 else "" }} and {{ identity.embedding_count }} enrolled reference{{ "s" if identity.embedding_count != 1 else "" }} will be permanently removed. This cannot be undone.',
     async () => {
       const resp = await fetch('/api/identities/{{ identity.id }}', { method: 'DELETE' });
       if (resp.ok || resp.status === 204) location.href = '/';

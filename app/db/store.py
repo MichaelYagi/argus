@@ -263,7 +263,11 @@ def set_model_active(model_id: int, model_type: str) -> None:
 # ---------------------------------------------------------------------------
 
 def list_identities(
-    user_id: int, identity_type: str | None = None, q: str | None = None
+    user_id: int,
+    identity_type: str | None = None,
+    q: str | None = None,
+    cursor: str | None = None,
+    limit: int | None = None,
 ) -> list[sqlite3.Row]:
     with _connect() as conn:
         sql = "SELECT * FROM identities WHERE user_id = ?"
@@ -274,7 +278,13 @@ def list_identities(
         if q:
             sql += " AND label LIKE ?"
             params.append(f"%{q}%")
+        if cursor:
+            sql += " AND label > ?"
+            params.append(cursor)
         sql += " ORDER BY label"
+        if limit is not None:
+            sql += " LIMIT ?"
+            params.append(limit + 1)  # fetch one extra to determine has_more
         return conn.execute(sql, params).fetchall()
 
 
@@ -294,6 +304,40 @@ def delete_identity(identity_id: int, user_id: int) -> bool:
             (identity_id, user_id),
         )
         return conn.execute("SELECT changes()").fetchone()[0] > 0
+
+
+def list_identities_summary(
+    user_id: int,
+    identity_type: str | None = None,
+    cursor: str | None = None,
+    limit: int = 30,
+) -> list[sqlite3.Row]:
+    """Return identities with counts and thumbnail in a single query."""
+    with _connect() as conn:
+        sql = """SELECT i.*,
+                        COUNT(DISTINCT d.id)  AS detection_count,
+                        COUNT(DISTINCT fe.id) AS embedding_count,
+                        COALESCE(
+                          (SELECT dc.crop_path FROM detections dc
+                           WHERE dc.id = i.cover_detection_id),
+                          (SELECT d2.crop_path FROM detections d2
+                           WHERE d2.identity_id = i.id AND d2.user_id = i.user_id
+                           ORDER BY d2.detected_at DESC LIMIT 1)
+                        ) AS thumbnail_crop
+                 FROM identities i
+                 LEFT JOIN detections d      ON d.identity_id  = i.id
+                 LEFT JOIN face_embeddings fe ON fe.identity_id = i.id
+                 WHERE i.user_id = ?"""
+        params: list = [user_id]
+        if identity_type:
+            sql += " AND i.type = ?"
+            params.append(identity_type)
+        if cursor:
+            sql += " AND i.label > ?"
+            params.append(cursor)
+        sql += " GROUP BY i.id ORDER BY i.label LIMIT ?"
+        params.append(limit + 1)
+        return conn.execute(sql, params).fetchall()
 
 
 def get_identity_with_counts(identity_id: int, user_id: int) -> sqlite3.Row | None:

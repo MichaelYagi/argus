@@ -119,6 +119,17 @@ a:hover { text-decoration: underline; }
 .card { background: var(--surface); border-radius: var(--radius); box-shadow: var(--shadow); padding: 20px; margin-bottom: 16px; }
 .card-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 16px; margin-bottom: 24px; }
 
+/* ---------- Tabs ---------- */
+.tab-bar { display: flex; gap: 0; margin-bottom: 20px; border-bottom: 2px solid var(--border); }
+.tab-btn {
+  padding: 9px 20px; border: none; background: none; cursor: pointer;
+  font-size: 13px; font-family: inherit; color: var(--muted);
+  border-bottom: 2px solid transparent; margin-bottom: -2px;
+  transition: color .15s;
+}
+.tab-btn:hover { color: var(--text); }
+.tab-btn.active { color: var(--text); border-bottom-color: var(--accent); font-weight: 500; }
+
 /* ---------- Identity thumb ---------- */
 .identity-thumb { background: var(--surface); border-radius: var(--radius); box-shadow: var(--shadow); overflow: hidden; display: block; transition: box-shadow .15s; text-decoration: none; }
 .identity-thumb:hover { box-shadow: 0 4px 14px rgba(0,0,0,.15); }

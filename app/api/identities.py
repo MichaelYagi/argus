@@ -24,16 +24,57 @@ class _CreateBody(BaseModel):
 # Identity CRUD
 # ---------------------------------------------------------------------------
 
+@router.get("/api/identities/summary")
+async def identities_summary(
+    type: Optional[str] = Query(None),
+    cursor: Optional[str] = Query(None),
+    limit: int = Query(30, ge=1, le=100),
+    user_id: int = Depends(require_auth),
+):
+    """Identities with counts + thumbnail in one query — for paginated dashboard grid."""
+    if type and type not in ("face", "object"):
+        raise HTTPException(400, "type must be 'face' or 'object'")
+    rows = store.list_identities_summary(user_id, identity_type=type, cursor=cursor, limit=limit)
+    has_more = len(rows) > limit
+    items = rows[:limit]
+    return {
+        "items": [
+            {
+                **_fmt(r),
+                "detection_count": r["detection_count"],
+                "embedding_count": r["embedding_count"],
+                "thumbnail_url": f"/media/crops/{r['thumbnail_crop']}" if r["thumbnail_crop"] else None,
+            }
+            for r in items
+        ],
+        "next_cursor": items[-1]["label"] if has_more and items else None,
+        "has_more": has_more,
+    }
+
+
 @router.get("/api/identities")
 async def list_identities(
     type: Optional[str] = Query(None),
     q: Optional[str] = Query(None),
+    cursor: Optional[str] = Query(None),
+    limit: Optional[int] = Query(None, ge=1, le=200),
     user_id: int = Depends(require_auth),
 ):
     if type and type not in ("face", "object"):
         raise HTTPException(400, "type must be 'face' or 'object'")
-    rows = store.list_identities(user_id, identity_type=type, q=q)
-    return [_fmt(r) for r in rows]
+    rows = store.list_identities(user_id, identity_type=type, q=q, cursor=cursor, limit=limit)
+
+    if limit is None:
+        return [_fmt(r) for r in rows]
+
+    has_more = len(rows) > limit
+    items = rows[:limit]
+    next_cursor = items[-1]["label"] if has_more and items else None
+    return {
+        "items": [_fmt(r) for r in items],
+        "next_cursor": next_cursor,
+        "has_more": has_more,
+    }
 
 
 @router.get("/api/identities/{identity_id}")
