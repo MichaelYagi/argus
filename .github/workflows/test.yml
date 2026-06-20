@@ -46,3 +46,63 @@ jobs:
           context: .
           push: false
           tags: argus:ci-check
+
+  publish-docs:
+    runs-on: ubuntu-latest
+    needs: lint-and-test
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install minimal deps for spec generation
+        run: |
+          pip install fastapi starlette pydantic jinja2 \
+                      python-multipart python-dotenv itsdangerous httpx2
+
+      - name: Generate OpenAPI spec
+        run: |
+          mkdir -p _site
+          python -c "
+          import os, json
+          os.environ.setdefault('SECRET_KEY', 'docs-build')
+          from app.main import app
+          with open('_site/openapi.json', 'w') as f:
+              json.dump(app.openapi(), f, indent=2)
+          print('Spec written — routes:', len(app.routes))
+          "
+
+      - name: Create ReDoc page
+        run: |
+          cat > _site/index.html << 'EOF'
+          <!doctype html>
+          <html lang="en">
+          <head>
+            <meta charset="utf-8">
+            <meta name="viewport" content="width=device-width, initial-scale=1">
+            <title>Argus — API Reference</title>
+            <style>body { margin: 0; }</style>
+          </head>
+          <body>
+            <redoc spec-url="openapi.json"
+                   expand-responses="200"
+                   hide-download-button
+                   theme='{"colors":{"primary":{"main":"#3a8ef6"}},"typography":{"fontFamily":"system-ui,-apple-system,sans-serif"}}'
+            ></redoc>
+            <script src="https://cdn.jsdelivr.net/npm/redoc/bundles/redoc.standalone.js"></script>
+          </body>
+          </html>
+          EOF
+
+      - name: Deploy to GitHub Pages
+        uses: peaceiris/actions-gh-pages@v4
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: _site
+          commit_message: "docs: update API reference"
