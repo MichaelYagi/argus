@@ -52,7 +52,12 @@ jobs:
     needs: lint-and-test
     if: github.ref == 'refs/heads/main' && github.event_name == 'push'
     permissions:
-      contents: write
+      contents: read
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
 
     steps:
       - name: Checkout
@@ -63,7 +68,7 @@ jobs:
         with:
           python-version: "3.11"
 
-      - name: Install minimal deps for spec generation
+      - name: Install deps for spec generation
         run: |
           pip install fastapi starlette pydantic jinja2 \
                       python-multipart python-dotenv itsdangerous httpx2
@@ -102,14 +107,11 @@ jobs:
           </html>
           EOF
 
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+
       - name: Deploy to GitHub Pages
-        run: |
-          cd _site
-          git init
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add .
-          git commit -m "docs: update API reference [skip ci]"
-          git push --force \
-            "https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git" \
-            HEAD:gh-pages
+        id: deploy
+        uses: actions/deploy-pages@v4
