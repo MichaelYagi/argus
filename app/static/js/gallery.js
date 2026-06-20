@@ -151,6 +151,22 @@
         tagLink.addEventListener('click', e => e.stopPropagation());
         el.appendChild(tagLink);
 
+        // Set-cover button (bottom-right, hover only)
+        const coverBtn = document.createElement('button');
+        coverBtn.title = 'Set as cover photo';
+        coverBtn.className = 'g-cover-btn';
+        coverBtn.textContent = '★';
+        coverBtn.addEventListener('click', async e => {
+          e.stopPropagation();
+          const resp = await fetch(`/api/identities/${identityId}/cover`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ detection_id: item.detection_id }),
+          });
+          if (resp.ok) coverBtn.style.color = '#ffd700';
+        });
+        el.appendChild(coverBtn);
+
         // Checkbox (top-left, hover + selected)
         const cb = document.createElement('input');
         cb.type = 'checkbox';

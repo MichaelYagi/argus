@@ -1,33 +1,21 @@
-<!doctype html>
-<html lang="en">
-<head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Tag image — Argus</title>
-  <link rel="icon" type="image/svg+xml" href="/static/favicon.svg">
-  <link rel="stylesheet" href="/static/css/style.css">
-</head>
-<body>
-<script src="/static/js/autocomplete.js"></script>
-<nav>
-  <span class="brand">Argus</span>
-  <a href="/">Dashboard</a>
+{% extends "base.html" %}
+{% block title %}Tag image — Argus{% endblock %}
+
+{% block content %}
+<div class="page-header" style="margin-bottom:12px">
+  <a id="back-link" href="/">&larr; Back</a>
+  <span class="muted" style="font-size:13px;margin-left:8px">
+    Click a face box to assign or correct a label. Orange = unlabeled, green = labeled.
+  </span>
   <span class="nav-spacer"></span>
-  <span class="nav-user">{{ username }}</span>
-</nav>
-<main>
-  <div class="page-header" style="margin-bottom:12px">
-    <a href="/">&larr; Dashboard</a>
-    <span class="muted" style="font-size:13px;margin-left:8px">
-      Click a face box to assign or correct a label. Orange = unlabeled, green = labeled.
-    </span>
-    <span class="nav-spacer"></span>
-    <span id="tag-status" class="muted" style="font-size:12px"></span>
-  </div>
-  <div id="tag-wrap">
-    <img id="tag-photo" src="{{ image_url }}" alt="" onload="renderBoxes()">
-  </div>
-</main>
+  <span id="tag-status" class="muted" style="font-size:12px"></span>
+</div>
+<div id="tag-wrap">
+  <img id="tag-photo" src="{{ image_url }}" alt="" onload="renderBoxes()">
+</div>
+{% endblock %}
+
+{% block scripts %}
 <script>
 const NAT_W = {{ nat_w }}, NAT_H = {{ nat_h }};
 const FACES = {{ faces_json | safe }};
@@ -89,6 +77,40 @@ function labelBox(div, tip) {
 }
 
 function setStatus(msg) { document.getElementById('tag-status').textContent = msg; }
+
+// Set breadcrumb from referrer so it always reflects where the user came from
+(function() {
+  const ref = document.referrer;
+  const link = document.getElementById('back-link');
+  if (!ref || !link) return;
+
+  const url = new URL(ref);
+  const path = url.pathname;
+
+  // Identity gallery → fetch the person's name
+  const identityMatch = path.match(/^\/identities\/(\d+)/);
+  if (identityMatch) {
+    fetch('/api/identities/' + identityMatch[1])
+      .then(r => r.ok ? r.json() : null)
+      .then(data => {
+        if (data && data.label) {
+          link.textContent = '← ' + data.label;
+          link.href = path;
+        }
+      })
+      .catch(() => {});
+    return;
+  }
+
+  // Any other page — use its title or a sensible label
+  const labels = {
+    '/': 'Dashboard',
+    '/detect': 'Detect',
+    '/review': 'Review',
+  };
+  const label = labels[path] || 'Back';
+  link.textContent = '← ' + label;
+  link.href = path;
+})();
 </script>
-</body>
-</html>
+{% endblock %}

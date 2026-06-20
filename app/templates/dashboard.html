@@ -15,9 +15,19 @@
   <div class="stat"><div class="num" id="s-review">—</div><div class="lbl">Pending review</div></div>
 </div>
 
-<h2>Enrolled identities</h2>
-<div class="card-grid" id="identity-grid">
-  <p class="muted loading">Loading…</p>
+<div style="display:grid;grid-template-columns:1fr 1fr;gap:24px;margin-top:8px" class="dashboard-grid">
+  <div>
+    <h2>People</h2>
+    <div class="card-grid" id="grid-faces" style="margin-top:8px">
+      <p class="muted loading">Loading…</p>
+    </div>
+  </div>
+  <div>
+    <h2>Objects</h2>
+    <div class="card-grid" id="grid-objects" style="margin-top:8px">
+      <p class="muted loading">Loading…</p>
+    </div>
+  </div>
 </div>
 {% endblock %}
 
@@ -35,26 +45,35 @@
   document.getElementById('s-faces').textContent  = identities.filter(i => i.type === 'face').length;
   document.getElementById('s-review').textContent = rv.count ?? 0;
 
-  const grid = document.getElementById('identity-grid');
-  if (!identities.length) {
-    grid.innerHTML = '<p class="muted">No identities yet. <a href="/enroll">Enroll a face</a> to get started.</p>';
-    return;
+  async function populateGrid(gridId, type, emptyMsg) {
+    const group = identities.filter(i => i.type === type);
+    const grid = document.getElementById(gridId);
+    if (!group.length) {
+      grid.innerHTML = `<p class="muted">${emptyMsg}</p>`;
+      return;
+    }
+    grid.innerHTML = '';
+    const details = await Promise.all(
+      group.map(id => fetch('/api/identities/' + id.id).then(r => r.json()))
+    );
+    details.forEach(d => {
+      const img = d.thumbnail_url
+        ? `<img src="${d.thumbnail_url}" alt="${d.label}">`
+        : `<div class="it-ph">?</div>`;
+      const a = document.createElement('a');
+      a.href = '/identities/' + d.id;
+      a.className = 'identity-thumb';
+      a.innerHTML = img +
+        `<div class="it-name">${d.label}</div>` +
+        `<div class="it-count">${d.detection_count} detection${d.detection_count !== 1 ? 's' : ''}</div>`;
+      grid.appendChild(a);
+    });
   }
 
-  grid.innerHTML = '';
-  await Promise.all(identities.map(async id => {
-    const d = await fetch('/api/identities/' + id.id).then(r => r.json());
-    const img = d.thumbnail_url
-      ? `<img src="${d.thumbnail_url}" alt="${d.label}">`
-      : `<div class="it-ph">?</div>`;
-    const a = document.createElement('a');
-    a.href = '/identities/' + id.id;
-    a.className = 'identity-thumb';
-    a.innerHTML = img +
-      `<div class="it-name">${d.label}</div>` +
-      `<div class="it-count">${d.detection_count} detection${d.detection_count !== 1 ? 's' : ''}</div>`;
-    grid.appendChild(a);
-  }));
+  await Promise.all([
+    populateGrid('grid-faces',   'face',   'No people enrolled yet. <a href="/enroll">Enroll a face</a> to get started.'),
+    populateGrid('grid-objects', 'object', 'No objects detected yet.'),
+  ]);
 })();
 </script>
 {% endblock %}

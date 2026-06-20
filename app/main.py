@@ -55,7 +55,7 @@ def _autoload_engines() -> None:
             log.warning("Failed to load object model %s: %s", obj_row["name"], exc)
 
 
-app = FastAPI(title="Argus", version=__version__, lifespan=lifespan)
+app = FastAPI(title="Argus", version=__version__, lifespan=lifespan, docs_url=None)
 
 app.add_middleware(
     SessionMiddleware,
@@ -86,3 +86,5 @@ app.include_router(tag.router)
 app.include_router(auth.router)
 app.include_router(account.router)
 app.include_router(keys_page.router)
+
+

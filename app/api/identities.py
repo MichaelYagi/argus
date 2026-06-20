@@ -63,6 +63,17 @@ async def create_identity(body: _CreateBody, user_id: int = Depends(require_auth
     return {"id": identity_id, "type": body.type, "label": label}
 
 
+class _CoverBody(BaseModel):
+    detection_id: int
+
+
+@router.put("/api/identities/{identity_id}/cover", status_code=200)
+async def set_cover(identity_id: int, body: _CoverBody, user_id: int = Depends(require_auth)):
+    if not store.set_identity_cover(identity_id, user_id, body.detection_id):
+        raise HTTPException(404, "Identity not found")
+    return {"identity_id": identity_id, "cover_detection_id": body.detection_id}
+
+
 @router.delete("/api/identities/{identity_id}", status_code=204)
 async def delete_identity(identity_id: int, user_id: int = Depends(require_auth)):
     if not store.delete_identity(identity_id, user_id):

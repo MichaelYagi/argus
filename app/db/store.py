@@ -62,6 +62,12 @@ def _migrate(conn: sqlite3.Connection) -> None:
     if "is_approved" not in existing_user_cols:
         conn.execute("ALTER TABLE users ADD COLUMN is_approved INTEGER NOT NULL DEFAULT 1")
 
+    existing_identity_cols = {r[1] for r in conn.execute("PRAGMA table_info(identities)")}
+    if "cover_detection_id" not in existing_identity_cols:
+        conn.execute(
+            "ALTER TABLE identities ADD COLUMN cover_detection_id INTEGER REFERENCES detections(id) ON DELETE SET NULL"
+        )
+
     # Insert missing seed settings and refresh descriptions on every startup
     existing_keys = {r[0] for r in conn.execute("SELECT key FROM settings")}
     missing = [row for row in _SETTINGS_SEED if row[0] not in existing_keys]
@@ -282,9 +288,13 @@ def get_identity_with_counts(identity_id: int, user_id: int) -> sqlite3.Row | No
             """SELECT i.*,
                       COUNT(DISTINCT d.id)  AS detection_count,
                       COUNT(DISTINCT fe.id) AS embedding_count,
-                      (SELECT d2.crop_path FROM detections d2
-                       WHERE d2.identity_id = i.id AND d2.user_id = i.user_id
-                       ORDER BY d2.detected_at DESC LIMIT 1) AS thumbnail_crop
+                      COALESCE(
+                        (SELECT d_cover.crop_path FROM detections d_cover
+                         WHERE d_cover.id = i.cover_detection_id),
+                        (SELECT d2.crop_path FROM detections d2
+                         WHERE d2.identity_id = i.id AND d2.user_id = i.user_id
+                         ORDER BY d2.detected_at DESC LIMIT 1)
+                      ) AS thumbnail_crop
                FROM identities i
                LEFT JOIN detections d  ON d.identity_id = i.id
                LEFT JOIN face_embeddings fe ON fe.identity_id = i.id
@@ -292,6 +302,15 @@ def get_identity_with_counts(identity_id: int, user_id: int) -> sqlite3.Row | No
                GROUP BY i.id""",
             (identity_id, user_id),
         ).fetchone()
+
+
+def set_identity_cover(identity_id: int, user_id: int, detection_id: int) -> bool:
+    with _connect() as conn:
+        conn.execute(
+            "UPDATE identities SET cover_detection_id = ? WHERE id = ? AND user_id = ?",
+            (detection_id, identity_id, user_id),
+        )
+        return conn.execute("SELECT changes()").fetchone()[0] > 0
 
 
 def get_identity_gallery(
@@ -304,7 +323,7 @@ def get_identity_gallery(
         if cursor:
             sql += " AND detected_at < ?"
             params.append(cursor)
-        sql += " ORDER BY detected_at DESC LIMIT ?"
+        sql += " ORDER BY detected_at DESC, id DESC LIMIT ?"
         params.append(limit + 1)
         return conn.execute(sql, params).fetchall()
 
@@ -325,7 +344,7 @@ def get_unknown_detections(
         if cursor:
             sql += " AND detected_at < ?"
             params.append(cursor)
-        sql += " ORDER BY detected_at DESC LIMIT ?"
+        sql += " ORDER BY detected_at DESC, id DESC LIMIT ?"
         params.append(limit + 1)
         return conn.execute(sql, params).fetchall()
 

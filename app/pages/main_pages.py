@@ -96,6 +96,15 @@ async def models_page(request: Request):
     return _r(request, "models.html", ctx)
 
 
+@router.get("/docs")
+async def api_docs(request: Request):
+    ctx = _base(request, "docs")
+    if ctx:
+        return _r(request, "api_docs.html", ctx)
+    # Not signed in — render without nav
+    return templates.TemplateResponse(request, "api_docs_public.html", {})
+
+
 @router.get("/settings")
 async def settings_page(request: Request):
     ctx = _base(request, "settings")

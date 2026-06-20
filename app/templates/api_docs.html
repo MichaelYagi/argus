@@ -1,0 +1,17 @@
+{% extends "base.html" %}
+{% block title %}API Reference — Argus{% endblock %}
+
+{% block head %}
+<style>
+  .main-content { padding: 0; max-width: none; }
+</style>
+{% endblock %}
+
+{% block content %}
+<redoc spec-url="/openapi.json"
+       expand-responses="200"
+       hide-download-button
+       theme='{"colors":{"primary":{"main":"#3a8ef6"}},"typography":{"fontFamily":"system-ui,-apple-system,sans-serif"}}'
+></redoc>
+<script src="https://cdn.jsdelivr.net/npm/redoc/bundles/redoc.standalone.js"></script>
+{% endblock %}

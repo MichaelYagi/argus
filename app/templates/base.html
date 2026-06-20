@@ -28,26 +28,56 @@ fetch('/api/review/count')
     <img src="/static/favicon.svg" width="24" height="24" alt="Argus">
     <span class="brand">Argus</span>
   </a>
-  <a href="/"        class="{% if active == 'dashboard' %}active{% endif %}">Dashboard</a>
-  <a href="/enroll"  class="{% if active == 'enroll'    %}active{% endif %}">Enroll</a>
-  <a href="/detect"  class="{% if active == 'detect'    %}active{% endif %}">Detect</a>
-  <a href="/review"  class="{% if active == 'review'    %}active{% endif %}">
+
+  <!-- Desktop links -->
+  <a href="/"         class="nav-desktop {% if active == 'dashboard' %}active{% endif %}">Dashboard</a>
+  <a href="/enroll"   class="nav-desktop {% if active == 'enroll'    %}active{% endif %}">Enroll</a>
+  <a href="/detect"   class="nav-desktop {% if active == 'detect'    %}active{% endif %}">Detect</a>
+  <a href="/review"   class="nav-desktop {% if active == 'review'    %}active{% endif %}">
     Review <span id="review-count-badge"
       style="display:none;background:#e53e3e;color:#fff;border-radius:99px;
              padding:1px 6px;font-size:10px;font-weight:700;margin-left:3px;
              vertical-align:middle;line-height:16px"></span>
   </a>
-  <a href="/models"  class="{% if active == 'models'    %}active{% endif %}">Models</a>
-  <a href="/settings" class="{% if active == 'settings' %}active{% endif %}">Settings</a>
-  <span class="nav-spacer"></span>
-  <a href="/account" style="color:#aaa;font-size:12px">{{ username }}</a>
-  <a href="/docs" target="_blank" style="color:#aaa;font-size:12px">API docs</a>
+  <a href="/models"   class="nav-desktop {% if active == 'models'    %}active{% endif %}">Models</a>
+  <a href="/settings" class="nav-desktop {% if active == 'settings'  %}active{% endif %}">Settings</a>
+  <a href="/docs"     class="nav-desktop {% if active == 'docs'      %}active{% endif %}">API docs</a>
+  <span class="nav-spacer nav-desktop"></span>
+  <a href="/account"  class="nav-desktop" style="color:#aaa;font-size:12px">{{ username }}</a>
+  <form method="post" action="/logout" class="nav-desktop">
+    <button type="submit">Sign out</button>
+  </form>
+
+  <!-- Mobile hamburger -->
+  <span class="nav-spacer nav-mobile"></span>
+  <button class="nav-burger" id="nav-burger" aria-label="Menu" onclick="
+    var m = document.getElementById('mobile-menu');
+    m.hidden = !m.hidden;
+    this.textContent = m.hidden ? '☰' : '✕';
+  ">☰</button>
+</nav>
+
+<!-- Mobile dropdown -->
+<div id="mobile-menu" class="mobile-menu" hidden>
+  <a href="/"         class="{% if active == 'dashboard' %}active{% endif %}">Dashboard</a>
+  <a href="/enroll"   class="{% if active == 'enroll'    %}active{% endif %}">Enroll</a>
+  <a href="/detect"   class="{% if active == 'detect'    %}active{% endif %}">Detect</a>
+  <a href="/review"   class="{% if active == 'review'    %}active{% endif %}">Review</a>
+  <a href="/models"   class="{% if active == 'models'    %}active{% endif %}">Models</a>
+  <a href="/settings" class="{% if active == 'settings'  %}active{% endif %}">Settings</a>
+  <a href="/docs"     class="{% if active == 'docs'      %}active{% endif %}">API docs</a>
+  {% if username %}
+  <a href="/account">{{ username }}</a>
   <form method="post" action="/logout">
     <button type="submit">Sign out</button>
   </form>
-</nav>
+  {% endif %}
+</div>
+
 <main>
-  {% block content %}{% endblock %}
+  <div class="main-content">
+    {% block content %}{% endblock %}
+  </div>
 </main>
 {% block scripts %}{% endblock %}
 </body>

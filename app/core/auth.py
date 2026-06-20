@@ -39,18 +39,34 @@ async def require_auth(
 
 
 def get_session_user(request: Request) -> int | None:
-    """Return user_id from session or remember-me cookie, or None."""
+    """Return user_id from session or remember-me cookie, or None.
+
+    Always ensures 'username' is in the session so every page using
+    base.html renders the nav account link correctly.
+    """
     uid = _user_from_session(request)
     if uid:
+        _restore_username(request, uid)
         return uid
+
     token = request.cookies.get("argus_remember")
     if token:
         secret = os.environ.get("SECRET_KEY", "change-me")
         uid = verify_remember_token(token, secret)
         if uid:
             request.session["user_id"] = uid
+            _restore_username(request, uid)
             return uid
+
     return None
+
+
+def _restore_username(request: Request, uid: int) -> None:
+    """Set session username from DB if it is missing."""
+    if not request.session.get("username"):
+        user = store.get_user_by_id(uid)
+        if user:
+            request.session["username"] = user["username"]
 
 
 def _user_from_session(request: Request) -> int | None:

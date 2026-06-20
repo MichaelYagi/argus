@@ -23,11 +23,12 @@ CREATE INDEX IF NOT EXISTS idx_api_keys_hash ON api_keys(key_hash);
 
 -- identities: per-user enrolled people (faces) and tracked object classes
 CREATE TABLE IF NOT EXISTS identities (
-    id         INTEGER PRIMARY KEY AUTOINCREMENT,
-    user_id    INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-    type       TEXT    NOT NULL CHECK(type IN ('face', 'object')),
-    label      TEXT    NOT NULL,
-    created_at TEXT    NOT NULL DEFAULT (datetime('now')),
+    id                 INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id            INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    type               TEXT    NOT NULL CHECK(type IN ('face', 'object')),
+    label              TEXT    NOT NULL,
+    cover_detection_id INTEGER REFERENCES detections(id) ON DELETE SET NULL,
+    created_at         TEXT    NOT NULL DEFAULT (datetime('now')),
     UNIQUE(user_id, type, label)
 );
 
