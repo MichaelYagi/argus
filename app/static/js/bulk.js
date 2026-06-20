@@ -1,4 +1,16 @@
 'use strict';
+
+async function _pool(items, concurrency, fn) {
+  let idx = 0;
+  async function worker() {
+    while (idx < items.length) {
+      const item = items[idx++];
+      await fn(item);
+    }
+  }
+  await Promise.all(Array.from({ length: Math.min(concurrency, items.length) }, worker));
+}
+
 (() => {
   const dropZone   = document.getElementById('drop-zone');
   const fileInput  = document.getElementById('file-input');
@@ -80,30 +92,23 @@
       rows.push(row);
     }
 
-    // Process files
-    for (let i = 0; i < fileList.length; i++) {
-      setStatus(i, 'Processing…', 'muted');
-      const fd = new FormData();
-      fd.append('file', fileList[i]);
-      const resp = await fetch(`/api/detect/${mode}`, { method: 'POST', body: fd });
-      const data = await resp.json();
-      done++;
-      updateProgress();
-      renderResult(rows[i], i, fileList[i].name, resp.ok, data, mode);
-    }
+    // Build job list then process in parallel (max 3 concurrent)
+    const jobs = [
+      ...fileList.map((f, idx) => ({ i: idx,                  type: 'file', payload: f,       label: f.name })),
+      ...urls.map((u, idx)     => ({ i: fileList.length + idx, type: 'url',  payload: u,       label: u      })),
+    ];
 
-    // Process URLs
-    for (let j = 0; j < urls.length; j++) {
-      const i = fileList.length + j;
-      setStatus(i, 'Fetching…', 'muted');
+    await _pool(jobs, 3, async job => {
+      setStatus(job.i, job.type === 'file' ? 'Processing…' : 'Fetching…', 'muted');
       const fd = new FormData();
-      fd.append('image_url', urls[j]);
+      if (job.type === 'file') fd.append('file', job.payload);
+      else fd.append('image_url', job.payload);
       const resp = await fetch(`/api/detect/${mode}`, { method: 'POST', body: fd });
       const data = await resp.json();
       done++;
       updateProgress();
-      renderResult(rows[i], i, urls[j], resp.ok, data, mode);
-    }
+      renderResult(rows[job.i], job.i, job.label, resp.ok, data, mode);
+    });
 
     progressLbl.textContent = `Done — ${total} image${total === 1 ? '' : 's'} processed`;
     runBtn.disabled = false;

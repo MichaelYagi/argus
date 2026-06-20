@@ -61,13 +61,13 @@ async def enroll_new(request: Request, user_id: int = Depends(require_auth)):
         raise HTTPException(409, f"Identity '{name}' already exists")
 
     model_row = store.get_active_model("face")
-    store.insert_face_embedding(
+    embedding_id = store.insert_face_embedding(
         identity_id=identity_id,
         model_id=model_row["id"] if model_row else None,
         embedding_bytes=_to_bytes(embedding),
         source_image_path=source_path,
     )
-    return {"identity_id": identity_id, "label": name, "embeddings": 1}
+    return {"identity_id": identity_id, "label": name, "embeddings": 1, "embedding_id": embedding_id}
 
 
 @router.post("/api/identities/{identity_id}/enroll", status_code=201)
@@ -89,7 +89,12 @@ async def enroll_existing(
         embedding_bytes=_to_bytes(embedding),
         source_image_path=source_path,
     )
-    return {"embedding_id": embedding_id, "identity_id": identity_id}
+    identity = store.get_identity(identity_id, user_id)
+    return {
+        "embedding_id": embedding_id,
+        "identity_id": identity_id,
+        "label": identity["label"] if identity else None,
+    }
 
 
 # ---------------------------------------------------------------------------
