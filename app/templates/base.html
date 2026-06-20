@@ -9,7 +9,12 @@
   {% block head %}{% endblock %}
 </head>
 <body>
+<script>
+window.USER_TZ     = "{{ user_tz     | default('UTC') }}";
+window.USER_LOCALE = "{{ user_locale | default('en-US') }}";
+</script>
 <script src="/static/js/autocomplete.js"></script>
+<script src="/static/js/dates.js"></script>
 <script>
 fetch('/api/review/count')
   .then(r => r.ok ? r.json() : null)

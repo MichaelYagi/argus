@@ -130,7 +130,7 @@
             </div>` : `
             <div><span class="muted">No match found</span></div>`}
             <span class="muted" style="font-size:11px;white-space:nowrap;margin-left:auto;padding-left:16px">
-              ${(item.confidence*100).toFixed(1)}% detection
+              \${(item.confidence*100).toFixed(1)}% · \${typeof formatDate !== 'undefined' ? formatDate(item.detected_at) : item.detected_at}
             </span>
           </div>
 

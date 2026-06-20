@@ -4,7 +4,8 @@ Self-hosted face and object recognition. Single Docker container, runs on your L
 
 - Enroll faces, detect and match them across photos
 - Object detection via YOLO (80 COCO classes)
-- Per-user accounts with API keys
+- Per-user accounts with individually managed API keys
+- Admin approval flow for new registrations
 - Review queue for low-confidence matches
 - Justified infinite-scroll galleries per identity
 - REST API + browser UI
@@ -16,7 +17,7 @@ Self-hosted face and object recognition. Single Docker container, runs on your L
 **1. Clone and create your `.env`**
 
 ```bash
-git clone https://github.com/YOUR_USERNAME/argus.git
+git clone https://github.com/MichaelYagi/argus.git
 cd argus
 cp .env.example .env
 ```
@@ -59,11 +60,12 @@ Port 8100 — Argus had 100 eyes.
 ## First run
 
 1. Visit `http://localhost:8100` — you're redirected to sign up
-2. Create an account — the first user is automatically the admin
-3. Go to **Models** and download a face model (`buffalo_l` is recommended)
-4. Wait for the download, then click **Activate**
-5. Go to **Enroll** and enroll a face with a name
-6. Go to **Detect** and drop in a photo — Argus will match against enrolled faces
+2. Create an account — the **first user is automatically the admin**
+3. Subsequent sign-ups require admin approval from the **Account** page
+4. Go to **Models** and download a face model (`buffalo_l` is recommended)
+5. Wait for the download to complete, then click **Activate**
+6. Go to **Enroll** and enroll a face with a name
+7. Go to **Detect** and drop in a photo — Argus will match against enrolled faces
 
 To detect objects, download and activate a YOLO model from the Models page as well.
 
@@ -71,7 +73,7 @@ To detect objects, download and activate a YOLO model from the Models page as we
 
 ## Native run (no Docker)
 
-Requires Python 3.11.
+Requires Python 3.11+.
 
 ```bash
 pip install -r requirements.txt
@@ -106,6 +108,10 @@ Data is stored in `./data/` and model weights in `./models/` relative to the wor
 
 Uncomment the `deploy` block in `docker-compose.yml`. Requires the NVIDIA Container Toolkit and Docker Desktop using the WSL2 backend with CUDA drivers configured. The app auto-detects GPU availability at runtime — no rebuild needed.
 
+### ARM / Apple Silicon (M1/M2/M3)
+
+Works natively. The image builds for ARM64, `onnxruntime` (CPU) is installed automatically instead of `onnxruntime-gpu` (no ARM64 wheels), and everything runs at full native performance.
+
 ---
 
 ## API
@@ -114,9 +120,11 @@ All `/api/*` routes require an `X-API-Key` header.
 
 **Get an API key:**
 1. Sign in at `http://localhost:8100`
-2. Go to `/keys` → Create → copy the key (shown once)
+2. Go to **Account** → type a label → **Create key** → copy the key (shown once)
 
 **Interactive docs:** `http://localhost:8100/docs`
+
+**Public API reference:** `https://michaelyagi.github.io/argus/`
 
 **Example — detect faces:**
 
@@ -152,12 +160,13 @@ curl -X POST \
 ## Development
 
 ```bash
+pip install -r requirements.txt
 pip install ruff pytest
 ruff check .
 pytest -v
 ```
 
-See `DESIGN.md` for full architecture, schema, and API reference.
+The full API reference is available at `/docs` in a running instance, or at `https://michaelyagi.github.io/argus/`.
 
 ---
 

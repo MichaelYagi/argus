@@ -62,6 +62,12 @@ def _migrate(conn: sqlite3.Connection) -> None:
     if "is_approved" not in existing_user_cols:
         conn.execute("ALTER TABLE users ADD COLUMN is_approved INTEGER NOT NULL DEFAULT 1")
 
+    existing_user_pref_cols = {r[1] for r in conn.execute("PRAGMA table_info(users)")}
+    if "timezone" not in existing_user_pref_cols:
+        conn.execute("ALTER TABLE users ADD COLUMN timezone TEXT NOT NULL DEFAULT 'UTC'")
+    if "locale" not in existing_user_pref_cols:
+        conn.execute("ALTER TABLE users ADD COLUMN locale TEXT NOT NULL DEFAULT 'en-US'")
+
     existing_identity_cols = {r[1] for r in conn.execute("PRAGMA table_info(identities)")}
     if "cover_detection_id" not in existing_identity_cols:
         conn.execute(
@@ -99,6 +105,14 @@ def create_user(username: str, password_hash: str, is_admin: bool = False, is_ap
             (username, password_hash, 1 if is_admin else 0, 1 if is_approved else 0),
         )
         return conn.execute("SELECT last_insert_rowid()").fetchone()[0]
+
+
+def update_user_preferences(user_id: int, timezone: str, locale: str) -> None:
+    with _connect() as conn:
+        conn.execute(
+            "UPDATE users SET timezone = ?, locale = ? WHERE id = ?",
+            (timezone, locale, user_id),
+        )
 
 
 def update_password(user_id: int, password_hash: str) -> None:

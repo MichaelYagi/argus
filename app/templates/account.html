@@ -43,8 +43,8 @@
       {% for k in active_keys %}
       <tr style="border-bottom:1px solid var(--border)">
         <td style="padding:8px 0"><strong>{{ k.label or 'Unnamed' }}</strong></td>
-        <td style="padding:8px 0;color:var(--muted)">{{ k.created_at[:10] }}</td>
-        <td style="padding:8px 0;color:var(--muted)">{{ k.last_used_at[:10] if k.last_used_at else 'Never' }}</td>
+        <td style="padding:8px 0;color:var(--muted)" title="Set once when the key was created — never changes"><time class="fmt-date" datetime="{{ k.created_at }}">{{ k.created_at }}</time></td>
+        <td style="padding:8px 0;color:var(--muted)">{% if k.last_used_at %}<time class="fmt-date" datetime="{{ k.last_used_at }}">{{ k.last_used_at }}</time>{% else %}<span class="muted">Never</span>{% endif %}</td>
         <td style="padding:8px 0;text-align:right;display:flex;gap:4px;justify-content:flex-end">
           <form method="post" action="/account/key/{{ k.id }}/revoke" style="display:inline">
             <button class="btn btn-ghost" style="padding:3px 10px;font-size:12px"
@@ -72,7 +72,7 @@
         {% for k in revoked_keys %}
         <tr style="border-bottom:1px solid var(--border)">
           <td style="padding:6px 0;color:var(--muted)">{{ k.label or 'Unnamed' }}</td>
-          <td style="padding:6px 0;color:var(--muted)">{{ k.created_at[:10] }}</td>
+          <td style="padding:6px 0;color:var(--muted)"><time class="fmt-date" datetime="{{ k.created_at }}">{{ k.created_at }}</time></td>
           <td style="padding:6px 0;text-align:right">
             <button class="btn btn-ghost" style="padding:2px 8px;font-size:11px"
                     onclick="showConfirm('Permanently delete this key?',
@@ -100,6 +100,30 @@
     <form id="revoke-all-form" method="post" action="/account/key/revoke-all" style="display:none"></form>
     {% endif %}
   </div>
+</div>
+
+<!-- Preferences -->
+<div class="card" style="margin-bottom:16px">
+  <h2 style="margin-bottom:16px">Date &amp; time preferences</h2>
+  <form method="post" action="/account/preferences" style="max-width:380px">
+    <div class="form-group">
+      <label class="lbl">Timezone</label>
+      <select name="timezone">
+        {% for tz in timezones %}
+        <option value="{{ tz }}" {% if tz == user_tz %}selected{% endif %}>{{ tz }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="form-group">
+      <label class="lbl">Locale</label>
+      <select name="locale">
+        {% for code, label in locales %}
+        <option value="{{ code }}" {% if code == user_locale %}selected{% endif %}>{{ label }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <button type="submit" class="btn btn-primary">Save preferences</button>
+  </form>
 </div>
 
 <!-- Password change -->
@@ -130,7 +154,7 @@
     {% for u in pending_users %}
     <div style="display:flex;align-items:center;gap:12px;padding:10px 0;border-bottom:1px solid var(--border)">
       <strong style="font-size:14px">{{ u.username }}</strong>
-      <span class="muted" style="font-size:12px">Registered {{ u.created_at[:10] }}</span>
+      <span class="muted" style="font-size:12px">Registered <time class="fmt-date" datetime="{{ u.created_at }}">{{ u.created_at }}</time></span>
       <span style="flex:1"></span>
       <form method="post" action="/admin/approve/{{ u.id }}" style="display:inline">
         <button class="btn btn-success" style="padding:5px 12px;font-size:12px">Approve</button>

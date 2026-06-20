@@ -24,6 +24,31 @@ def _require(request: Request):
     return user, None
 
 
+def _safe_col(row, key: str, default: str) -> str:
+    try:
+        return row[key] or default
+    except (IndexError, KeyError):
+        return default
+
+
+TIMEZONES = [
+    "UTC","America/New_York","America/Chicago","America/Denver","America/Los_Angeles",
+    "America/Vancouver","America/Toronto","America/Sao_Paulo","America/Mexico_City",
+    "Europe/London","Europe/Paris","Europe/Berlin","Europe/Rome","Europe/Madrid",
+    "Europe/Amsterdam","Europe/Stockholm","Europe/Zurich","Europe/Moscow",
+    "Asia/Tokyo","Asia/Shanghai","Asia/Singapore","Asia/Seoul","Asia/Kolkata",
+    "Asia/Dubai","Asia/Bangkok","Australia/Sydney","Australia/Melbourne",
+    "Pacific/Auckland","Pacific/Honolulu",
+]
+
+LOCALES = [
+    ("en-US","English (US)"),("en-GB","English (UK)"),("en-AU","English (AU)"),
+    ("fr-FR","Français"),("de-DE","Deutsch"),("es-ES","Español"),("it-IT","Italiano"),
+    ("pt-BR","Português (BR)"),("ja-JP","日本語"),("ko-KR","한국어"),
+    ("zh-CN","中文 (简体)"),("zh-TW","中文 (繁體)"),
+]
+
+
 def _render(request: Request, user, error: str = "", success: str = ""):
     new_key = request.session.pop("new_key", None)
     pending = store.get_pending_users() if user["is_admin"] else []
@@ -36,6 +61,10 @@ def _render(request: Request, user, error: str = "", success: str = ""):
         "new_key": new_key,
         "error": error,
         "success": success,
+        "user_tz": _safe_col(user, "timezone", "UTC"),
+        "user_locale": _safe_col(user, "locale", "en-US"),
+        "timezones": TIMEZONES,
+        "locales": LOCALES,
     })
 
 
@@ -88,6 +117,28 @@ async def revoke_all_keys(request: Request):
     for k in store.list_api_keys(user["id"]):
         store.revoke_api_key(k["id"], user["id"])
     return RedirectResponse("/account", status_code=303)
+
+
+# ---------------------------------------------------------------------------
+# Preferences
+# ---------------------------------------------------------------------------
+
+@router.post("/account/preferences")
+async def update_preferences(
+    request: Request,
+    timezone: str = Form(...),
+    locale: str = Form(...),
+):
+    user, redir = _require(request)
+    if redir:
+        return redir
+    if timezone not in TIMEZONES:
+        return _render(request, user, error="Invalid timezone.")
+    if locale not in dict(LOCALES):
+        return _render(request, user, error="Invalid locale.")
+    store.update_user_preferences(user["id"], timezone, locale)
+    user = store.get_user_by_id(user["id"])  # re-fetch so window.USER_TZ reflects new value
+    return _render(request, user, success="Preferences saved.")
 
 
 # ---------------------------------------------------------------------------

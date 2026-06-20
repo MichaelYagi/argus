@@ -35,15 +35,26 @@ COCO_CLASSES = [
 ]
 
 
+def _col(row, key: str, default: str) -> str:
+    """Safe column access for sqlite3.Row — avoids IndexError on newly-migrated columns."""
+    try:
+        return row[key] or default
+    except (IndexError, KeyError):
+        return default
+
+
 def _base(request: Request, active: str = "") -> dict | None:
     """Return base template context, or None if the user is not authenticated."""
     user_id = get_session_user(request)
     if not user_id:
         return None
+    user = store.get_user_by_id(user_id)
     return {
         "username": request.session.get("username", ""),
         "user_id": user_id,
         "active": active,
+        "user_tz": _col(user, "timezone", "UTC"),
+        "user_locale": _col(user, "locale", "en-US"),
     }
 
 
