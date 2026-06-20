@@ -11,7 +11,7 @@ from fastapi.staticfiles import StaticFiles
 from starlette.middleware.sessions import SessionMiddleware
 
 from app import __version__
-from app.api import detect, enroll, health, identities, images, keys, media, models, review, settings
+from app.api import detect, enroll, export_import, health, identities, images, keys, media, models, review, settings
 from app.core import settings_cache
 from app.db import store
 from app.pages import account, auth, bulk, main_pages, tag
@@ -78,6 +78,7 @@ app.include_router(models.router)
 app.include_router(settings.router)
 app.include_router(review.router)
 app.include_router(images.router)
+app.include_router(export_import.router)
 
 # Page routes
 app.include_router(main_pages.router)

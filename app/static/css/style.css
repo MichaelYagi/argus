@@ -52,6 +52,8 @@ h2 { font-size: 15px; font-weight: 600; color: var(--muted); margin-bottom: 12px
 a { color: var(--accent); text-decoration: none; }
 a:hover { text-decoration: underline; }
 
+@keyframes spin { to { transform: rotate(360deg); } }
+
 /* ---------- Mobile nav ---------- */
 .nav-mobile { display: none; }
 

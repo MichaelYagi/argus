@@ -169,6 +169,30 @@
   {% endif %}
 </div>
 {% endif %}
+
+<!-- Export -->
+<div class="card" style="margin-bottom:16px">
+  <h2 style="margin-bottom:8px">Export data</h2>
+  <p class="muted" style="font-size:13px;margin-bottom:12px">
+    Export enrolled identities, reference embeddings, and detections as a zip file.
+    Does not include user accounts, settings, or model weights.
+  </p>
+  <button class="btn btn-ghost" onclick="openExportModal()">Export…</button>
+</div>
+
+<!-- Import -->
+<div class="card">
+  <h2 style="margin-bottom:8px">Import data</h2>
+  <p class="muted" style="font-size:13px;margin-bottom:12px">
+    Import a previously exported zip. Existing identities with the same name are merged;
+    duplicate detections and embeddings are skipped.
+  </p>
+  <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+    <input type="file" id="import-file" accept=".zip" style="width:auto">
+    <button class="btn btn-primary" onclick="doImport()">Import</button>
+  </div>
+  <div id="import-result" style="margin-top:10px"></div>
+</div>
 {% endblock %}
 
 {% block scripts %}
@@ -197,6 +221,163 @@ function copyKey() {
   } else {
     fallback();
   }
+}
+
+// ---------------------------------------------------------------------------
+// Export modal
+// ---------------------------------------------------------------------------
+async function openExportModal() {
+  const resp = await fetch('/api/identities');
+  const identities = await resp.json();
+
+  if (!identities.length) {
+    alert('No identities to export.');
+    return;
+  }
+
+  const faces   = identities.filter(i => i.type === 'face');
+  const objects = identities.filter(i => i.type === 'object');
+
+  function group(title, items) {
+    if (!items.length) return '';
+    return `<div style="margin-bottom:12px">
+      <div style="font-size:11px;font-weight:600;color:var(--muted);text-transform:uppercase;
+                  letter-spacing:.5px;margin-bottom:6px">${title}</div>
+      ${items.map(i => `
+        <label style="display:flex;align-items:center;gap:8px;padding:4px 0;cursor:pointer;font-size:13px">
+          <input type="checkbox" class="export-cb" value="${i.id}" checked>
+          ${i.label}
+        </label>`).join('')}
+    </div>`;
+  }
+
+  const body = document.createElement('div');
+  body.innerHTML = `
+    <p style="font-size:13px;color:var(--muted);margin-bottom:14px">
+      Select which identities to include:
+    </p>
+    <label style="display:flex;align-items:center;gap:8px;margin-bottom:10px;font-size:13px;cursor:pointer">
+      <input type="checkbox" id="export-all" checked onchange="
+        document.querySelectorAll('.export-cb').forEach(c => c.checked = this.checked)">
+      <strong>Select all</strong>
+    </label>
+    <div style="max-height:260px;overflow-y:auto;border:1px solid var(--border);
+                border-radius:var(--radius);padding:10px">
+      ${group('People', faces)}${group('Objects', objects)}
+    </div>`;
+
+  document.querySelectorAll('.label-popup, .label-backdrop').forEach(e => e.remove());
+
+  const backdrop = document.createElement('div');
+  backdrop.className = 'label-backdrop';
+  Object.assign(backdrop.style, { position:'fixed', inset:'0', zIndex:'499' });
+  document.body.appendChild(backdrop);
+
+  const popup = document.createElement('div');
+  popup.className = 'label-popup';
+  Object.assign(popup.style, {
+    position:'fixed', top:'50%', left:'50%', transform:'translate(-50%,-50%)',
+    background:'#fff', border:'1px solid var(--border)', borderRadius:'var(--radius)',
+    padding:'20px', zIndex:'500', boxShadow:'0 8px 32px rgba(0,0,0,.2)',
+    width:'360px', maxWidth:'90vw',
+  });
+
+  const title = document.createElement('h2');
+  title.textContent = 'Export data';
+  title.style.marginBottom = '12px';
+  popup.appendChild(title);
+  popup.appendChild(body);
+
+  const actions = document.createElement('div');
+  actions.style.cssText = 'display:flex;gap:8px;margin-top:16px;justify-content:flex-end';
+
+  const cancelBtn = document.createElement('button');
+  cancelBtn.textContent = 'Cancel';
+  cancelBtn.className = 'btn btn-ghost';
+
+  const downloadBtn = document.createElement('button');
+  downloadBtn.textContent = 'Download export';
+  downloadBtn.className = 'btn btn-primary';
+
+  actions.appendChild(cancelBtn);
+  actions.appendChild(downloadBtn);
+  popup.appendChild(actions);
+  document.body.appendChild(popup);
+
+  const close = () => { popup.remove(); backdrop.remove(); };
+  cancelBtn.addEventListener('click', close);
+  backdrop.addEventListener('click', close);
+
+  downloadBtn.addEventListener('click', async () => {
+    const ids = [...document.querySelectorAll('.export-cb:checked')].map(c => parseInt(c.value));
+    if (!ids.length) { alert('Select at least one identity.'); return; }
+
+    downloadBtn.disabled = true;
+    downloadBtn.innerHTML = '<span style="display:inline-flex;align-items:center;gap:6px">'
+      + '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"'
+      + ' style="animation:spin 1s linear infinite"><circle cx="12" cy="12" r="10" stroke-opacity=".25"/>'
+      + '<path d="M12 2a10 10 0 0 1 10 10" stroke-linecap="round"/></svg>Preparing…</span>';
+
+    const resp = await fetch('/api/export', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ identity_ids: ids }),
+    });
+
+    if (!resp.ok) {
+      const err = await resp.json().catch(() => ({}));
+      downloadBtn.innerHTML = '<span style="display:inline-flex;align-items:center;gap:6px">'
+        + '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">'
+        + '<circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/>'
+        + '<line x1="9" y1="9" x2="15" y2="15"/></svg>'
+        + (err.detail || 'Export failed') + '</span>';
+      downloadBtn.style.background = 'var(--danger)';
+      setTimeout(() => {
+        downloadBtn.innerHTML = 'Download export';
+        downloadBtn.style.background = '';
+        downloadBtn.disabled = false;
+      }, 3000);
+      return;
+    }
+
+    const blob = await resp.blob();
+    const url  = URL.createObjectURL(blob);
+    const a    = document.createElement('a');
+    a.href = url; a.download = 'argus_export.zip'; a.click();
+    URL.revokeObjectURL(url);
+    close();
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Import
+// ---------------------------------------------------------------------------
+async function doImport() {
+  const fileInput = document.getElementById('import-file');
+  const resultEl  = document.getElementById('import-result');
+  if (!fileInput.files[0]) { resultEl.innerHTML = '<div class="alert alert-error">Select a zip file first.</div>'; return; }
+
+  resultEl.innerHTML = '<p class="muted">Importing…</p>';
+
+  const fd = new FormData();
+  fd.append('file', fileInput.files[0]);
+
+  const resp = await fetch('/api/import', { method: 'POST', body: fd });
+  const data = await resp.json();
+
+  if (!resp.ok) {
+    resultEl.innerHTML = `<div class="alert alert-error">${data.detail || 'Import failed'}</div>`;
+    return;
+  }
+
+  resultEl.innerHTML = `<div class="alert alert-success">
+    Import complete —
+    ${data.identities_created} created, ${data.identities_merged} merged,
+    ${data.detections_imported} detections imported (${data.detections_skipped} skipped),
+    ${data.embeddings_imported} embeddings imported (${data.embeddings_skipped} skipped),
+    ${data.images_copied} images copied.
+  </div>`;
+  fileInput.value = '';
 }
 </script>
 {% endblock %}

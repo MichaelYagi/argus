@@ -49,6 +49,7 @@ function switchTab(type) {
   ['face', 'object'].forEach(t => {
     document.getElementById('tab-' + t).hidden = (t !== type);
   });
+  localStorage.setItem('dashboard_tab', type);
   if (!state[type].loaded) loadMore(type);
 }
 
@@ -74,8 +75,8 @@ async function loadMore(type) {
 
   if (!data.items.length && !grid.children.length) {
     grid.innerHTML = type === 'face'
-      ? '<p class="muted">No people enrolled yet. <a href="/enroll">Enroll a face</a> to get started.</p>'
-      : '<p class="muted">No objects detected yet. Run detection on some photos first.</p>';
+      ? '<p class="muted" style="grid-column:1/-1">No people enrolled yet. <a href="/enroll">Enroll a face</a> to get started.</p>'
+      : '<p class="muted" style="grid-column:1/-1">No objects detected yet. Run detection on some photos first.</p>';
     return;
   }
 
@@ -122,7 +123,7 @@ async function loadMore(type) {
   document.getElementById('s-review').textContent = rv.count ?? 0;
 })();
 
-// Load People tab on page load
-switchTab('face');
+// Restore last active tab (defaults to People)
+switchTab(localStorage.getItem('dashboard_tab') || 'face');
 </script>
 {% endblock %}
