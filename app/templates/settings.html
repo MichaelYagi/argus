@@ -22,12 +22,20 @@
     </div>
     <div class="s-ctrl">
       {% if s.value_type == 'bool' %}
+        {% if s.key == 'system.use_gpu' and not gpu_available %}
+        <label class="toggle" title="No CUDA device detected — GPU unavailable">
+          <input type="checkbox" disabled {% if s.value == 'true' %}checked{% endif %}>
+          <span class="tog-track" style="opacity:.4"></span>
+        </label>
+        <span class="muted" style="font-size:11px;margin-left:8px">No CUDA device</span>
+        {% else %}
         <label class="toggle">
           <input type="checkbox" data-key="{{ s.key }}"
             {% if s.key == 'face.auto_confirm' %}data-controls="face.auto_confirm_threshold"{% endif %}
             {% if s.value == 'true' %}checked{% endif %}>
           <span class="tog-track"></span>
         </label>
+        {% endif %}
 
       {% elif s.key == 'object.classes_enabled' %}
         {# rendered below #}

@@ -67,9 +67,11 @@ for _sp in _site.getsitepackages():
 # Pre-load every versioned .so found in nvidia pip packages into the global
 # symbol table so onnxruntime-gpu's dlopen() finds them regardless of
 # LD_LIBRARY_PATH (unreliable in WSL2 after process start).
+_SKIP_LIBS = {"libnvblas"}  # NVBLAS needs nvblas.conf — not required by onnxruntime
+
 for _lib_dir in _nvidia_lib_dirs:
     for _so in sorted(_glob.glob(os.path.join(_lib_dir, "*.so.*"))):
-        if os.path.isfile(_so):
+        if os.path.isfile(_so) and not any(s in os.path.basename(_so) for s in _SKIP_LIBS):
             try:
                 _ctypes.CDLL(_so, mode=_ctypes.RTLD_GLOBAL)
             except OSError:

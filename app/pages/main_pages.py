@@ -127,7 +127,13 @@ async def settings_page(request: Request):
     grouped: dict[str, list] = {}
     for r in rows:
         grouped.setdefault(r["category"], []).append(dict(r))
-    ctx["settings"] = grouped
+    try:
+        import onnxruntime as ort
+        gpu_available = "CUDAExecutionProvider" in ort.get_available_providers()
+    except Exception:
+        gpu_available = False
+    ctx["settings"]     = grouped
     ctx["slider_ranges"] = SLIDER_RANGES
     ctx["coco_classes"] = COCO_CLASSES
+    ctx["gpu_available"] = gpu_available
     return _r(request, "settings.html", ctx)

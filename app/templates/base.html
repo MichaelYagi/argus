@@ -16,17 +16,23 @@ window.USER_LOCALE = "{{ user_locale | default('en-US') }}";
 <script src="/static/js/autocomplete.js"></script>
 <script src="/static/js/dates.js"></script>
 <script>
-fetch('/api/review/count')
-  .then(r => r.ok ? r.json() : null)
-  .then(data => {
-    if (!data || !data.count) return;
-    const badge = document.getElementById('review-count-badge');
-    if (badge) {
-      badge.textContent = data.count > 99 ? '99+' : data.count;
-      badge.style.display = 'inline';
-    }
-  })
-  .catch(() => {});
+function _updateReviewBadge() {
+  fetch('/api/review/count')
+    .then(r => r.ok ? r.json() : null)
+    .then(data => {
+      const badge = document.getElementById('review-count-badge');
+      if (!badge) return;
+      if (data && data.count) {
+        badge.textContent = data.count > 99 ? '99+' : data.count;
+        badge.style.display = 'inline';
+      } else {
+        badge.style.display = 'none';
+      }
+    })
+    .catch(() => {});
+}
+_updateReviewBadge();
+setInterval(_updateReviewBadge, 30000);
 </script>
 <nav>
   <a href="/" style="display:flex;align-items:center;gap:7px;text-decoration:none;margin-right:4px">
