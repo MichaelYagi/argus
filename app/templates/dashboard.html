@@ -30,6 +30,18 @@
   </button>
 </div>
 
+<!-- Bulk action bar (shared, shown for whichever tab has a selection) -->
+<div id="bulk-bar" style="display:none;align-items:center;gap:10px;
+     padding:10px 14px;margin-bottom:12px;background:var(--surface);
+     border-radius:var(--radius);box-shadow:var(--shadow);border-left:3px solid var(--accent)">
+  <span id="bulk-count" style="font-size:13px;font-weight:500"></span>
+  <span class="nav-spacer"></span>
+  <button class="btn btn-ghost" style="font-size:12px" onclick="selectAll()">Select all</button>
+  <button class="btn btn-ghost" style="font-size:12px" onclick="clearSelection()">Cancel</button>
+  <button class="btn" style="font-size:12px;background:#e53e3e;color:#fff;border:none"
+          onclick="deleteSelected()">Delete</button>
+</div>
+
 <div id="tab-face">
   <div class="card-grid dashboard-grid" id="grid-face">
     <p class="muted loading">Loading…</p>
@@ -47,12 +59,142 @@
 <script>
 const PAGE = 30;
 const state = {
-  face:   { cursor: null, hasMore: true, loading: false, loaded: false },
-  object: { cursor: null, hasMore: true, loading: false, loaded: false },
+  face:   { cursor: null, hasMore: true, loading: false, loaded: false, selected: new Set() },
+  object: { cursor: null, hasMore: true, loading: false, loaded: false, selected: new Set() },
 };
 const sentinels = {};
+let activeTab = 'face';
+
+// ---------------------------------------------------------------------------
+// Bulk selection
+// ---------------------------------------------------------------------------
+
+function updateBulkBar() {
+  const sel = state[activeTab].selected;
+  const bar = document.getElementById('bulk-bar');
+  document.getElementById('bulk-count').textContent =
+    sel.size === 1 ? '1 selected' : `${sel.size} selected`;
+  bar.style.display = sel.size > 0 ? 'flex' : 'none';
+}
+
+function clearSelection() {
+  const s = state[activeTab];
+  s.selected.clear();
+  document.querySelectorAll(`#grid-${activeTab} .identity-thumb`).forEach(card => {
+    card.classList.remove('selected');
+    const cb = card.querySelector('.card-cb');
+    if (cb) { cb.checked = false; cb.style.opacity = '0'; }
+  });
+  updateBulkBar();
+}
+
+function selectAll() {
+  const s = state[activeTab];
+  document.querySelectorAll(`#grid-${activeTab} .identity-thumb`).forEach(card => {
+    const id = parseInt(card.dataset.id);
+    if (!id) return;
+    s.selected.add(id);
+    card.classList.add('selected');
+    const cb = card.querySelector('.card-cb');
+    if (cb) { cb.checked = true; cb.style.opacity = '1'; }
+  });
+  updateBulkBar();
+}
+
+function deleteSelected() {
+  const s   = state[activeTab];
+  const ids = [...s.selected];
+  if (!ids.length) return;
+  const noun = activeTab === 'face' ? 'person' : 'object class';
+  const label = ids.length === 1 ? `1 ${noun}` : `${ids.length} ${noun}${ids.length !== 1 ? 'es' : ''}`;
+  showConfirm(
+    `Delete ${label} and all their detections? This cannot be undone.`,
+    async () => {
+      await Promise.all(ids.map(id =>
+        fetch(`/api/identities/${id}`, { method: 'DELETE' })
+      ));
+      ids.forEach(id => {
+        const card = document.querySelector(`#grid-${activeTab} [data-id="${id}"]`);
+        if (card) card.remove();
+      });
+      s.selected.clear();
+      updateBulkBar();
+      // Update badge
+      const badge = document.getElementById('badge-' + activeTab);
+      if (badge) {
+        const cur = parseInt(badge.textContent) || 0;
+        const next = Math.max(0, cur - ids.length);
+        badge.textContent = next > 99 ? '99+' : next;
+        badge.style.display = next > 0 ? 'inline' : 'none';
+      }
+    },
+    { confirmText: 'Delete', danger: true }
+  );
+}
+
+function makeCard(d, type) {
+  const img = d.thumbnail_url
+    ? `<img src="${d.thumbnail_url}" alt="${d.label}">`
+    : `<div class="it-ph">?</div>`;
+  const a = document.createElement('a');
+  a.href = '/identities/' + d.id;
+  a.className = 'identity-thumb';
+  a.dataset.id = d.id;
+  a.style.position = 'relative';
+  a.innerHTML = img +
+    `<div class="it-name">${d.label}</div>` +
+    `<div class="it-count">${d.detection_count} detection${d.detection_count !== 1 ? 's' : ''}</div>`;
+
+  // Checkbox overlay
+  const cb = document.createElement('input');
+  cb.type = 'checkbox';
+  cb.className = 'card-cb';
+  cb.style.cssText = 'position:absolute;top:6px;left:6px;z-index:3;opacity:0;' +
+    'width:16px;height:16px;cursor:pointer;accent-color:#3a8ef6';
+  a.prepend(cb);
+
+  // Show checkbox on hover
+  a.addEventListener('mouseenter', () => { cb.style.opacity = '1'; });
+  a.addEventListener('mouseleave', () => {
+    if (!cb.checked && !state[type].selected.size) cb.style.opacity = '0';
+  });
+
+  cb.addEventListener('click', e => e.stopPropagation());
+
+  cb.addEventListener('change', e => {
+    e.stopPropagation();
+    const s = state[type];
+    if (cb.checked) {
+      s.selected.add(d.id);
+      a.classList.add('selected');
+      cb.style.opacity = '1';
+    } else {
+      s.selected.delete(d.id);
+      a.classList.remove('selected');
+      if (!s.selected.size) cb.style.opacity = '0';
+    }
+    // Show all checkboxes when any selected
+    document.querySelectorAll(`#grid-${type} .card-cb`).forEach(c => {
+      if (!c.checked) c.style.opacity = s.selected.size ? '1' : '0';
+    });
+    updateBulkBar();
+  });
+
+  // Intercept navigation when in select mode
+  a.addEventListener('click', e => {
+    if (state[type].selected.size || cb.checked) {
+      e.preventDefault();
+      cb.checked = !cb.checked;
+      cb.dispatchEvent(new Event('change'));
+    }
+  });
+
+  return a;
+}
 
 function switchTab(type) {
+  clearSelection();
+  activeTab = type;
   document.querySelectorAll('.tab-btn').forEach(b =>
     b.classList.toggle('active', b.dataset.type === type)
   );
@@ -98,18 +240,7 @@ async function loadMore(type) {
     return;
   }
 
-  data.items.forEach(d => {
-    const img = d.thumbnail_url
-      ? `<img src="${d.thumbnail_url}" alt="${d.label}">`
-      : `<div class="it-ph">?</div>`;
-    const a = document.createElement('a');
-    a.href = '/identities/' + d.id;
-    a.className = 'identity-thumb';
-    a.innerHTML = img +
-      `<div class="it-name">${d.label}</div>` +
-      `<div class="it-count">${d.detection_count} detection${d.detection_count !== 1 ? 's' : ''}</div>`;
-    grid.appendChild(a);
-  });
+  data.items.forEach(d => grid.appendChild(makeCard(d, type)));
 
   if (!s.hasMore && sentinels[type]) {
     sentinels[type].remove();

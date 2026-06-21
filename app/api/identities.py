@@ -125,6 +125,14 @@ async def delete_identity(identity_id: int, user_id: int = Depends(require_auth)
     _fi.rebuild_user(user_id)
 
 
+@router.delete("/api/identities", status_code=200)
+async def delete_all_identities(user_id: int = Depends(require_auth)):
+    count = store.delete_all_identities(user_id)
+    from app.core import face_index as _fi
+    _fi.rebuild_user(user_id)
+    return {"deleted": count}
+
+
 # ---------------------------------------------------------------------------
 # Galleries
 # ---------------------------------------------------------------------------

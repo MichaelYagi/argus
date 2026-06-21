@@ -308,6 +308,22 @@ def delete_identity(identity_id: int, user_id: int) -> bool:
         return conn.execute("SELECT changes()").fetchone()[0] > 0
 
 
+def delete_all_identities(user_id: int) -> int:
+    """Delete all identities and related data for a user. Returns count of identities deleted."""
+    with _connect() as conn:
+        count = conn.execute(
+            "SELECT COUNT(*) FROM identities WHERE user_id = ?", (user_id,)
+        ).fetchone()[0]
+        conn.execute(
+            "DELETE FROM face_embeddings WHERE identity_id IN "
+            "(SELECT id FROM identities WHERE user_id = ?)", (user_id,)
+        )
+        conn.execute("DELETE FROM detections WHERE user_id = ?", (user_id,))
+        conn.execute("DELETE FROM source_images WHERE user_id = ?", (user_id,))
+        conn.execute("DELETE FROM identities WHERE user_id = ?", (user_id,))
+        return count
+
+
 def count_identities(user_id: int, identity_type: str | None = None) -> int:
     with _connect() as conn:
         sql    = "SELECT COUNT(*) FROM identities WHERE user_id = ?"
