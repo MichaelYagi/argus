@@ -107,9 +107,10 @@
 <div class="card">
   <h2>YOLO-World vocabulary</h2>
   <p class="muted" style="font-size:12px;margin-bottom:12px">
-    Classes to detect when using a YOLO-World model. One class per line or comma-separated.
-    Add anything — not limited to COCO. Standard YOLO models ignore this.
+    Classes to detect when using a YOLO-World model. Add anything that is a visible,
+    physical thing. Standard YOLO models ignore this.
   </p>
+
   <form class="settings-form" data-category="world">
     <textarea id="world-classes-input" rows="12"
               style="width:100%;font-size:12px;font-family:monospace;resize:vertical;box-sizing:border-box">{{ wc[0].value }}</textarea>
@@ -124,4 +125,150 @@
 
 {% block scripts %}
 <script src="/static/js/settings.js"></script>
+{% if active_obj_world %}
+<script src="/static/js/world-suggestions.js"></script>
+<script>
+(() => {
+  const ta  = document.getElementById('world-classes-input');
+  if (!ta) return;
+
+  const ul = document.createElement('ul');
+  ul.id = 'world-suggestions';
+  ul.style.cssText = [
+    'display:none', 'position:fixed', 'z-index:99999',
+    'list-style:none', 'margin:0', 'padding:0',
+    'background:#fff', 'border:1px solid #ccc',
+    'border-radius:6px', 'box-shadow:0 6px 20px rgba(0,0,0,.18)',
+    'overflow-y:auto', 'overflow-x:hidden',
+  ].join(';');
+  document.body.appendChild(ul);
+
+  const all = window.YOLO_WORLD_SUGGESTIONS || [];
+  let active = -1;
+
+  function currentSet() {
+    return new Set(ta.value.split(/,/).map(s => s.trim().toLowerCase()).filter(Boolean));
+  }
+
+  function currentWord() {
+    const pos  = ta.selectionStart;
+    const text = ta.value.substring(0, pos);
+    const last = text.lastIndexOf(',');
+    return text.substring(last + 1).trim();
+  }
+
+  function replaceCurrentWord(suggestion) {
+    const pos    = ta.selectionStart;
+    const before = ta.value.substring(0, pos);
+    const after  = ta.value.substring(pos);
+    const last   = before.lastIndexOf(',');
+    const prefix = before.substring(0, last + 1);
+    const sep    = prefix.length > 0 ? '' : '';
+    ta.value = prefix + suggestion + ',' + after.replace(/^\s*,?/, '');
+    const np = (prefix + suggestion + ',').length;
+    ta.selectionStart = ta.selectionEnd = np;
+  }
+
+  function positionDropdown() {
+    const r          = ta.getBoundingClientRect();
+    const spaceBelow = window.innerHeight - r.bottom - 8;
+    const spaceAbove = r.top - 8;
+    const maxH       = 220;
+
+    if (spaceBelow >= 120 || spaceBelow >= spaceAbove) {
+      ul.style.top       = (r.bottom + 4) + 'px';
+      ul.style.bottom    = 'auto';
+      ul.style.maxHeight = Math.min(maxH, spaceBelow) + 'px';
+    } else {
+      ul.style.bottom    = (window.innerHeight - r.top + 4) + 'px';
+      ul.style.top       = 'auto';
+      ul.style.maxHeight = Math.min(maxH, spaceAbove) + 'px';
+    }
+    ul.style.left  = r.left + 'px';
+    ul.style.width = r.width + 'px';
+  }
+
+  function show() {
+    const q   = currentWord();
+    const ql  = q.toLowerCase();
+    const cur = currentSet();
+    if (!ql) { hide(); return; }
+
+    const matches = all
+      .filter(s => s.toLowerCase().includes(ql) && !cur.has(s.toLowerCase()))
+      .slice(0, 10);
+
+    if (!matches.length) { hide(); return; }
+
+    const esc = s => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    ul.innerHTML = matches.map((m, i) =>
+      `<li data-i="${i}"
+           style="padding:8px 14px;cursor:pointer;font-size:13px;font-family:inherit;
+                  border-bottom:1px solid #e8e8e8;background:#fff;color:#1a1a1a;
+                  white-space:nowrap;overflow:hidden;text-overflow:ellipsis">
+        ${m.replace(new RegExp('(' + esc(ql) + ')', 'gi'), '<strong style="color:#3a8ef6">$1</strong>')}
+       </li>`
+    ).join('');
+    ul.querySelectorAll('li').forEach((li, i) => {
+      li.onmousedown  = e => e.preventDefault();
+      li.onmouseenter = () => { active = i; highlight(); };
+      li.onclick      = () => { replaceCurrentWord(matches[i]); hide(); ta.focus(); };
+    });
+    active = -1;
+    positionDropdown();
+    ul.style.display = 'block';
+    highlight();
+  }
+
+  function hide() { ul.style.display = 'none'; active = -1; }
+
+  function highlight() {
+    ul.querySelectorAll('li').forEach((li, i) => {
+      li.style.background = i === active ? '#f0f4ff' : '#fff';
+    });
+  }
+
+  // Sanitize before save: strip non-list entries and duplicates
+  const worldForm = document.querySelector('form[data-category="world"]');
+  if (worldForm) {
+    worldForm.addEventListener('submit', () => {
+      const valid = new Set(all.map(s => s.toLowerCase()));
+      const seen  = new Set();
+      const cleaned = ta.value
+        .split(',')
+        .map(s => s.trim())
+        .filter(s => s && valid.has(s.toLowerCase()))
+        .filter(s => { const k = s.toLowerCase(); return seen.has(k) ? false : seen.add(k); });
+      ta.value = cleaned.join(',');
+    }, true); // capture phase fires before settings.js
+  }
+
+  ta.addEventListener('input',  show);
+  ta.addEventListener('click',  show);
+  ta.addEventListener('blur',   () => setTimeout(hide, 150));
+  window.addEventListener('scroll', () => { if (ul.style.display !== 'none') positionDropdown(); });
+  window.addEventListener('resize', () => { if (ul.style.display !== 'none') positionDropdown(); });
+
+  ta.addEventListener('keydown', e => {
+    if (ul.style.display === 'none') return;
+    const items = ul.querySelectorAll('li');
+    if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      active = Math.min(active + 1, items.length - 1);
+      highlight();
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      active = Math.max(active - 1, 0);
+      highlight();
+    } else if (e.key === 'Enter') {
+      e.preventDefault(); // always block Enter when dropdown is open
+      if (active >= 0 && items[active]) items[active].click();
+      else if (items.length) items[0].click(); // default to first match
+    } else if (e.key === 'Escape') {
+      hide();
+    }
+  });
+})();
+</script>
+{% endif %}
 {% endblock %}
