@@ -5,7 +5,7 @@ Self-hosted face and object recognition. Single Docker container, runs on your L
 **Features:**
 - Face detection and recognition (InsightFace/ArcFace) — enroll people by name, match them across photos
 - Labelling a person during detection auto-enrolls them as a reference — no separate enroll step needed
-- Object detection via YOLO (80 COCO classes)
+- Object detection via standard YOLO (80 COCO classes) or YOLO-World (open vocabulary — detect anything)
 - Per-user accounts with admin approval flow and individually managed, named API keys
 - Review queue with ranked match suggestions, configurable auto-confirm threshold, and auto-enroll on confirm
 - Justified infinite-scroll galleries per identity with cover photo selection and bulk operations
@@ -14,10 +14,11 @@ Self-hosted face and object recognition. Single Docker container, runs on your L
 - Live settings (thresholds, GPU, crop padding) — no restart needed
 - Hot-swap models without restarting
 - Embedding averaging + faiss index for fast, accurate matching at scale
+- GPU auto-detected at startup; manual override available in Settings
 - REST API — everything the UI does is available via API, fully paginated
 - Mobile-responsive browser UI
 
-**Supported image formats:** JPEG, PNG, WEBP, BMP, GIF (first frame), TIFF, HEIC/HEIF
+**Supported image formats:** JPEG, PNG, WEBP, BMP, GIF (first frame), TIFF, HEIC/HEIF, MPO (first frame)
 
 ---
 
@@ -64,7 +65,7 @@ Port 8100 — Argus had 100 eyes.
 5. Go to **Enroll** and enroll a face with a name — or skip this and label faces directly on the **Detect** page
 6. Go to **Detect** and drop in a photo — Argus will detect and match faces
 
-**For object detection:** also download and activate a YOLO model from the Models page (`yolov8s` is a good balance of speed and accuracy). Object detection is independent of face recognition and optional.
+**For object detection:** download and activate a YOLO model from the Models page. `yolov8s` is a good starting point for standard detection. For open-vocabulary detection, see [YOLO-World](#yolo-world-open-vocabulary-object-detection) below.
 
 ---
 
@@ -82,6 +83,36 @@ Key thresholds (all configurable in **Settings**):
 - `face.auto_enroll_threshold` (default 0.92) — when a detection is confirmed, if its confidence meets this bar it is added to that person's reference embeddings, improving future matching accuracy. Set to 0 to disable.
 
 The split between auto-confirm and auto-enroll is intentional: a detection can be confident enough to skip review (0.80) without being confident enough to become a reference sample (0.92). Keeping the reference set to only unambiguous, high-quality samples produces more accurate matches over time.
+
+---
+
+## Object detection models
+
+Argus supports two kinds of object detection models, selectable from the **Models** page:
+
+### Standard YOLO
+
+Models: `yolov8n`, `yolov8s`, `yolov8m`, `yolov8x`, `yolo11n`
+
+Detects a fixed set of 80 everyday object categories defined by the COCO dataset (people, vehicles, animals, furniture, food, etc.). Fast and consistent — the vocabulary is baked into the model weights and never changes. Use the **Object classes** setting to filter which of the 80 you care about.
+
+### YOLO-World (open vocabulary)
+
+Models: `yolov8s-worldv2`, `yolov8m-worldv2`, `yolov8l-worldv2`
+
+Detects anything you describe in plain language. Instead of a fixed list of 80 categories, you define a vocabulary of words and phrases, and the model finds those things in photos.
+
+**What is a "vocabulary"?** It's a list of physical things you want Argus to find and label. Each entry is a description of something that can appear in an image — "dog", "fire", "license plate", "person wearing a helmet". When Argus scans a photo, it looks for every item in your vocabulary and draws a bounding box around each one it finds.
+
+**Can you use arbitrary words?** Mostly yes, within reason. YOLO-World understands natural language, so descriptions like "golden retriever", "broken window", or "person on a bicycle" work. Abstract or non-visual concepts ("happiness", "expensive") do not — if you couldn't point at it in a photo, it won't work.
+
+**Why not just list thousands of things?** Two reasons:
+- Every entry in the vocabulary adds a small amount of compute per image. 100–300 classes is a practical sweet spot; thousands would be noticeably slower.
+- Precision degrades with a bloated list — more categories means more chances for false positives and misclassification between similar-sounding things.
+
+**Default vocabulary:** Argus ships with ~160 classes covering all 80 COCO categories plus common additions: weapons, fire, smoke, license plates, face masks, extended vehicle types, more animal species, and other frequently useful categories. Edit the vocabulary in **Settings → YOLO-World vocabulary** to add or remove anything. Changes take effect on the next detection — no restart needed.
+
+**When to use YOLO-World vs standard YOLO:** if the things you want to detect are all within COCO's 80 classes, standard YOLO is faster and more consistent. Switch to YOLO-World when you need to detect things outside that list — a specific vehicle type, safety equipment, environmental hazards, or anything else with a name.
 
 ---
 
@@ -146,6 +177,16 @@ All `/api/*` routes require an `X-API-Key` header **or** a valid browser session
 curl -X POST \
   -H "X-API-Key: argus_..." \
   -F "file=@photo.jpg" \
+  http://localhost:8100/api/detect/faces
+```
+
+**Example — detect with an inline label (skips review queue):**
+
+```bash
+curl -X POST \
+  -H "X-API-Key: argus_..." \
+  -H "Content-Type: application/json" \
+  -d '{"image_url": "http://...", "label": "Noah"}' \
   http://localhost:8100/api/detect/faces
 ```
 

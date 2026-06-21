@@ -718,15 +718,52 @@ def update_setting(key: str, value: str) -> None:
 # ---------------------------------------------------------------------------
 
 _MODEL_SEED: list[tuple] = [
-    ("face",   "buffalo_l",   512),
-    ("face",   "buffalo_s",   512),
-    ("face",   "antelopev2",  512),
-    ("object", "yolov8n",     None),
-    ("object", "yolov8s",     None),
-    ("object", "yolov8m",     None),
-    ("object", "yolov8x",     None),
-    ("object", "yolo11n",     None),
+    ("face",   "buffalo_l",          512),
+    ("face",   "buffalo_s",          512),
+    ("face",   "antelopev2",         512),
+    ("object", "yolov8n",            None),
+    ("object", "yolov8s",            None),
+    ("object", "yolov8m",            None),
+    ("object", "yolov8x",            None),
+    ("object", "yolo11n",            None),
+    ("object", "yolov8s-worldv2",    None),
+    ("object", "yolov8m-worldv2",    None),
+    ("object", "yolov8l-worldv2",    None),
 ]
+
+# Default vocabulary for YOLO-World: 80 COCO classes + common extras
+_WORLD_CLASSES_DEFAULT = (
+    # COCO 80
+    "person,bicycle,car,motorcycle,airplane,bus,train,truck,boat,"
+    "traffic light,fire hydrant,stop sign,parking meter,bench,"
+    "bird,cat,dog,horse,sheep,cow,elephant,bear,zebra,giraffe,"
+    "backpack,umbrella,handbag,tie,suitcase,frisbee,skis,snowboard,"
+    "sports ball,kite,baseball bat,baseball glove,skateboard,surfboard,"
+    "tennis racket,bottle,wine glass,cup,fork,knife,spoon,bowl,"
+    "banana,apple,sandwich,orange,broccoli,carrot,hot dog,pizza,"
+    "donut,cake,chair,couch,potted plant,bed,dining table,toilet,"
+    "tv,laptop,mouse,remote,keyboard,cell phone,microwave,oven,"
+    "toaster,sink,refrigerator,book,clock,vase,scissors,teddy bear,"
+    "hair drier,toothbrush,"
+    # Safety and security
+    "gun,rifle,pistol,weapon,sword,face mask,helmet,handcuffs,"
+    "security camera,fire extinguisher,police car,ambulance,fire truck,"
+    # Events and hazards
+    "fire,smoke,explosion,flood,crowd,accident,graffiti,trash,"
+    # Extended vehicles
+    "van,scooter,tractor,forklift,crane,excavator,helicopter,drone,"
+    "go-kart,golf cart,wheelchair,baby stroller,"
+    # More animals
+    "lion,tiger,leopard,cheetah,wolf,fox,deer,rabbit,squirrel,"
+    "raccoon,skunk,beaver,otter,monkey,gorilla,penguin,flamingo,"
+    "dolphin,whale,shark,seal,crab,lobster,jellyfish,"
+    "turtle,snake,lizard,frog,eagle,owl,parrot,crow,peacock,"
+    # Documents and IDs
+    "license plate,passport,credit card,badge,barcode,QR code,"
+    # Misc useful
+    "cigarette,alcohol bottle,ladder,fence,gate,stairs,"
+    "fire hydrant,manhole,traffic cone,road sign,street light"
+)
 
 _SETTINGS_SEED: list[tuple] = [
     ("face.match_threshold",
@@ -756,6 +793,9 @@ _SETTINGS_SEED: list[tuple] = [
     ("object.classes_enabled",
      "*",     "string", "object",
      "Enabled Classes | Which COCO object classes to detect; * means all 80, or enter a comma-separated list"),
+    ("object.world_classes",
+     _WORLD_CLASSES_DEFAULT, "string", "object",
+     "YOLO-World Vocabulary | Classes to detect with a YOLO-World model; edit to add or remove"),
     ("system.gallery_page_size",
      "30",    "int",    "system",
      "Gallery Page Size | Number of crop thumbnails loaded per scroll batch in galleries"),
@@ -783,18 +823,15 @@ def get_settings_defaults() -> dict[str, str]:
 
 
 def _seed_models(conn: sqlite3.Connection) -> None:
-    if conn.execute("SELECT COUNT(*) FROM models").fetchone()[0] > 0:
-        return
     conn.executemany(
-        "INSERT INTO models (type, name, embedding_dim) VALUES (?, ?, ?)",
+        "INSERT OR IGNORE INTO models (type, name, embedding_dim) VALUES (?, ?, ?)",
         _MODEL_SEED,
     )
 
 
 def _seed_settings(conn: sqlite3.Connection) -> None:
-    if conn.execute("SELECT COUNT(*) FROM settings").fetchone()[0] > 0:
-        return
     conn.executemany(
-        "INSERT INTO settings (key, value, value_type, category, description) VALUES (?, ?, ?, ?, ?)",
+        """INSERT OR IGNORE INTO settings (key, value, value_type, category, description)
+           VALUES (?, ?, ?, ?, ?)""",
         _SETTINGS_SEED,
     )

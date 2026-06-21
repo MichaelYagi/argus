@@ -53,7 +53,7 @@ def test_list_models_returns_all(client):
     h = _setup(client)
     r = client.get("/api/models", headers=h)
     assert r.status_code == 200
-    assert len(r.json()) == 8
+    assert len(r.json()) == 11
 
 
 def test_list_models_filter_face(client):
@@ -67,7 +67,8 @@ def test_list_models_filter_object(client):
     h = _setup(client)
     r = client.get("/api/models?type=object", headers=h)
     names = {m["name"] for m in r.json()}
-    assert names == {"yolov8n", "yolov8s", "yolov8m", "yolov8x", "yolo11n"}
+    assert names == {"yolov8n", "yolov8s", "yolov8m", "yolov8x", "yolo11n",
+                     "yolov8s-worldv2", "yolov8m-worldv2", "yolov8l-worldv2"}
 
 
 def test_get_model_detail(client):

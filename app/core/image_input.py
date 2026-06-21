@@ -22,7 +22,7 @@ try:
 except ImportError:
     pass
 
-SUPPORTED_FORMATS = frozenset({"JPEG", "PNG", "WEBP", "BMP", "GIF", "TIFF", "HEIF"})
+SUPPORTED_FORMATS = frozenset({"JPEG", "PNG", "WEBP", "BMP", "GIF", "TIFF", "HEIF", "MPO"})
 
 
 async def acquire_image(request: Request) -> bytes:
@@ -83,7 +83,7 @@ def open_and_validate(image_bytes: bytes) -> Any:
     if fmt not in SUPPORTED_FORMATS:
         raise HTTPException(415, f"Unsupported image format: {fmt or 'unknown'}")
 
-    if fmt == "GIF":
+    if fmt in ("GIF", "MPO"):
         img.seek(0)
 
     return img

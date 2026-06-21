@@ -30,30 +30,60 @@ def _object_device() -> str:
 
 class ObjectEngine:
     def __init__(self, model_name: str, model_path: Path) -> None:
-        from ultralytics import YOLO
-
         self._model_name = model_name
-        self._model = YOLO(str(model_path))
-        self._device = _object_device()
+        self._is_world   = "world" in model_name.lower()
+        self._device     = _object_device()
+
+        if self._is_world:
+            from ultralytics import YOLOWorld
+            self._model = YOLOWorld(str(model_path))
+            self._apply_world_classes()
+        else:
+            from ultralytics import YOLO
+            self._model = YOLO(str(model_path))
 
     @property
     def model_name(self) -> str:
         return self._model_name
 
+    @property
+    def is_world(self) -> bool:
+        return self._is_world
+
+    def _apply_world_classes(self) -> None:
+        raw = settings_cache.cache.get_or("object.world_classes", "")
+        classes = [c.strip() for c in raw.split(",") if c.strip()]
+        if classes:
+            self._model.set_classes(classes)
+            self._world_classes_raw = raw
+
     def detect(self, image: Any) -> list[ObjectDetection]:
         min_conf = settings_cache.cache.get_or("object.detection_confidence", 0.5)
-        iou = settings_cache.cache.get_or("object.iou_threshold", 0.45)
-        classes_enabled = settings_cache.cache.get_or("object.classes_enabled", "*")
+        iou      = settings_cache.cache.get_or("object.iou_threshold", 0.45)
 
-        results = self._model(image, conf=min_conf, iou=iou, device=self._device, verbose=False)
+        if self._is_world:
+            # Only re-encode vocabulary if it changed since last call
+            current_raw = settings_cache.cache.get_or("object.world_classes", "")
+            if current_raw != getattr(self, "_world_classes_raw", None):
+                self._apply_world_classes()
+            results = self._model.predict(
+                image, conf=min_conf, iou=iou, device=self._device, verbose=False
+            )
+        else:
+            results = self._model(
+                image, conf=min_conf, iou=iou, device=self._device, verbose=False
+            )
+
+        classes_enabled = settings_cache.cache.get_or("object.classes_enabled", "*")
 
         detections: list[ObjectDetection] = []
         for result in results:
-            names: dict[int, str] = result.names
+            names = result.names
             for box in result.boxes:
-                cls_id = int(box.cls)
-                cls_name = names.get(cls_id, str(cls_id))
-                if classes_enabled != "*":
+                cls_id   = int(box.cls)
+                cls_name = (names[cls_id] if isinstance(names, list)
+                            else names.get(cls_id, str(cls_id)))
+                if not self._is_world and classes_enabled != "*":
                     enabled = {c.strip() for c in classes_enabled.split(",")}
                     if cls_name not in enabled:
                         continue

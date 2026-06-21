@@ -71,6 +71,18 @@
         if (err) errors.push(err);
       }
 
+      // YOLO-World vocabulary textarea
+      const wcInput = form.querySelector('#world-classes-input');
+      if (wcInput) {
+        // Normalise: split on newlines or commas, trim, rejoin as CSV
+        const classes = wcInput.value
+          .split(/[\n,]+/)
+          .map(s => s.trim())
+          .filter(Boolean);
+        const err = await saveSetting('object.world_classes', classes.join(','));
+        if (err) errors.push(err);
+      }
+
       btn.disabled = false;
       btn.textContent = 'Save';
 

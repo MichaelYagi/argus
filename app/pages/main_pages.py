@@ -132,8 +132,11 @@ async def settings_page(request: Request):
         gpu_available = "CUDAExecutionProvider" in ort.get_available_providers()
     except Exception:
         gpu_available = False
-    ctx["settings"]     = grouped
-    ctx["slider_ranges"] = SLIDER_RANGES
-    ctx["coco_classes"] = COCO_CLASSES
-    ctx["gpu_available"] = gpu_available
+    active_obj = store.get_active_model("object")
+    active_obj_name = active_obj["name"] if active_obj else None
+    ctx["settings"]        = grouped
+    ctx["slider_ranges"]   = SLIDER_RANGES
+    ctx["coco_classes"]    = COCO_CLASSES
+    ctx["gpu_available"]   = gpu_available
+    ctx["active_obj_world"] = active_obj_name and "world" in active_obj_name.lower()
     return _r(request, "settings.html", ctx)

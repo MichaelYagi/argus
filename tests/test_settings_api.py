@@ -43,7 +43,7 @@ def test_list_settings_grouped(client):
     data = r.json()
     assert set(data.keys()) == {"face", "object", "system"}
     assert len(data["face"]) == 6
-    assert len(data["object"]) == 3
+    assert len(data["object"]) == 4
     assert len(data["system"]) == 6
 
 
