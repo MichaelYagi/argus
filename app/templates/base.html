@@ -7,11 +7,73 @@
   <link rel="icon" type="image/svg+xml" href="/static/favicon.svg">
   <link rel="stylesheet" href="/static/css/style.css">
   {% block head %}{% endblock %}
+  <!-- Apply saved theme before first paint to avoid flash -->
+  <script>
+    (function(){
+      var t = localStorage.getItem('argus-theme');
+      if (t && t !== 'light') document.documentElement.setAttribute('data-theme', t);
+    })();
+  </script>
 </head>
 <body>
 <script>
 window.USER_TZ     = "{{ user_tz     | default('UTC') }}";
 window.USER_LOCALE = "{{ user_locale | default('en-US') }}";
+
+// ---------------------------------------------------------------------------
+// Theme picker — runs after DOM is ready so elements exist
+// ---------------------------------------------------------------------------
+document.addEventListener('DOMContentLoaded', function() {
+  const COLORS = {
+    light: { bg: '#f0f2f5', surface: '#ffffff', accent: '#3a8ef6' },
+    dark:  { bg: '#0d1117', surface: '#161b22', accent: '#58a6ff' },
+    ember: { bg: '#1a1612', surface: '#252018', accent: '#f59e0b' },
+  };
+  const btn  = document.getElementById('theme-btn');
+  const menu = document.getElementById('theme-menu');
+  if (!btn || !menu) return;
+
+  function setSwatch(t) {
+    const c  = COLORS[t] || COLORS.light;
+    const bg = document.getElementById('ts-bg');
+    const sf = document.getElementById('ts-surface');
+    const ac = document.getElementById('ts-accent');
+    if (bg) bg.style.background = c.bg;
+    if (sf) sf.style.background = c.surface;
+    if (ac) ac.style.background = c.accent;
+  }
+
+  function applyTheme(t) {
+    if (t === 'light') {
+      document.documentElement.removeAttribute('data-theme');
+    } else {
+      document.documentElement.setAttribute('data-theme', t);
+    }
+    setSwatch(t);
+    localStorage.setItem('argus-theme', t);
+    document.querySelectorAll('.theme-opt').forEach(o => {
+      const active = o.dataset.theme === t;
+      o.style.fontWeight = active ? '600' : '400';
+      o.style.background = active ? 'rgba(255,255,255,.1)' : 'none';
+    });
+  }
+
+  function openMenu()  { menu.style.display = 'flex'; }
+  function closeMenu() { menu.style.display = 'none'; }
+
+  // Sync swatch + active highlight to saved theme
+  applyTheme(localStorage.getItem('argus-theme') || 'light');
+
+  btn.addEventListener('click', e => {
+    e.stopPropagation();
+    menu.style.display === 'none' ? openMenu() : closeMenu();
+  });
+  document.querySelectorAll('.theme-opt').forEach(o => {
+    o.addEventListener('click', () => { applyTheme(o.dataset.theme); closeMenu(); });
+  });
+  document.addEventListener('click', closeMenu);
+  menu.addEventListener('click', e => e.stopPropagation());
+});
 </script>
 <script src="/static/js/autocomplete.js"></script>
 <script src="/static/js/dates.js"></script>
@@ -55,6 +117,65 @@ setInterval(_updateReviewBadge, 30000);
   <a href="/docs"     class="nav-desktop {% if active == 'docs'      %}active{% endif %}">API docs</a>
   <span class="nav-spacer nav-desktop"></span>
   <a href="/account"  class="nav-desktop" style="color:#aaa;font-size:12px">{{ username }}</a>
+
+  <!-- Theme picker -->
+  <div class="nav-desktop" style="position:relative">
+    <button id="theme-btn" title="Change theme"
+            style="background:none;border:none;cursor:pointer;padding:3px;
+                   display:flex;align-items:center;justify-content:center">
+      <!-- 3-color swatch square: bg | surface | accent stacked vertically -->
+      <span id="theme-swatch"
+            style="display:flex;flex-direction:column;width:18px;height:18px;
+                   border-radius:3px;overflow:hidden;border:1px solid rgba(255,255,255,.25)">
+        <span id="ts-bg"      style="flex:1;background:#f0f2f5"></span>
+        <span id="ts-surface" style="flex:1;background:#ffffff"></span>
+        <span id="ts-accent"  style="flex:1;background:#3a8ef6"></span>
+      </span>
+    </button>
+    <div id="theme-menu"
+         style="display:none;position:absolute;right:0;top:calc(100% + 8px);
+                background:#1e2430;border:1px solid #30363d;border-radius:8px;
+                box-shadow:0 4px 20px rgba(0,0,0,.4);padding:6px;
+                flex-direction:column;gap:2px;min-width:130px;z-index:300">
+      <button class="theme-opt" data-theme="light"
+              style="display:flex;align-items:center;gap:10px;padding:7px 10px;
+                     border:none;cursor:pointer;border-radius:5px;background:none;
+                     font-size:13px;font-family:inherit;text-align:left;width:100%;color:#e6edf3">
+        <span style="display:flex;flex-direction:column;width:14px;height:14px;
+                     border-radius:2px;overflow:hidden;flex-shrink:0">
+          <span style="flex:1;background:#f0f2f5"></span>
+          <span style="flex:1;background:#ffffff"></span>
+          <span style="flex:1;background:#3a8ef6"></span>
+        </span>
+        Light
+      </button>
+      <button class="theme-opt" data-theme="dark"
+              style="display:flex;align-items:center;gap:10px;padding:7px 10px;
+                     border:none;cursor:pointer;border-radius:5px;background:none;
+                     font-size:13px;font-family:inherit;text-align:left;width:100%;color:#e6edf3">
+        <span style="display:flex;flex-direction:column;width:14px;height:14px;
+                     border-radius:2px;overflow:hidden;flex-shrink:0">
+          <span style="flex:1;background:#0d1117"></span>
+          <span style="flex:1;background:#161b22"></span>
+          <span style="flex:1;background:#58a6ff"></span>
+        </span>
+        Dark
+      </button>
+      <button class="theme-opt" data-theme="ember"
+              style="display:flex;align-items:center;gap:10px;padding:7px 10px;
+                     border:none;cursor:pointer;border-radius:5px;background:none;
+                     font-size:13px;font-family:inherit;text-align:left;width:100%;color:#e6edf3">
+        <span style="display:flex;flex-direction:column;width:14px;height:14px;
+                     border-radius:2px;overflow:hidden;flex-shrink:0">
+          <span style="flex:1;background:#1a1612"></span>
+          <span style="flex:1;background:#252018"></span>
+          <span style="flex:1;background:#f59e0b"></span>
+        </span>
+        Ember
+      </button>
+    </div>
+  </div>
+
   <form method="post" action="/logout" class="nav-desktop">
     <button type="submit">Sign out</button>
   </form>
