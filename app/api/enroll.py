@@ -8,10 +8,11 @@ from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 
+from app.core import settings_cache
 from app.core.auth import require_auth
 from app.core.engine_registry import registry
 from app.core.image_input import decode_base64, fetch_url, open_and_validate, to_rgb_array
-from app.core.paths import sources_dir
+from app.core.paths import crops_dir, sources_dir
 from app.db import store
 
 router = APIRouter()
@@ -111,7 +112,7 @@ async def enroll_new(request: Request, user_id: int = Depends(require_auth)):
     """Create a new face identity and store its first embedding in one call."""
     raw, name = await _parse_enroll_request(request)
     img = open_and_validate(raw)
-    embedding, source_path = _extract_embedding(raw, img)
+    embedding, source_filename, face_det = _extract_embedding(raw, img)
 
     try:
         identity_id = store.create_identity(user_id, "face", name)
@@ -120,17 +121,38 @@ async def enroll_new(request: Request, user_id: int = Depends(require_auth)):
 
     model_row = store.get_active_model("face")
     model_id  = model_row["id"] if model_row else None
+
+    source_id  = store.get_or_create_source_image(user_id, source_filename, img.width, img.height)
+    crop_path  = _save_crop(img, face_det.bbox)
+    detection_id = store.insert_detection(
+        user_id=user_id,
+        identity_id=identity_id,
+        source_image_id=source_id,
+        detection_type="face",
+        model_id=model_id,
+        confidence=face_det.confidence,
+        bbox_x=face_det.bbox[0], bbox_y=face_det.bbox[1],
+        bbox_w=face_det.bbox[2], bbox_h=face_det.bbox[3],
+        crop_path=crop_path,
+        embedding=_to_bytes(embedding),
+        review_status="confirmed",
+    )
+    with store._connect() as conn:
+        conn.execute("UPDATE identities SET cover_detection_id = ? WHERE id = ?",
+                     (detection_id, identity_id))
+
     embedding_id = store.insert_face_embedding(
         identity_id=identity_id,
         model_id=model_id,
         embedding_bytes=_to_bytes(embedding),
-        source_image_path=source_path,
+        source_image_path=crop_path,
     )
     if model_id:
         store.compute_and_store_representative(identity_id, model_id)
         from app.core import face_index as _fi
         _fi.rebuild_user(user_id)
-    return {"identity_id": identity_id, "label": name, "embeddings": 1, "embedding_id": embedding_id}
+    return {"identity_id": identity_id, "label": name, "embeddings": 1,
+            "embedding_id": embedding_id, "detection_id": detection_id}
 
 
 @router.post("/api/identities/{identity_id}/enroll", status_code=201)
@@ -143,15 +165,32 @@ async def enroll_existing(
 
     raw, _name = await _parse_enroll_request(request, name_required=False)
     img = open_and_validate(raw)
-    embedding, source_path = _extract_embedding(raw, img)
+    embedding, source_filename, face_det = _extract_embedding(raw, img)
 
     model_row = store.get_active_model("face")
     model_id  = model_row["id"] if model_row else None
+
+    source_id  = store.get_or_create_source_image(user_id, source_filename, img.width, img.height)
+    crop_path  = _save_crop(img, face_det.bbox)
+    store.insert_detection(
+        user_id=user_id,
+        identity_id=identity_id,
+        source_image_id=source_id,
+        detection_type="face",
+        model_id=model_id,
+        confidence=face_det.confidence,
+        bbox_x=face_det.bbox[0], bbox_y=face_det.bbox[1],
+        bbox_w=face_det.bbox[2], bbox_h=face_det.bbox[3],
+        crop_path=crop_path,
+        embedding=_to_bytes(embedding),
+        review_status="confirmed",
+    )
+
     embedding_id = store.insert_face_embedding(
         identity_id=identity_id,
         model_id=model_id,
         embedding_bytes=_to_bytes(embedding),
-        source_image_path=source_path,
+        source_image_path=crop_path,
     )
     if model_id:
         store.compute_and_store_representative(identity_id, model_id)
@@ -217,8 +256,8 @@ async def _parse_enroll_request(
     return raw, name
 
 
-def _extract_embedding(raw: bytes, img: Any) -> tuple[Any, str | None]:
-    """Run face detection, return (embedding, source_image_path).
+def _extract_embedding(raw: bytes, img: Any) -> tuple[Any, str | None, Any]:
+    """Run face detection, return (embedding, source_filename, face_detection).
 
     Uses the highest-confidence face if multiple are detected.
     Raises 503 if no engine is loaded, 400 if no face is found.
@@ -234,10 +273,26 @@ def _extract_embedding(raw: bytes, img: Any) -> tuple[Any, str | None]:
         raise HTTPException(400, "No face detected in this image.")
 
     best = max(faces, key=lambda f: f.confidence)
-
-    # Save source image to disk for reference
     source_path = _save_source(raw, img)
-    return best.embedding, source_path
+    return best.embedding, source_path, best
+
+
+def _save_crop(img: Any, bbox: tuple) -> str:
+    import uuid
+    x, y, w, h = bbox
+    padding = settings_cache.cache.get_or("system.crop_padding", 0.2)
+    pad_x = int(w * padding)
+    pad_y = int(h * padding)
+    x1 = max(0, x - pad_x)
+    y1 = max(0, y - pad_y)
+    x2 = min(img.width,  x + w + pad_x)
+    y2 = min(img.height, y + h + pad_y)
+    crop = img.crop((x1, y1, x2, y2))
+    crop_dir = crops_dir()
+    crop_dir.mkdir(parents=True, exist_ok=True)
+    filename = f"{uuid.uuid4().hex}.jpg"
+    crop.convert("RGB").save(crop_dir / filename, "JPEG")
+    return filename
 
 
 def _save_source(raw: bytes, img: Any) -> str:
