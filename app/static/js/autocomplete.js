@@ -146,6 +146,57 @@
     document.addEventListener('keydown', onKey);
   };
 
+  // ---------------------------------------------------------------------------
+  // showMessage — single-button informational modal (no cancel)
+  // ---------------------------------------------------------------------------
+  window.showMessage = (message, { buttonText = 'OK', onClose = null } = {}) => {
+    document.querySelectorAll('.modal-overlay').forEach(m => m.remove());
+
+    const overlay = document.createElement('div');
+    overlay.className = 'modal-overlay';
+    Object.assign(overlay.style, {
+      position: 'fixed', inset: '0',
+      background: 'rgba(0,0,0,.45)',
+      zIndex: '600',
+      display: 'flex', alignItems: 'center', justifyContent: 'center',
+    });
+
+    const box = document.createElement('div');
+    Object.assign(box.style, {
+      background: '#fff', borderRadius: 'var(--radius)',
+      padding: '24px', maxWidth: '400px', width: '90vw',
+      boxShadow: '0 8px 32px rgba(0,0,0,.2)',
+    });
+
+    const msg = document.createElement('p');
+    msg.textContent = message;
+    msg.style.cssText = 'margin-bottom:20px;font-size:14px;line-height:1.5';
+
+    const row = document.createElement('div');
+    row.style.cssText = 'display:flex;justify-content:flex-end';
+
+    const okBtn = document.createElement('button');
+    okBtn.textContent = buttonText;
+    okBtn.className = 'btn btn-primary';
+
+    row.appendChild(okBtn);
+    box.appendChild(msg);
+    box.appendChild(row);
+    overlay.appendChild(box);
+    document.body.appendChild(overlay);
+    okBtn.focus();
+
+    const close = () => { overlay.remove(); onClose?.(); };
+    okBtn.addEventListener('click', close);
+    overlay.addEventListener('click', e => { if (e.target === overlay) close(); });
+    document.addEventListener('keydown', function onKey(e) {
+      if (e.key === 'Escape' || e.key === 'Enter') {
+        close();
+        document.removeEventListener('keydown', onKey);
+      }
+    });
+  };
+
   window.showLabelPopup = (anchor, onConfirm, placeholder = 'Name (blank to clear)') => {
     document.querySelectorAll('.label-popup, .label-backdrop').forEach(p => p.remove());
 

@@ -297,7 +297,7 @@ document.getElementById('delete-all-data-btn').addEventListener('click', () => {
     'This will permanently delete all enrolled people, detected objects, detections, face embeddings, and stored images. Settings and model configuration will not be affected. This cannot be undone.',
     async () => {
       const r = await fetch('/api/identities', { method: 'DELETE' });
-      if (r.ok) window.location.href = '/';
+      if (r.ok) showMessage('All data deleted successfully.');
     },
     { confirmText: 'Delete all data', danger: true }
   );
