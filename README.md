@@ -77,9 +77,11 @@ Detections below the match threshold go into a review queue (`/review`). Each it
 - Actions: confirm, reject, reassign, or dismiss
 
 Key thresholds (all configurable in **Settings**):
-- `face.match_threshold` (default 0.5) — minimum similarity to assign a match at all
-- `face.auto_confirm_threshold` (default 0.80) — skip the queue for high-confidence matches
-- `face.auto_enroll_threshold` (default 0.92) — automatically add confirmed detections to the reference set
+- `face.match_threshold` (default 0.5) — minimum similarity to assign a match at all. Below this, the face is stored but left unidentified.
+- `face.auto_confirm_threshold` (default 0.80) — detections at or above this similarity are confirmed automatically and skip the review queue. Below it, they land in the queue for manual review.
+- `face.auto_enroll_threshold` (default 0.92) — when a detection is confirmed, if its confidence meets this bar it is added to that person's reference embeddings, improving future matching accuracy. Set to 0 to disable.
+
+The split between auto-confirm and auto-enroll is intentional: a detection can be confident enough to skip review (0.80) without being confident enough to become a reference sample (0.92). Keeping the reference set to only unambiguous, high-quality samples produces more accurate matches over time.
 
 ---
 

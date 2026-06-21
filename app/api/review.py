@@ -54,7 +54,7 @@ async def get_review_queue(
     )
 
     return {
-        "items": [_fmt_review_item(r, model_id, user_id) for r in items],
+        "items": [x for x in (_fmt_review_item(r, model_id, user_id) for r in items) if x is not None],
         "next_cursor": next_cursor,
         "has_more": has_more,
     }
@@ -198,10 +198,21 @@ async def label_detection(
 # Internal
 # ---------------------------------------------------------------------------
 
-def _fmt_review_item(row: Any, model_id: int | None, user_id: int) -> dict:
+def _fmt_review_item(row: Any, model_id: int | None, user_id: int) -> dict | None:
     suggested: list[dict] = []
     if model_id and row["embedding"]:
         suggested = _suggested_matches(bytes(row["embedding"]), model_id, user_id)
+
+    # If no identity assigned but the top suggestion beats auto-confirm threshold,
+    # confirm it now rather than showing "No match found" with an obvious match below.
+    if not row["identity_id"] and suggested:
+        auto_on  = settings_cache.cache.get_or("face.auto_confirm", True)
+        auto_thr = settings_cache.cache.get_or("face.auto_confirm_threshold", 0.80)
+        top = suggested[0]
+        if auto_on and top["similarity"] >= auto_thr:
+            store.label_detection(row["id"], user_id, top["identity_id"])
+            _auto_enroll(row["id"], user_id)
+            return None  # remove from queue
 
     current = (
         {"identity_id": row["identity_id"], "label": row["current_label"]}

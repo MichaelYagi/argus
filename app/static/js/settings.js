@@ -7,7 +7,7 @@
     alertEl.textContent = msg;
     alertEl.hidden = false;
     clearTimeout(alertEl._t);
-    alertEl._t = setTimeout(() => { alertEl.hidden = true; }, 2500);
+    alertEl._t = setTimeout(() => { alertEl.hidden = true; }, 3000);
   }
 
   async function saveSetting(key, value) {
@@ -16,37 +16,20 @@
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ value }),
     });
-    if (resp.ok) {
-      showAlert('Saved', 'success');
-    } else {
+    if (!resp.ok) {
       const err = await resp.json().catch(() => ({}));
-      showAlert(err.detail || 'Failed to save', 'error');
-      return false;
+      return err.detail || 'Failed to save';
     }
-    return true;
+    return null;
   }
 
-  // Sliders
+  // Update slider display value live while dragging
   document.querySelectorAll('input[type=range][data-key]').forEach(slider => {
     const valEl = document.getElementById('v-' + slider.dataset.key.replace(/\./g, '-'));
     if (valEl) slider.addEventListener('input', () => { valEl.textContent = slider.value; });
-    slider.addEventListener('change', () => saveSetting(slider.dataset.key, slider.value));
   });
 
-  // Number inputs
-  document.querySelectorAll('input[type=number][data-key]').forEach(inp => {
-    inp.addEventListener('change', () => saveSetting(inp.dataset.key, inp.value));
-  });
-
-  // Toggles
-  document.querySelectorAll('input[type=checkbox][data-key]').forEach(cb => {
-    cb.addEventListener('change', async () => {
-      const ok = await saveSetting(cb.dataset.key, cb.checked ? 'true' : 'false');
-      if (!ok) cb.checked = !cb.checked; // revert on error
-    });
-  });
-
-  // Dependent rows — a checkbox with data-controls disables the target row when unchecked
+  // Dependent rows — checkbox with data-controls disables the target row when unchecked
   document.querySelectorAll('input[type=checkbox][data-controls]').forEach(cb => {
     const rowId = 'srow-' + cb.dataset.controls.replace(/\./g, '-');
     function sync() {
@@ -58,26 +41,59 @@
       });
     }
     cb.addEventListener('change', sync);
-    sync(); // apply on page load
+    sync();
   });
 
-  // COCO class checkboxes
-  const allCoco = document.querySelectorAll('.coco-cb');
-  const allCocoToggle = document.getElementById('coco-all');
+  // Save on form submit
+  document.querySelectorAll('form.settings-form').forEach(form => {
+    form.addEventListener('submit', async e => {
+      e.preventDefault();
+      const btn = form.querySelector('button[type=submit]');
+      btn.disabled = true;
+      btn.textContent = 'Saving…';
 
+      const errors = [];
+
+      for (const el of form.querySelectorAll('[data-key]')) {
+        let value;
+        if (el.type === 'checkbox') value = el.checked ? 'true' : 'false';
+        else value = el.value;
+        const err = await saveSetting(el.dataset.key, value);
+        if (err) errors.push(`${el.dataset.key}: ${err}`);
+      }
+
+      // COCO classes
+      const allCoco = form.querySelectorAll('.coco-cb');
+      if (allCoco.length) {
+        const checked = [...allCoco].filter(c => c.checked).map(c => c.value);
+        const value = checked.length === allCoco.length ? '*' : checked.join(',');
+        const err = await saveSetting('object.classes_enabled', value);
+        if (err) errors.push(err);
+      }
+
+      btn.disabled = false;
+      btn.textContent = 'Save';
+
+      if (errors.length) {
+        showAlert(errors.join('; '), 'error');
+      } else {
+        showAlert('Settings saved', 'success');
+      }
+    });
+  });
+
+  // COCO all-classes toggle (UI only — saved on form submit)
+  const allCocoToggle = document.getElementById('coco-all');
   if (allCocoToggle) {
+    const allCoco = document.querySelectorAll('.coco-cb');
     allCocoToggle.addEventListener('change', () => {
       allCoco.forEach(c => { c.checked = allCocoToggle.checked; });
-      saveSetting('object.classes_enabled', allCocoToggle.checked ? '*' : '');
+    });
+    document.querySelectorAll('.coco-cb').forEach(cb => {
+      cb.addEventListener('change', () => {
+        const checked = [...document.querySelectorAll('.coco-cb')].filter(c => c.checked);
+        allCocoToggle.checked = checked.length === allCoco.length;
+      });
     });
   }
-
-  allCoco.forEach(cb => {
-    cb.addEventListener('change', () => {
-      const checked = [...allCoco].filter(c => c.checked).map(c => c.value);
-      const value = checked.length === allCoco.length ? '*' : checked.join(',');
-      if (allCocoToggle) allCocoToggle.checked = (value === '*');
-      saveSetting('object.classes_enabled', value);
-    });
-  });
 })();
