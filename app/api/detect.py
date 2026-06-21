@@ -28,9 +28,10 @@ _FMT_EXT = {"JPEG": "jpg", "PNG": "png", "WEBP": "webp", "BMP": "bmp",
 @router.post("/api/detect/faces")
 async def detect_faces(request: Request, user_id: int = Depends(require_auth)):
     raw = await acquire_image(request)
+    label = await _extract_label(request)
     img = open_and_validate(raw)
     source_filename, source_id = _save_source_image(user_id, raw, img)
-    return {"source_image_id": source_id, "faces": _run_faces(user_id, img, source_id)}
+    return {"source_image_id": source_id, "faces": _run_faces(user_id, img, source_id, label=label)}
 
 
 @router.post("/api/detect/objects")
@@ -44,11 +45,12 @@ async def detect_objects(request: Request, user_id: int = Depends(require_auth))
 @router.post("/api/detect/all")
 async def detect_all(request: Request, user_id: int = Depends(require_auth)):
     raw = await acquire_image(request)
+    label = await _extract_label(request)
     img = open_and_validate(raw)
     source_filename, source_id = _save_source_image(user_id, raw, img)
     return {
         "source_image_id": source_id,
-        "faces": _run_faces(user_id, img, source_id),
+        "faces": _run_faces(user_id, img, source_id, label=label),
         "objects": _run_objects(user_id, img, source_id),
     }
 
@@ -120,7 +122,24 @@ async def detect_bulk(request: Request, user_id: int = Depends(require_auth)):
 # Detection pipelines
 # ---------------------------------------------------------------------------
 
-def _run_faces(user_id: int, img: Any, source_id: int) -> list[dict]:
+async def _extract_label(request: Request) -> str | None:
+    """Read the optional `label` field from multipart form or JSON body."""
+    ct = request.headers.get("content-type", "")
+    try:
+        if "multipart/form-data" in ct:
+            form = await request.form()
+            v = form.get("label")
+            return str(v).strip() or None if v else None
+        if "application/json" in ct:
+            body = await request.json()
+            v = body.get("label", "")
+            return str(v).strip() or None
+    except Exception:
+        pass
+    return None
+
+
+def _run_faces(user_id: int, img: Any, source_id: int, label: str | None = None) -> list[dict]:
     model_row = store.get_active_model("face")
     if model_row is None:
         raise HTTPException(503, "No active face model. Download and activate one via /api/models.")
@@ -142,14 +161,18 @@ def _run_faces(user_id: int, img: Any, source_id: int) -> list[dict]:
     for det in detections:
         identity_id, sim = _match_face(det.embedding, model_row["id"], user_id, threshold)
 
-        if identity_id is None and not save_unknown:
-            continue
-
-        review_status = (
-            "confirmed"
-            if identity_id is not None and auto_confirm_on and sim >= auto_confirm
-            else "pending"
-        )
+        if label:
+            # Caller already knows who this is — assign directly and confirm.
+            identity_id = store.get_or_create_identity(user_id, "face", label)
+            review_status = "confirmed"
+        else:
+            if identity_id is None and not save_unknown:
+                continue
+            review_status = (
+                "confirmed"
+                if identity_id is not None and auto_confirm_on and sim >= auto_confirm
+                else "pending"
+            )
 
         crop_filename = _save_crop(img, det.bbox, padding)
         detection_id = store.insert_detection(
@@ -168,17 +191,21 @@ def _run_faces(user_id: int, img: Any, source_id: int) -> list[dict]:
             review_status=review_status,
         )
 
-        label = None
-        if identity_id is not None:
+        display_label = label
+        if display_label is None and identity_id is not None:
             row = store.get_identity(identity_id, user_id)
-            label = row["label"] if row else None
+            display_label = row["label"] if row else None
+
+        if label:
+            from app.api.enroll import enroll_from_detection
+            enroll_from_detection(store.get_detection(detection_id, user_id), user_id)
 
         results.append({
             "detection_id": detection_id,
             "bbox": {"x": det.bbox[0], "y": det.bbox[1], "w": det.bbox[2], "h": det.bbox[3]},
             "confidence": det.confidence,
             "identity_id": identity_id,
-            "label": label,
+            "label": display_label,
             "crop_url": f"/media/crops/{crop_filename}",
             "review_status": review_status,
         })
