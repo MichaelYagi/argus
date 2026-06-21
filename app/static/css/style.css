@@ -9,7 +9,6 @@
   --border: #e0e0e0;
   --hover: #f5f5f5;
   --placeholder: #e8e8e8;
-  --input-bg: #fff;
   --toggle-off: #ccc;
   --danger: #e53e3e;
   --success: #38a169;
@@ -26,10 +25,9 @@
   --accent: #58a6ff;
   --text: #e6edf3;
   --muted: #8b949e;
-  --border: #30363d;
+  --border: #4a5260;
   --hover: #21262d;
   --placeholder: #21262d;
-  --input-bg: #0d1117;
   --toggle-off: #484f58;
   --danger: #f85149;
   --success: #3fb950;
@@ -45,10 +43,9 @@
   --accent: #f59e0b;
   --text: #f0ebe3;
   --muted: #a89988;
-  --border: #3d3428;
+  --border: #6b5a45;
   --hover: #2d2620;
   --placeholder: #2d2620;
-  --input-bg: #1a1612;
   --toggle-off: #5c4a36;
   --danger: #ef4444;
   --success: #4ade80;
@@ -262,9 +259,9 @@ label.lbl { display: block; font-size: 12px; font-weight: 500; color: var(--mute
 input[type=text], input[type=password], input[type=number], input[type=url], select, textarea {
   width: 100%; padding: 8px 12px; border: 1px solid var(--border); border-radius: var(--radius);
   font-size: 14px; font-family: inherit; outline: none; transition: border-color .15s;
-  background: var(--input-bg); color: var(--text);
 }
-input:focus, select:focus { border-color: var(--accent); }
+input:focus, select:focus, textarea:focus { border-color: var(--accent); }
+.docs-page input:focus, .docs-page select:focus, .docs-page textarea:focus { border-color: #3a8ef6; }
 
 /* ---------- Drop zone ---------- */
 .drop-zone { border: 2px dashed var(--border); border-radius: var(--radius); padding: 36px; text-align: center; color: var(--muted); cursor: pointer; transition: border-color .15s, background .15s; }
@@ -329,6 +326,11 @@ input[type=range] { width: 150px; cursor: pointer; }
 .t-box.labeled:hover { border-color: #9f9; }
 .t-tip { position: absolute; bottom: 100%; left: 0; background: rgba(0,0,0,.75); color: #fff; font-size: 11px; padding: 2px 6px; white-space: nowrap; pointer-events: none; display: none; }
 .t-box:hover .t-tip { display: block; }
+
+/* ---------- Docs page — always white regardless of theme ---------- */
+.docs-page { background: #fff !important; }
+.docs-page .main-content { background: #fff !important; }
+.docs-page input { border-color: #e0e0e0 !important; }
 
 /* ---------- Auth pages ---------- */
 .auth-page { min-height: 100vh; display: flex; align-items: center; justify-content: center; background: var(--bg); }

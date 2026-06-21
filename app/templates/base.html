@@ -15,7 +15,7 @@
     })();
   </script>
 </head>
-<body>
+<body{% if active == 'docs' %} class="docs-page"{% endif %}>
 <script>
 window.USER_TZ     = "{{ user_tz     | default('UTC') }}";
 window.USER_LOCALE = "{{ user_locale | default('en-US') }}";
@@ -216,5 +216,6 @@ setInterval(_updateReviewBadge, 30000);
   </div>
 </main>
 {% block scripts %}{% endblock %}
+
 </body>
 </html>
