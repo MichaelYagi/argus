@@ -6,6 +6,7 @@ from fastapi import APIRouter, Request
 from fastapi.responses import RedirectResponse
 from fastapi.templating import Jinja2Templates
 
+from app import __version__
 from app.core.auth import get_session_user
 
 router = APIRouter()
@@ -22,4 +23,5 @@ async def detect_page(request: Request):
     return templates.TemplateResponse(request, "bulk.html", {
         "username": request.session.get("username", ""),
         "active": "detect",
+        "version": __version__,
     })

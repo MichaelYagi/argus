@@ -127,6 +127,7 @@ function deleteSelected() {
         badge.textContent = next > 99 ? '99+' : next;
         badge.style.display = next > 0 ? 'inline' : 'none';
       }
+      refreshStats();
     },
     { confirmText: 'Delete', danger: true }
   );
@@ -259,18 +260,23 @@ async function loadMore(type) {
   }, { rootMargin: '300px' }).observe(sentinel);
 });
 
-// Stats (lightweight — no joins)
-(async () => {
-  const [idResp, rvResp] = await Promise.all([
-    fetch('/api/identities'),
+// Stats — refreshed on load, every 30s, and after bulk actions
+async function refreshStats() {
+  const [faceResp, objResp, rvResp] = await Promise.all([
+    fetch('/api/identities/summary?type=face&limit=1'),
+    fetch('/api/identities/summary?type=object&limit=1'),
     fetch('/api/review/count'),
   ]);
-  const identities = await idResp.json();
-  const rv = await rvResp.json();
-  document.getElementById('s-ident').textContent  = identities.length;
-  document.getElementById('s-faces').textContent  = identities.filter(i => i.type === 'face').length;
+  if (!faceResp.ok || !objResp.ok || !rvResp.ok) return;
+  const [fd, od, rv] = await Promise.all([faceResp.json(), objResp.json(), rvResp.json()]);
+  const faceTotal = fd.total ?? 0;
+  const objTotal  = od.total ?? 0;
+  document.getElementById('s-ident').textContent  = faceTotal + objTotal;
+  document.getElementById('s-faces').textContent  = faceTotal;
   document.getElementById('s-review').textContent = rv.count ?? 0;
-})();
+}
+refreshStats();
+setInterval(refreshStats, 30000);
 
 // Restore last active tab (defaults to People)
 switchTab(localStorage.getItem('dashboard_tab') || 'face');

@@ -15,10 +15,7 @@
       <p class="muted" style="font-size:12px">One clear face per photo works best</p>
       <input type="file" id="file-input" accept="image/*" hidden>
     </div>
-    <div id="preview" hidden style="margin-top:8px">
-      <img id="preview-img" style="max-width:220px;border-radius:4px;display:block">
     </div>
-  </div>
   <div class="form-group">
     <label class="lbl">Or image URL</label>
     <input type="url" id="url-input" placeholder="http://…">
@@ -29,7 +26,12 @@
               placeholder="data:image/jpeg;base64,... or raw base64 string"
               style="font-size:12px;font-family:monospace;resize:vertical"></textarea>
   </div>
-  <button class="btn btn-primary" id="enroll-btn">Enroll</button>
+  <div style="display:flex;align-items:center;gap:12px;margin-top:4px">
+    <button class="btn btn-primary" id="enroll-btn">Enroll</button>
+    <img id="enroll-preview" hidden
+         style="width:48px;height:48px;object-fit:cover;border-radius:4px;
+                border:1px solid var(--border)">
+  </div>
   <div id="result" style="margin-top:12px"></div>
 </div>
 {% endblock %}
@@ -37,23 +39,46 @@
 {% block scripts %}
 <script>
 (async () => {
-  const dz  = document.getElementById('drop-zone');
-  const fi  = document.getElementById('file-input');
-  const ui  = document.getElementById('url-input');
-  const b64 = document.getElementById('b64-input');
+  const dz      = document.getElementById('drop-zone');
+  const fi      = document.getElementById('file-input');
+  const ui      = document.getElementById('url-input');
+  const b64     = document.getElementById('b64-input');
+  const prevImg = document.getElementById('enroll-preview');
+
+  function showPreview(src) {
+    if (!prevImg) return;
+    prevImg.hidden = false;
+    prevImg.src = src;
+    prevImg.onerror = () => { prevImg.hidden = true; };
+  }
+
+  function clearPreview() {
+    if (!prevImg) return;
+    prevImg.hidden = true;
+    prevImg.src = '';
+  }
 
   dz.addEventListener('dragover', e => { e.preventDefault(); dz.classList.add('over'); });
   dz.addEventListener('dragleave', () => dz.classList.remove('over'));
   dz.addEventListener('drop', e => {
     e.preventDefault(); dz.classList.remove('over');
-    if (e.dataTransfer.files[0]) { fi.files = e.dataTransfer.files; preview(e.dataTransfer.files[0]); }
+    if (e.dataTransfer.files[0]) { fi.files = e.dataTransfer.files; previewFile(e.dataTransfer.files[0]); }
   });
   dz.addEventListener('click', () => fi.click());
-  fi.addEventListener('change', () => { if (fi.files[0]) preview(fi.files[0]); });
+  fi.addEventListener('change', () => { if (fi.files[0]) previewFile(fi.files[0]); });
+  ui.addEventListener('input', () => {
+    const v = ui.value.trim();
+    v ? showPreview(v) : clearPreview();
+  });
+  b64?.addEventListener('input', () => {
+    const v = b64.value.trim();
+    if (!v) { clearPreview(); return; }
+    showPreview(v.startsWith('data:') ? v : 'data:image/jpeg;base64,' + v);
+  });
 
-  function preview(file) {
+  function previewFile(file) {
     const r = new FileReader();
-    r.onload = e => { document.getElementById('preview-img').src = e.target.result; document.getElementById('preview').hidden = false; };
+    r.onload = e => showPreview(e.target.result);
     r.readAsDataURL(file);
   }
 
@@ -73,8 +98,9 @@
     if (resp.ok) {
       msg(`Enrolled "${name}" successfully (identity #${data.identity_id}).`, 'success');
       document.getElementById('name-input').value = '';
-      document.getElementById('preview').hidden = true;
       fi.value = ''; ui.value = '';
+      if (b64) b64.value = '';
+      clearPreview();
     } else {
       msg(data.detail || 'Enrollment failed.', 'error');
     }

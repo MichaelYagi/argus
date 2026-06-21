@@ -17,9 +17,10 @@ async function _pool(items, concurrency, fn) {
   const urlInput   = document.getElementById('url-input');
   const b64Input   = document.getElementById('b64-input');
   const modeSelect = document.getElementById('detect-mode');
-  const runBtn     = document.getElementById('run-btn');
-  const queueCount = document.getElementById('queue-count');
-  const resultsEl  = document.getElementById('results');
+  const runBtn       = document.getElementById('run-btn');
+  const queueCount   = document.getElementById('queue-count');
+  const previewStrip = document.getElementById('preview-strip');
+  const resultsEl    = document.getElementById('results');
   const progressWrap = document.getElementById('progress-bar-wrap');
   const progressBar  = document.getElementById('progress-bar');
   const progressLbl  = document.getElementById('progress-label');
@@ -55,10 +56,69 @@ async function _pool(items, concurrency, fn) {
     return v ? [v] : [];
   }
 
+  function thumbStyle() {
+    return 'width:48px;height:48px;object-fit:cover;border-radius:4px;' +
+           'border:1px solid var(--border);flex-shrink:0';
+  }
+
   function updateQueue() {
-    const total = fileList.length + getUrls().length + getB64().length;
+    const urls    = getUrls();
+    const b64list = getB64();
+    const total   = fileList.length + urls.length + b64list.length;
     runBtn.disabled = total === 0;
-    queueCount.textContent = total ? `${total} image${total === 1 ? '' : 's'} queued` : '';
+    queueCount.textContent = '';
+
+    if (!previewStrip) return;
+    previewStrip.innerHTML = '';
+
+    if (total === 0) { previewStrip.style.display = 'none'; return; }
+    previewStrip.style.display = 'flex';
+
+    // File thumbnails — instant via object URL
+    fileList.forEach(f => {
+      const img = document.createElement('img');
+      img.src   = URL.createObjectURL(f);
+      img.title = f.name;
+      img.style.cssText = thumbStyle();
+      img.onload = () => URL.revokeObjectURL(img.src);
+      previewStrip.appendChild(img);
+    });
+
+    // URL thumbnails — attempt to load, fall back to placeholder on error
+    urls.forEach(url => {
+      const img = document.createElement('img');
+      img.src   = url;
+      img.title = url;
+      img.style.cssText = thumbStyle();
+      img.onerror = () => {
+        // Replace broken image with a labelled placeholder
+        const ph = document.createElement('div');
+        ph.title = url;
+        ph.style.cssText = thumbStyle() + ';background:var(--border);display:flex;' +
+          'align-items:center;justify-content:center;font-size:9px;color:var(--muted);' +
+          'text-align:center;padding:2px;box-sizing:border-box;overflow:hidden';
+        ph.textContent = 'URL';
+        img.replaceWith(ph);
+      };
+      previewStrip.appendChild(img);
+    });
+
+    // Base64 thumbnail
+    b64list.forEach(b64 => {
+      const img = document.createElement('img');
+      const src = b64.startsWith('data:') ? b64 : 'data:image/jpeg;base64,' + b64;
+      img.src   = src;
+      img.title = 'base64 image';
+      img.style.cssText = thumbStyle();
+      img.onerror = () => {
+        const ph = document.createElement('div');
+        ph.style.cssText = thumbStyle() + ';background:var(--border);display:flex;' +
+          'align-items:center;justify-content:center;font-size:9px;color:var(--muted)';
+        ph.textContent = 'B64';
+        img.replaceWith(ph);
+      };
+      previewStrip.appendChild(img);
+    });
   }
 
   // ---------------------------------------------------------------------------
@@ -122,6 +182,11 @@ async function _pool(items, concurrency, fn) {
 
     progressLbl.textContent = `Done — ${total} image${total === 1 ? '' : 's'} processed`;
     runBtn.disabled = false;
+    // Clear queue state and previews after processing
+    fileList = [];
+    if (urlInput) urlInput.value = '';
+    if (b64Input) b64Input.value = '';
+    if (previewStrip) { previewStrip.innerHTML = ''; previewStrip.style.display = 'none'; }
   });
 
   function setStatus(i, msg, cls = '') {
