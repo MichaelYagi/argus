@@ -16,8 +16,18 @@
 </div>
 
 <div class="tab-bar">
-  <button class="tab-btn active" data-type="face"   onclick="switchTab('face')">People</button>
-  <button class="tab-btn"        data-type="object" onclick="switchTab('object')">Objects</button>
+  <button class="tab-btn active" data-type="face"   onclick="switchTab('face')">
+    People <span id="badge-face"
+      style="display:none;background:#3a8ef6;color:#fff;border-radius:99px;
+             padding:1px 7px;font-size:10px;font-weight:700;margin-left:4px;
+             vertical-align:middle;line-height:16px"></span>
+  </button>
+  <button class="tab-btn"        data-type="object" onclick="switchTab('object')">
+    Objects <span id="badge-object"
+      style="display:none;background:#3a8ef6;color:#fff;border-radius:99px;
+             padding:1px 7px;font-size:10px;font-weight:700;margin-left:4px;
+             vertical-align:middle;line-height:16px"></span>
+  </button>
 </div>
 
 <div id="tab-face">
@@ -69,6 +79,14 @@ async function loadMore(type) {
   s.cursor    = data.next_cursor;
   s.loaded    = true;
   s.loading   = false;
+
+  if (data.total != null) {
+    const badge = document.getElementById('badge-' + type);
+    if (badge) {
+      badge.textContent = data.total > 99 ? '99+' : data.total;
+      badge.style.display = data.total > 0 ? 'inline' : 'none';
+    }
+  }
 
   const grid = document.getElementById('grid-' + type);
   if (grid.querySelector('.loading')) grid.innerHTML = '';

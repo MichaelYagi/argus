@@ -308,6 +308,16 @@ def delete_identity(identity_id: int, user_id: int) -> bool:
         return conn.execute("SELECT changes()").fetchone()[0] > 0
 
 
+def count_identities(user_id: int, identity_type: str | None = None) -> int:
+    with _connect() as conn:
+        sql    = "SELECT COUNT(*) FROM identities WHERE user_id = ?"
+        params: list = [user_id]
+        if identity_type:
+            sql += " AND type = ?"
+            params.append(identity_type)
+        return conn.execute(sql, params).fetchone()[0]
+
+
 def list_identities_summary(
     user_id: int,
     identity_type: str | None = None,

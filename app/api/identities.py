@@ -34,9 +34,10 @@ async def identities_summary(
     """Identities with counts + thumbnail in one query — for paginated dashboard grid."""
     if type and type not in ("face", "object"):
         raise HTTPException(400, "type must be 'face' or 'object'")
-    rows = store.list_identities_summary(user_id, identity_type=type, cursor=cursor, limit=limit)
+    rows     = store.list_identities_summary(user_id, identity_type=type, cursor=cursor, limit=limit)
     has_more = len(rows) > limit
-    items = rows[:limit]
+    items    = rows[:limit]
+    total    = store.count_identities(user_id, identity_type=type)
     return {
         "items": [
             {
@@ -49,6 +50,7 @@ async def identities_summary(
         ],
         "next_cursor": items[-1]["label"] if has_more and items else None,
         "has_more": has_more,
+        "total": total,
     }
 
 
