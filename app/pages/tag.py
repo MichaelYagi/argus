@@ -9,6 +9,7 @@ from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 
 from app import __version__
+from app.core import settings_cache
 from app.core.auth import get_session_user
 from app.db import store
 
@@ -27,15 +28,19 @@ async def tag_page(source_image_id: int, request: Request):
         return HTMLResponse("<h2>Image not found</h2>", status_code=404)
 
     faces = store.get_image_detections(source_image_id, user_id, det_type="face")
-    _reps: dict = {}  # identity_id -> representative embedding (cached per request)
+    best_match = settings_cache.cache.get_or("face.match_strategy", "best") != "average"
+    _cache: dict = {}  # identity_id -> representative bytes, or list of reference blobs
 
     def _similarity(row):
         iid = row["identity_id"]
         if iid is None:
             return None
-        if iid not in _reps:
-            _reps[iid] = store.get_representative_embedding(iid, user_id)
-        return store.cosine_similarity(row["embedding"], _reps[iid])
+        if iid not in _cache:
+            _cache[iid] = (store.get_identity_reference_blobs(iid, user_id) if best_match
+                           else store.get_representative_embedding(iid, user_id))
+        ref = _cache[iid]
+        return (store.best_cosine(row["embedding"], ref) if best_match
+                else store.cosine_similarity(row["embedding"], ref))
 
     face_data = [
         {

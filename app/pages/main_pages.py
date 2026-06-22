@@ -21,6 +21,14 @@ SLIDER_RANGES = {
     "system.crop_padding":         (0.0, 0.5, 0.01),
 }
 
+# Settings rendered as a dropdown: key -> [(value, label), ...]
+SETTING_CHOICES = {
+    "face.match_strategy": [
+        ("best", "Best matching photo (default)"),
+        ("average", "Average all reference photos"),
+    ],
+}
+
 COCO_CLASSES = [
     "person","bicycle","car","motorcycle","airplane","bus","train","truck","boat",
     "traffic light","fire hydrant","stop sign","parking meter","bench","bird","cat",
@@ -136,6 +144,7 @@ async def settings_page(request: Request):
     active_obj_name = active_obj["name"] if active_obj else None
     ctx["settings"]        = grouped
     ctx["slider_ranges"]   = SLIDER_RANGES
+    ctx["setting_choices"] = SETTING_CHOICES
     ctx["coco_classes"]    = COCO_CLASSES
     ctx["gpu_available"]   = gpu_available
     ctx["active_obj_world"] = active_obj_name and "world" in active_obj_name.lower()

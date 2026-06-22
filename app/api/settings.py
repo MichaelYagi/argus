@@ -50,6 +50,14 @@ async def update_setting(key: str, body: _UpdateBody, user_id: int = Depends(req
     store.update_setting(key, value_str)
     settings_cache.cache.set(key, value_str, row["value_type"])
 
+    # Changing how faces are matched requires rebuilding the index (centroid vs
+    # per-reference vectors).
+    if key == "face.match_strategy":
+        model_row = store.get_active_model("face")
+        if model_row:
+            from app.core import face_index
+            face_index.build_all(model_row["id"])
+
     return _fmt(store.get_setting(key))
 
 
@@ -109,6 +117,12 @@ def _validate_value(key: str, raw: str, value_type: str) -> str:
     # Special rule: system.use_gpu = true is rejected when GPU is unavailable
     if key == "system.use_gpu" and raw == "true":
         _require_gpu_available()
+
+    # Face matching method is a fixed choice.
+    if key == "face.match_strategy":
+        if raw.lower() not in ("average", "best"):
+            raise HTTPException(400, "face.match_strategy must be 'average' or 'best'")
+        raw = raw.lower()
 
     return raw
 

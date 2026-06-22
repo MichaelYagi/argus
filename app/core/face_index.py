@@ -45,25 +45,47 @@ _current_model_id: int | None  = None
 # Build
 # ---------------------------------------------------------------------------
 
+def _strategy() -> str:
+    """'best' (every reference indexed, default) or 'average' (centroid per identity)."""
+    from app.core import settings_cache
+    s = str(settings_cache.cache.get_or("face.match_strategy", "best")).strip().lower()
+    return "average" if s == "average" else "best"
+
+
 def build_for_user(model_id: int, user_id: int) -> None:
-    """Build or rebuild the faiss index for one user."""
+    """Build or rebuild the in-memory index for one user, per the match strategy.
+
+    - average: one centroid (representative) vector per identity.
+    - best:    one vector per reference embedding (id_map repeats the identity).
+    Search collapses to the best score per identity either way.
+    """
     import numpy as np
 
     from app.db import store
 
-    # Compute any missing representatives first
-    with store._connect() as conn:
-        stale = conn.execute(
-            """SELECT DISTINCT fe.identity_id FROM face_embeddings fe
-               JOIN identities i ON i.id = fe.identity_id
-               WHERE fe.model_id = ? AND i.user_id = ?
-                 AND i.representative_embedding IS NULL""",
-            (model_id, user_id),
-        ).fetchall()
-    for row in stale:
-        store.compute_and_store_representative(row["identity_id"], model_id)
+    strategy = _strategy()
 
-    rows = store.get_representative_embeddings(model_id, user_id)
+    if strategy == "best":
+        rows = [
+            (r["identity_id"], r["embedding"])
+            for r in store.get_reference_embeddings(model_id, user_id)
+        ]
+    else:
+        # Compute any missing representatives first
+        with store._connect() as conn:
+            stale = conn.execute(
+                """SELECT DISTINCT fe.identity_id FROM face_embeddings fe
+                   JOIN identities i ON i.id = fe.identity_id
+                   WHERE fe.model_id = ? AND i.user_id = ?
+                     AND i.representative_embedding IS NULL""",
+                (model_id, user_id),
+            ).fetchall()
+        for row in stale:
+            store.compute_and_store_representative(row["identity_id"], model_id)
+        rows = [
+            (r["identity_id"], r["representative_embedding"])
+            for r in store.get_representative_embeddings(model_id, user_id)
+        ]
 
     with _lock:
         global _current_model_id
@@ -78,8 +100,7 @@ def build_for_user(model_id: int, user_id: int) -> None:
         use_faiss = faiss is not None
 
         vectors, id_map = [], []
-        for row in rows:
-            emb = row["representative_embedding"]
+        for identity_id, emb in rows:
             if not emb:
                 continue
             vec  = np.frombuffer(bytes(emb), dtype=np.float32).copy()
@@ -87,7 +108,7 @@ def build_for_user(model_id: int, user_id: int) -> None:
             if norm > 0:
                 vec /= norm
             vectors.append(vec)
-            id_map.append(row["identity_id"])
+            id_map.append(identity_id)
 
         _id_maps[user_id] = id_map
 
@@ -152,26 +173,32 @@ def search(
     if norm > 0:
         vec /= norm
 
+    pairs: list[tuple[int, float]] = []
+
     faiss = _try_import_faiss()
+    used_faiss = False
     if faiss is not None:
         try:
             if isinstance(index, faiss.swigfaiss.Index):
-                k_actual = min(k, index.ntotal)
-                scores, idxs = index.search(vec.reshape(1, -1), k_actual)
-                return [
-                    (id_map[i], float(s))
-                    for s, i in zip(scores[0], idxs[0])
-                    if i >= 0 and float(s) >= threshold
-                ]
+                # 'best' mode has many vectors per identity, so pull a wider pool
+                # of neighbours before collapsing to one score per identity.
+                k_search = min(index.ntotal, max(k * 5, 50))
+                scores, idxs = index.search(vec.reshape(1, -1), k_search)
+                pairs = [(id_map[i], float(s)) for s, i in zip(scores[0], idxs[0]) if i >= 0]
+                used_faiss = True
         except Exception:
-            pass
+            used_faiss = False
 
-    # numpy fallback
-    if index is None or not hasattr(index, "shape"):
-        return []
-    sims = index @ vec
-    ranked = sorted(
-        ((id_map[i], float(sims[i])) for i in range(len(id_map)) if float(sims[i]) >= threshold),
-        key=lambda x: x[1], reverse=True,
-    )
+    if not used_faiss:
+        if index is None or not hasattr(index, "shape"):
+            return []
+        sims = index @ vec
+        pairs = [(id_map[i], float(sims[i])) for i in range(len(id_map))]
+
+    # Collapse to the best score per identity (no-op when one vector per identity).
+    best: dict[int, float] = {}
+    for iid, s in pairs:
+        if s >= threshold and (iid not in best or s > best[iid]):
+            best[iid] = s
+    ranked = sorted(best.items(), key=lambda x: x[1], reverse=True)
     return ranked[:k]

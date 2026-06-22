@@ -644,6 +644,58 @@ def cosine_similarity(emb: bytes | None, rep: bytes | None) -> float | None:
         return None
 
 
+def best_cosine(emb: bytes | None, refs: list[bytes]) -> float | None:
+    """Max cosine similarity between an embedding and any of the reference blobs.
+    Used for the 'best match' display. Returns None if nothing comparable."""
+    if not emb or not refs:
+        return None
+    try:
+        import numpy as np
+        a = np.frombuffer(bytes(emb), dtype=np.float32)
+        na = float(np.linalg.norm(a))
+        if na == 0:
+            return None
+        best = None
+        for r in refs:
+            b = np.frombuffer(bytes(r), dtype=np.float32)
+            nb = float(np.linalg.norm(b))
+            if nb == 0:
+                continue
+            s = float(np.dot(a, b) / (na * nb))
+            if best is None or s > best:
+                best = s
+        return round(best, 4) if best is not None else None
+    except Exception:
+        return None
+
+
+def get_reference_embeddings(model_id: int, user_id: int) -> list[sqlite3.Row]:
+    """All individual reference embeddings (identity_id, embedding) for a user/model.
+    Used to build the 'best match' index (one vector per reference, not per identity).
+    """
+    with _connect() as conn:
+        return conn.execute(
+            """SELECT fe.identity_id, fe.embedding
+               FROM face_embeddings fe
+               JOIN identities i ON i.id = fe.identity_id
+               WHERE fe.model_id = ? AND i.user_id = ?""",
+            (model_id, user_id),
+        ).fetchall()
+
+
+def get_identity_reference_blobs(identity_id: int, user_id: int) -> list[bytes]:
+    """All reference embedding blobs for one identity (for max-over-references display)."""
+    with _connect() as conn:
+        rows = conn.execute(
+            """SELECT fe.embedding
+               FROM face_embeddings fe
+               JOIN identities i ON i.id = fe.identity_id
+               WHERE fe.identity_id = ? AND i.user_id = ? AND fe.embedding IS NOT NULL""",
+            (identity_id, user_id),
+        ).fetchall()
+        return [bytes(r["embedding"]) for r in rows]
+
+
 def get_representative_embedding(identity_id: int, user_id: int) -> bytes | None:
     """Return the stored representative embedding for an identity, or None."""
     with _connect() as conn:
@@ -941,6 +993,13 @@ _SETTINGS_SEED: list[tuple] = [
     ("face.auto_enroll_threshold",
      "0.92",  "float",  "face",
      "Auto-Enroll Threshold | Add confirmed detections to the reference set above this confidence; 0 disables"),
+    ("face.match_strategy",
+     "best", "string", "face",
+     "Face Matching Method | How a face is scored against each saved person. "
+     "Best match compares against each reference photo and uses the closest — better when "
+     "someone looks different across photos (age, glasses, lighting), and keeps scores intuitive. "
+     "Average blends all of a person's reference photos into one — faster and steadier, but "
+     "individual photo scores drift as you add varied references."),
     ("face.detection_confidence",
      "0.6",   "float",  "face",
      "Detection Confidence | Minimum confidence for a face region to be reported at all"),

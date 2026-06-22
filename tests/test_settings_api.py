@@ -42,7 +42,7 @@ def test_list_settings_grouped(client):
     assert r.status_code == 200
     data = r.json()
     assert set(data.keys()) == {"face", "object", "system"}
-    assert len(data["face"]) == 6
+    assert len(data["face"]) == 7
     assert len(data["object"]) == 4
     assert len(data["system"]) == 6
 
@@ -167,7 +167,7 @@ def test_reset_category(client):
 
     r = client.post("/api/settings/reset?category=face", headers=h)
     assert r.status_code == 200
-    assert len(r.json()) == 6
+    assert len(r.json()) == 7
     assert settings_cache.cache.get("face.match_threshold") == 0.5
     assert settings_cache.cache.get("face.min_face_size") == 40
 
@@ -181,4 +181,28 @@ def test_reset_requires_key_or_category(client):
 def test_reset_rejects_both_key_and_category(client):
     h = _setup(client)
     r = client.post("/api/settings/reset?key=face.match_threshold&category=face", headers=h)
+    assert r.status_code == 400
+
+
+# ---------------------------------------------------------------------------
+# face.match_strategy choice
+# ---------------------------------------------------------------------------
+
+def test_match_strategy_default_is_best(client):
+    h = _setup(client)
+    r = client.get("/api/settings/face.match_strategy", headers=h)
+    assert r.status_code == 200
+    assert r.json()["value"] == "best"
+
+
+def test_match_strategy_accepts_average(client):
+    h = _setup(client)
+    r = client.put("/api/settings/face.match_strategy", json={"value": "average"}, headers=h)
+    assert r.status_code == 200
+    assert r.json()["value"] == "average"
+
+
+def test_match_strategy_rejects_invalid(client):
+    h = _setup(client)
+    r = client.put("/api/settings/face.match_strategy", json={"value": "fuzzy"}, headers=h)
     assert r.status_code == 400

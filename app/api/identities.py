@@ -148,13 +148,21 @@ async def identity_gallery(
         raise HTTPException(404, "Identity not found")
     page_size = limit or settings_cache.cache.get_or("system.gallery_page_size", 30)
     rows = store.get_identity_gallery(identity_id, user_id, cursor=cursor, limit=page_size)
-    rep = store.get_representative_embedding(identity_id, user_id)
+
+    # Similarity shown per crop follows the active matching method.
+    if settings_cache.cache.get_or("face.match_strategy", "best") != "average":
+        refs = store.get_identity_reference_blobs(identity_id, user_id)
+        sim_fn = lambda emb: store.best_cosine(emb, refs)  # noqa: E731
+    else:
+        rep = store.get_representative_embedding(identity_id, user_id)
+        sim_fn = lambda emb: store.cosine_similarity(emb, rep)  # noqa: E731
+
     return _paginate(rows, page_size, lambda r: {
         "detection_id": r["id"],
         "source_image_id": r["source_image_id"],
         "crop_url": f"/media/crops/{r['crop_path']}",
         "confidence": r["confidence"],
-        "similarity": _cosine(r["embedding"], rep),
+        "similarity": sim_fn(r["embedding"]),
         "detected_at": r["detected_at"],
         "review_status": r["review_status"],
         "enrolled": r["embedding_id"] is not None,

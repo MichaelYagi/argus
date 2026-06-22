@@ -43,6 +43,13 @@
         {# rendered below #}
         <span class="muted" style="font-size:12px">See below</span>
 
+      {% elif s.key in setting_choices %}
+        <select data-key="{{ s.key }}" style="width:auto;min-width:220px">
+          {% for val, lbl in setting_choices[s.key] %}
+          <option value="{{ val }}" {% if s.value == val %}selected{% endif %}>{{ lbl }}</option>
+          {% endfor %}
+        </select>
+
       {% elif s.value_type == 'float' and s.key in slider_ranges %}
         {% set rng = slider_ranges[s.key] %}
         <input type="range" data-key="{{ s.key }}"

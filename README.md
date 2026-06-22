@@ -82,7 +82,13 @@ Key thresholds (all configurable in **Settings**):
 - `face.auto_confirm_threshold` (default 0.80) — detections at or above this similarity are confirmed automatically and skip the review queue. Below it, they land in the queue for manual review.
 - `face.auto_enroll_threshold` (default 0.92) — gate for the *automatic* path only. When Argus auto-confirms a high-similarity match with no human in the loop, the detection's embedding is added to the reference set only if its face-detection quality score clears this bar — avoiding the unattended promotion of low-quality crops. Set to 0 to disable automatic enrollment.
 
-**Human actions always enroll.** When you confirm, reassign, or label a face yourself, that's ground truth — its embedding is added to the person's reference set unconditionally (the threshold above does not apply), so future matches of that person improve. Matching compares a detected face's embedding against the *averaged* reference embedding for each enrolled person, so confirming more varied shots of someone is what raises their match scores over time.
+**Human actions always enroll.** When you confirm, reassign, or label a face yourself, that's ground truth — its embedding is added to the person's reference set unconditionally (the threshold above does not apply), so future matches of that person improve.
+
+**Matching method (`face.match_strategy`, Settings):**
+- **Best match** (default) — a face is scored against *every* reference photo and takes the closest. Enrolled photos stay ~100%, and people who look different across photos (age, glasses, lighting) recognize better. Slightly more compute (every reference is indexed, not one centroid per person) — negligible until tens of thousands of faces.
+- **Average** — each person's reference photos are blended into one representative embedding; a face is scored against that average. Faster and steadier, but an individual photo's score drifts below 100% as you add varied references (it's measured against the moving average, not itself).
+
+Either way, confirming more varied shots of someone improves their recognition.
 
 ---
 
