@@ -19,6 +19,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Fixed
 
+- Startup now reconciles **orphaned references** — `face_embeddings` whose source crop no longer has a detection (left behind by older builds that deleted a detection without removing its reference). Affected identities' representatives are recomputed. Fixes "1 detection · 3 references" style mismatches.
 - The cover photo (and gallery star) no longer jumps to the newest detection as more faces are matched. When no cover is explicitly set, the **oldest** detection is used as a stable default — consistently for both the dashboard thumbnail and the gallery star — instead of the most-recent one, which shifted on every new match.
 - Detect with an inline `label` (human-asserted identity) now reports `similarity: 1.0` instead of the incidental match score against the prior reference set. A manually-named upload isn't a match — it's ground truth — so it no longer shows a misleading sub-100% confidence.
 - Deleting a detection now also removes any reference embedding enrolled from its crop and recomputes the identity's representative, so the reference count stays consistent with the gallery (previously a deleted reference crop left an orphan embedding — count said N but only N-1 crops were marked). The cover photo was already cleared on delete via the foreign key.

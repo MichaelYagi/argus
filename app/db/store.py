@@ -90,6 +90,31 @@ def _migrate(conn: sqlite3.Connection) -> None:
         [(row[4], row[0]) for row in _SETTINGS_SEED],
     )
 
+    # Reconcile orphaned references: face_embeddings whose source crop no longer has
+    # a detection (e.g. the detection was deleted by an older build that didn't cascade).
+    # Null the representative of affected identities so it's recomputed from the survivors.
+    affected = conn.execute(
+        """SELECT DISTINCT fe.identity_id FROM face_embeddings fe
+           WHERE fe.source_image_path IS NOT NULL
+             AND NOT EXISTS (
+                 SELECT 1 FROM detections d
+                 WHERE d.identity_id = fe.identity_id
+                   AND d.crop_path = fe.source_image_path)""",
+    ).fetchall()
+    if affected:
+        conn.execute(
+            """DELETE FROM face_embeddings
+               WHERE source_image_path IS NOT NULL
+                 AND NOT EXISTS (
+                     SELECT 1 FROM detections d
+                     WHERE d.identity_id = face_embeddings.identity_id
+                       AND d.crop_path = face_embeddings.source_image_path)""",
+        )
+        conn.executemany(
+            "UPDATE identities SET representative_embedding = NULL WHERE id = ?",
+            [(r[0],) for r in affected],
+        )
+
 
 # ---------------------------------------------------------------------------
 # Users
