@@ -8,6 +8,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
 from app.core.auth import require_auth
+from app.core.paths import crops_dir
 from app.db import store
 
 router = APIRouter()
@@ -38,6 +39,29 @@ async def image_faces(source_image_id: int, user_id: int = Depends(require_auth)
             for r in rows
         ],
     }
+
+
+@router.delete("/api/images/{source_image_id}", status_code=200)
+async def delete_source_image(source_image_id: int, user_id: int = Depends(require_auth)):
+    """Delete a source image and cascade-delete all its detections (faces + objects).
+
+    Use this before re-detecting a photo to avoid duplicate detections. The enrolled
+    face reference set (face_embeddings) is not affected.
+    """
+    crops = store.delete_source_image(source_image_id, user_id)
+    if crops is None:
+        raise HTTPException(404, "Source image not found")
+
+    removed = 0
+    for crop in crops:
+        try:
+            (crops_dir() / crop).unlink(missing_ok=True)
+            removed += 1
+        except OSError:
+            pass
+
+    return {"source_image_id": source_image_id, "detections_deleted": len(crops),
+            "crops_removed": removed}
 
 
 class _TagItem(BaseModel):

@@ -130,6 +130,54 @@ def test_image_faces_not_accessible_by_other_user(client):
 
 
 # ---------------------------------------------------------------------------
+# DELETE /api/images/{id}
+# ---------------------------------------------------------------------------
+
+def test_delete_source_image_not_found(client):
+    _, h = _setup(client)
+    r = client.delete("/api/images/999", headers=h)
+    assert r.status_code == 404
+
+
+def test_delete_source_image_cascades_detections(client):
+    user_id, h = _setup(client)
+    src_id = _insert_source(user_id)
+    _insert_face(user_id, src_id, label="Noah")
+    with store._connect() as conn:  # add an object detection too
+        conn.execute(
+            """INSERT INTO detections
+               (user_id, identity_id, source_image_id, type, model_id, confidence,
+                bbox_x, bbox_y, bbox_w, bbox_h, crop_path)
+               VALUES (?, NULL, ?, 'object', NULL, 0.8, 0, 0, 50, 50, 'obj.jpg')""",
+            (user_id, src_id),
+        )
+
+    r = client.delete(f"/api/images/{src_id}", headers=h)
+    assert r.status_code == 200
+    assert r.json()["detections_deleted"] == 2
+
+    # Source image and its detections are gone
+    assert store.get_source_image(src_id, user_id) is None
+    assert store.get_image_detections(src_id, user_id) == []
+
+
+def test_delete_source_image_not_accessible_by_other_user(client):
+    from app.core.security import hash_password
+    user_id, _ = _setup(client)
+    src_id = _insert_source(user_id)
+
+    user2 = store.create_user("bob", hash_password("pass12345"))
+    k2 = generate_api_key()
+    store.create_api_key(user2, hash_api_key(k2), "b")
+    h2 = {"X-API-Key": k2}
+
+    r = client.delete(f"/api/images/{src_id}", headers=h2)
+    assert r.status_code == 404
+    # Still exists for the owner
+    assert store.get_source_image(src_id, user_id) is not None
+
+
+# ---------------------------------------------------------------------------
 # POST /api/images/{id}/tag
 # ---------------------------------------------------------------------------
 

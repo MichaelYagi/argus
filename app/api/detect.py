@@ -29,16 +29,22 @@ _FMT_EXT = {"JPEG": "jpg", "PNG": "png", "WEBP": "webp", "BMP": "bmp",
 async def detect_faces(request: Request, user_id: int = Depends(require_auth)):
     raw = await acquire_image(request)
     label = await _extract_label(request)
+    replace = await _extract_replace(request)
     img = open_and_validate(raw)
     source_filename, source_id = _save_source_image(user_id, raw, img)
+    if replace:
+        _clear_detections(user_id, source_id, "face")
     return {"source_image_id": source_id, "faces": _run_faces(user_id, img, source_id, label=label)}
 
 
 @router.post("/api/detect/objects")
 async def detect_objects(request: Request, user_id: int = Depends(require_auth)):
     raw = await acquire_image(request)
+    replace = await _extract_replace(request)
     img = open_and_validate(raw)
     source_filename, source_id = _save_source_image(user_id, raw, img)
+    if replace:
+        _clear_detections(user_id, source_id, "object")
     return {"source_image_id": source_id, "objects": _run_objects(user_id, img, source_id)}
 
 
@@ -46,8 +52,11 @@ async def detect_objects(request: Request, user_id: int = Depends(require_auth))
 async def detect_all(request: Request, user_id: int = Depends(require_auth)):
     raw = await acquire_image(request)
     label = await _extract_label(request)
+    replace = await _extract_replace(request)
     img = open_and_validate(raw)
     source_filename, source_id = _save_source_image(user_id, raw, img)
+    if replace:
+        _clear_detections(user_id, source_id, None)  # both faces and objects
     return {
         "source_image_id": source_id,
         "faces": _run_faces(user_id, img, source_id, label=label),
@@ -137,6 +146,41 @@ async def _extract_label(request: Request) -> str | None:
     except Exception:
         pass
     return None
+
+
+def _is_truthy(v: Any) -> bool:
+    return str(v).strip().lower() in ("1", "true", "yes", "on")
+
+
+async def _extract_replace(request: Request) -> bool:
+    """Read the optional `replace` flag (multipart form, JSON body, or query param).
+
+    When true, the image's existing detections of the type being run are deleted
+    before new ones are written — making re-detection of the same image idempotent.
+    """
+    if _is_truthy(request.query_params.get("replace", "")):
+        return True
+    ct = request.headers.get("content-type", "")
+    try:
+        if "multipart/form-data" in ct:
+            form = await request.form()
+            return _is_truthy(form.get("replace", ""))
+        if "application/json" in ct:
+            body = await request.json()
+            return _is_truthy(body.get("replace", ""))
+    except Exception:
+        pass
+    return False
+
+
+def _clear_detections(user_id: int, source_id: int, det_type: str | None) -> None:
+    """Remove prior detections (and their crop files) for a source image."""
+    crops = store.clear_detections_for_source(source_id, user_id, det_type)
+    for crop in crops:
+        try:
+            (crops_dir() / crop).unlink(missing_ok=True)
+        except OSError:
+            pass
 
 
 def _run_faces(user_id: int, img: Any, source_id: int, label: str | None = None) -> list[dict]:

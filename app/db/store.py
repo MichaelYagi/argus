@@ -501,6 +501,61 @@ def get_image_detections(
         return conn.execute(sql, params).fetchall()
 
 
+def clear_detections_for_source(
+    source_image_id: int, user_id: int, det_type: str | None = None
+) -> list[str]:
+    """Delete detections for a source image (optionally just one type), keeping the
+    source row. Returns removed crop filenames so the caller can delete the files.
+
+    Used by detect's ``replace`` mode to make re-detecting the same image idempotent.
+    """
+    with _connect() as conn:
+        sql = "SELECT crop_path FROM detections WHERE source_image_id = ? AND user_id = ?"
+        params: list = [source_image_id, user_id]
+        if det_type:
+            sql += " AND type = ?"
+            params.append(det_type)
+        crops = [r["crop_path"] for r in conn.execute(sql, params).fetchall()]
+
+        del_sql = "DELETE FROM detections WHERE source_image_id = ? AND user_id = ?"
+        del_params: list = [source_image_id, user_id]
+        if det_type:
+            del_sql += " AND type = ?"
+            del_params.append(det_type)
+        conn.execute(del_sql, del_params)
+        return crops
+
+
+def delete_source_image(source_image_id: int, user_id: int) -> list[str] | None:
+    """Delete a source image and cascade-delete all its detections (faces + objects).
+
+    Returns the list of crop filenames that were removed (so the caller can delete
+    the files on disk), or None if the source image was not found for this user.
+    The content-hash source file itself is intentionally left on disk — it may be
+    shared with other users/rows.
+    """
+    with _connect() as conn:
+        row = conn.execute(
+            "SELECT id FROM source_images WHERE id = ? AND user_id = ?",
+            (source_image_id, user_id),
+        ).fetchone()
+        if not row:
+            return None
+        crops = [
+            r["crop_path"]
+            for r in conn.execute(
+                "SELECT crop_path FROM detections WHERE source_image_id = ? AND user_id = ?",
+                (source_image_id, user_id),
+            ).fetchall()
+        ]
+        # FK ON DELETE CASCADE removes the detections; SET NULL clears cover refs.
+        conn.execute(
+            "DELETE FROM source_images WHERE id = ? AND user_id = ?",
+            (source_image_id, user_id),
+        )
+        return crops
+
+
 def get_or_create_source_image(user_id: int, file_path: str, width: int, height: int) -> int:
     with _connect() as conn:
         conn.execute(

@@ -230,3 +230,100 @@ def test_detect_all_happy_path(client):
     data = r.json()
     assert len(data["faces"]) == 1
     assert len(data["objects"]) == 1
+
+
+# ---------------------------------------------------------------------------
+# replace flag — re-detection is idempotent
+# ---------------------------------------------------------------------------
+
+def _count_detections(user_id: int, source_id: int, det_type: str) -> int:
+    with store._connect() as conn:
+        return conn.execute(
+            "SELECT COUNT(*) FROM detections WHERE user_id = ? AND source_image_id = ? AND type = ?",
+            (user_id, source_id, det_type),
+        ).fetchone()[0]
+
+
+def test_detect_faces_replace_clears_prior(client):
+    user_id, key = _create_user_and_key()
+    _activate_face_model()
+    source_id = _insert_source_image(user_id)
+
+    mock_engine = MagicMock()
+    mock_engine.detect.return_value = [
+        FaceDetection(bbox=(10, 20, 100, 100), confidence=0.95, embedding=MagicMock()),
+    ]
+    mock_img = _mock_image()
+
+    def _detect():
+        with patch("app.api.detect.acquire_image", return_value=b"bytes"), \
+             patch("app.api.detect.open_and_validate", return_value=mock_img), \
+             patch("app.api.detect.to_rgb_array", return_value=MagicMock()), \
+             patch("app.api.detect._save_source_image", return_value=("src.jpg", source_id)), \
+             patch("app.api.detect._save_crop", return_value="crop.jpg"), \
+             patch.object(registry, "get_face_engine", return_value=mock_engine):
+            return client.post("/api/detect/faces?replace=true", files={"file": FAKE_FILE},
+                               headers={"X-API-Key": key})
+
+    _detect()
+    _detect()
+    _detect()
+    # Without replace this would be 3; with replace each run wipes the prior.
+    assert _count_detections(user_id, source_id, "face") == 1
+
+
+def test_detect_faces_without_replace_accumulates(client):
+    user_id, key = _create_user_and_key()
+    _activate_face_model()
+    source_id = _insert_source_image(user_id)
+
+    mock_engine = MagicMock()
+    mock_engine.detect.return_value = [
+        FaceDetection(bbox=(10, 20, 100, 100), confidence=0.95, embedding=MagicMock()),
+    ]
+    mock_img = _mock_image()
+
+    for _ in range(2):
+        with patch("app.api.detect.acquire_image", return_value=b"bytes"), \
+             patch("app.api.detect.open_and_validate", return_value=mock_img), \
+             patch("app.api.detect.to_rgb_array", return_value=MagicMock()), \
+             patch("app.api.detect._save_source_image", return_value=("src.jpg", source_id)), \
+             patch("app.api.detect._save_crop", return_value="crop.jpg"), \
+             patch.object(registry, "get_face_engine", return_value=mock_engine):
+            client.post("/api/detect/faces", files={"file": FAKE_FILE},
+                        headers={"X-API-Key": key})
+
+    assert _count_detections(user_id, source_id, "face") == 2
+
+
+def test_detect_faces_replace_leaves_objects(client):
+    """replace on /detect/faces must not touch object detections for the image."""
+    user_id, key = _create_user_and_key()
+    _activate_face_model()
+    source_id = _insert_source_image(user_id)
+    # Seed an existing object detection on the same source image
+    with store._connect() as conn:
+        conn.execute(
+            """INSERT INTO detections
+               (user_id, identity_id, source_image_id, type, model_id, confidence,
+                bbox_x, bbox_y, bbox_w, bbox_h, crop_path)
+               VALUES (?, NULL, ?, 'object', NULL, 0.8, 0, 0, 50, 50, 'obj.jpg')""",
+            (user_id, source_id),
+        )
+
+    mock_engine = MagicMock()
+    mock_engine.detect.return_value = [
+        FaceDetection(bbox=(10, 20, 100, 100), confidence=0.95, embedding=MagicMock()),
+    ]
+    mock_img = _mock_image()
+    with patch("app.api.detect.acquire_image", return_value=b"bytes"), \
+         patch("app.api.detect.open_and_validate", return_value=mock_img), \
+         patch("app.api.detect.to_rgb_array", return_value=MagicMock()), \
+         patch("app.api.detect._save_source_image", return_value=("src.jpg", source_id)), \
+         patch("app.api.detect._save_crop", return_value="crop.jpg"), \
+         patch.object(registry, "get_face_engine", return_value=mock_engine):
+        client.post("/api/detect/faces?replace=true", files={"file": FAKE_FILE},
+                    headers={"X-API-Key": key})
+
+    assert _count_detections(user_id, source_id, "face") == 1
+    assert _count_detections(user_id, source_id, "object") == 1  # untouched

@@ -200,6 +200,30 @@ curl -X POST \
   http://localhost:8100/api/detect/bulk
 ```
 
+**Example — re-detect a photo without piling up duplicates:**
+
+Argus deduplicates source images by content hash, so re-detecting the same image
+reuses its `source_image_id`. Pass `replace=true` to clear that image's prior
+detections (of the type being run) before writing new ones — re-detection becomes
+idempotent, and the client never needs to track IDs or delete anything first.
+
+```bash
+curl -X POST \
+  -H "X-API-Key: argus_..." \
+  -F "file=@photo.jpg" \
+  -F "replace=true" \
+  http://localhost:8100/api/detect/all
+```
+
+**Example — delete a photo's detections entirely:**
+
+```bash
+curl -X DELETE \
+  -H "X-API-Key: argus_..." \
+  http://localhost:8100/api/images/42
+# → {"source_image_id": 42, "detections_deleted": 5, "crops_removed": 5}
+```
+
 **Example — enroll a face:**
 
 ```bash
