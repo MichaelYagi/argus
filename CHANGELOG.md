@@ -9,6 +9,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Fixed
 
+- Human review actions (confirm, reassign, label) now enroll the face embedding **unconditionally** instead of gating on `face.auto_enroll_threshold`. The threshold was compared against the face-*detection* quality score (not match similarity), so ordinary faces (score < 0.92) never enrolled on confirm — meaning repeatedly confirming a person never improved their match score. The threshold now applies only to the automatic auto-confirm path (no human in the loop).
 - macOS / Apple Silicon: `faiss-cpu` and `torch` (YOLO object detection) each vendor their own OpenMP runtime and segfault when loaded together. `ARGUS_DISABLE_FAISS=true` now skips faiss entirely (never imported) and uses the numpy matching fallback. Auto-enabled on macOS; Linux/CUDA is unaffected and keeps faiss. Also pins OpenMP/BLAS thread counts and enables `faulthandler` (native traceback to stderr on crash) on the native run path.
 
 ### Added

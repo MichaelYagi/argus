@@ -80,9 +80,9 @@ Detections below the match threshold go into a review queue (`/review`). Each it
 Key thresholds (all configurable in **Settings**):
 - `face.match_threshold` (default 0.5) — minimum similarity to assign a match at all. Below this, the face is stored but left unidentified.
 - `face.auto_confirm_threshold` (default 0.80) — detections at or above this similarity are confirmed automatically and skip the review queue. Below it, they land in the queue for manual review.
-- `face.auto_enroll_threshold` (default 0.92) — when a detection is confirmed, if its confidence meets this bar it is added to that person's reference embeddings, improving future matching accuracy. Set to 0 to disable.
+- `face.auto_enroll_threshold` (default 0.92) — gate for the *automatic* path only. When Argus auto-confirms a high-similarity match with no human in the loop, the detection's embedding is added to the reference set only if its face-detection quality score clears this bar — avoiding the unattended promotion of low-quality crops. Set to 0 to disable automatic enrollment.
 
-The split between auto-confirm and auto-enroll is intentional: a detection can be confident enough to skip review (0.80) without being confident enough to become a reference sample (0.92). Keeping the reference set to only unambiguous, high-quality samples produces more accurate matches over time.
+**Human actions always enroll.** When you confirm, reassign, or label a face yourself, that's ground truth — its embedding is added to the person's reference set unconditionally (the threshold above does not apply), so future matches of that person improve. Matching compares a detected face's embedding against the *averaged* reference embedding for each enrolled person, so confirming more varied shots of someone is what raises their match scores over time.
 
 ---
 

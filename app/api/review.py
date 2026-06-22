@@ -13,7 +13,10 @@ from app.db import store
 
 
 def _auto_enroll(detection_id: int, user_id: int) -> None:
-    """Enroll a detection's embedding if its confidence exceeds the threshold."""
+    """Automatic path only: enroll if the face-detection quality score clears the
+    threshold. Used when Argus auto-confirms a high-similarity suggestion with no
+    human in the loop, so we avoid promoting low-quality crops unattended.
+    """
     threshold = settings_cache.cache.get_or("face.auto_enroll_threshold", 0.92)
     if threshold <= 0:
         return
@@ -22,6 +25,17 @@ def _auto_enroll(detection_id: int, user_id: int) -> None:
         return
     from app.api.enroll import enroll_from_detection
     enroll_from_detection(det, user_id)
+
+
+def _enroll_confirmed(detection_id: int, user_id: int) -> None:
+    """Human asserted this identity (confirm / reassign / label) — enroll the
+    embedding unconditionally so the reference set actually improves. This is
+    ground truth, so it is NOT gated on the detection-quality threshold.
+    """
+    det = store.get_detection(detection_id, user_id)
+    if det and det["type"] == "face":
+        from app.api.enroll import enroll_from_detection
+        enroll_from_detection(det, user_id)
 
 router = APIRouter()
 
@@ -68,7 +82,7 @@ async def get_review_queue(
 async def confirm(detection_id: int, user_id: int = Depends(require_auth)):
     if not store.confirm_detection(detection_id, user_id):
         raise HTTPException(404, "Detection not found")
-    _auto_enroll(detection_id, user_id)
+    _enroll_confirmed(detection_id, user_id)
     return {"detection_id": detection_id, "review_status": "confirmed"}
 
 
@@ -100,11 +114,7 @@ async def reassign(
         raise HTTPException(404, "Detection not found")
 
     store.reassign_detection(detection_id, user_id, identity_id)
-    # Human explicitly named this face — enroll unconditionally (bypass threshold)
-    det = store.get_detection(detection_id, user_id)
-    if det:
-        from app.api.enroll import enroll_from_detection
-        enroll_from_detection(det, user_id)
+    _enroll_confirmed(detection_id, user_id)  # human named this face — enroll unconditionally
     return {"detection_id": detection_id, "identity_id": identity_id, "review_status": "reassigned"}
 
 
@@ -121,7 +131,7 @@ async def bulk_review(items: list[_BulkItem], user_id: int = Depends(require_aut
     for item in items:
         if item.action == "confirm":
             store.confirm_detection(item.detection_id, user_id)
-            _auto_enroll(item.detection_id, user_id)
+            _enroll_confirmed(item.detection_id, user_id)
             results.append({"detection_id": item.detection_id, "status": "confirmed"})
         elif item.action == "reject":
             store.reject_detection(item.detection_id, user_id)
@@ -135,10 +145,7 @@ async def bulk_review(items: list[_BulkItem], user_id: int = Depends(require_aut
                                  "detail": "Provide identity_id or label"})
                 continue
             store.reassign_detection(item.detection_id, user_id, iid)
-            det = store.get_detection(item.detection_id, user_id)
-            if det:
-                from app.api.enroll import enroll_from_detection
-                enroll_from_detection(det, user_id)
+            _enroll_confirmed(item.detection_id, user_id)
             results.append({"detection_id": item.detection_id, "status": "reassigned",
                              "identity_id": iid})
         else:
@@ -184,7 +191,7 @@ async def label_detection(
         )
 
     store.label_detection(detection_id, user_id, identity_id)
-    _auto_enroll(detection_id, user_id)
+    _enroll_confirmed(detection_id, user_id)
     identity = store.get_identity(identity_id, user_id)
     return {
         "detection_id": detection_id,
