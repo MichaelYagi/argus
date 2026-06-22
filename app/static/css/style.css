@@ -259,7 +259,9 @@ label.lbl { display: block; font-size: 12px; font-weight: 500; color: var(--mute
 input[type=text], input[type=password], input[type=number], input[type=url], select, textarea {
   width: 100%; padding: 8px 12px; border: 1px solid var(--border); border-radius: var(--radius);
   font-size: 14px; font-family: inherit; outline: none; transition: border-color .15s;
+  background: #fff; color: #1a1a1a;
 }
+input::placeholder, textarea::placeholder { color: #999; }
 input:focus, select:focus, textarea:focus { border-color: var(--accent); }
 .docs-page input:focus, .docs-page select:focus, .docs-page textarea:focus { border-color: #3a8ef6; }
 

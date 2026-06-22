@@ -37,10 +37,10 @@
       drop = document.createElement('ul');
       Object.assign(drop.style, {
         position: 'absolute', listStyle: 'none', margin: '0', padding: '0',
-        background: '#fff', border: '1px solid var(--border)',
+        background: '#fff', color: '#1a1a1a', border: '1px solid #ccc',
         borderRadius: 'var(--radius)', zIndex: '400',
         maxHeight: '180px', overflowY: 'auto',
-        boxShadow: 'var(--shadow)',
+        boxShadow: '0 4px 12px rgba(0,0,0,.15)',
         minWidth: Math.max(input.offsetWidth, 160) + 'px',
         top: (input.offsetTop + input.offsetHeight + 2) + 'px',
         left: input.offsetLeft + 'px',
@@ -106,7 +106,7 @@
 
     const box = document.createElement('div');
     Object.assign(box.style, {
-      background: '#fff', borderRadius: 'var(--radius)',
+      background: '#fff', color: '#1a1a1a', borderRadius: 'var(--radius)',
       padding: '24px', maxWidth: '400px', width: '90vw',
       boxShadow: '0 8px 32px rgba(0,0,0,.2)',
     });
@@ -163,7 +163,7 @@
 
     const box = document.createElement('div');
     Object.assign(box.style, {
-      background: '#fff', borderRadius: 'var(--radius)',
+      background: '#fff', color: '#1a1a1a', borderRadius: 'var(--radius)',
       padding: '24px', maxWidth: '400px', width: '90vw',
       boxShadow: '0 8px 32px rgba(0,0,0,.2)',
     });
@@ -214,7 +214,7 @@
       position: 'fixed',
       top: '50%', left: '50%',
       transform: 'translate(-50%, -50%)',
-      background: '#fff', border: '1px solid var(--border)',
+      background: '#fff', color: '#1a1a1a', border: '1px solid #ccc',
       borderRadius: 'var(--radius)', padding: '16px',
       zIndex: '500', boxShadow: '0 8px 32px rgba(0,0,0,.2)',
       width: '300px', maxWidth: '90vw',
