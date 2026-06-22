@@ -128,6 +128,25 @@
 </div>
 {% endif %}
 {% endif %}
+
+<!-- Maintenance -->
+<div class="card" style="margin-top:24px">
+  <h2 style="margin-bottom:4px">Maintenance</h2>
+  <div style="display:flex;align-items:center;gap:16px;flex-wrap:wrap">
+    <div style="flex:1;min-width:200px">
+      <strong style="font-size:13px">Clean up orphaned references</strong>
+      <p class="muted" style="font-size:12px;margin:4px 0 0">
+        Removes any reference whose photo no longer exists (so a person's reference
+        count matches their photos) and recomputes matching. Runs automatically at
+        startup; use this to run it now.
+      </p>
+    </div>
+    <button id="reconcile-refs-btn" class="btn btn-ghost" style="white-space:nowrap;flex-shrink:0">
+      Clean up references
+    </button>
+  </div>
+</div>
+
 <!-- Danger zone -->
 <div class="card" style="margin-top:24px;border:1px solid #e53e3e;background:#fff5f5">
   <h2 style="color:#c53030;margin-bottom:4px">Danger zone</h2>
@@ -299,6 +318,26 @@
 </script>
 {% endif %}
 <script>
+document.getElementById('reconcile-refs-btn').addEventListener('click', async (e) => {
+  const btn = e.currentTarget;
+  btn.disabled = true;
+  btn.textContent = 'Cleaning…';
+  try {
+    const r = await fetch('/api/references/reconcile', { method: 'POST' });
+    if (r.ok) {
+      const d = await r.json();
+      showMessage(d.removed
+        ? `Removed ${d.removed} orphaned reference${d.removed === 1 ? '' : 's'}.`
+        : 'No orphaned references found — everything is consistent.');
+    } else {
+      showMessage('Could not clean up references.');
+    }
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Clean up references';
+  }
+});
+
 document.getElementById('delete-all-data-btn').addEventListener('click', () => {
   showConfirm(
     'This will permanently delete all enrolled people, detected objects, detections, face embeddings, and stored images. Settings and model configuration will not be affected. This cannot be undone.',

@@ -90,30 +90,8 @@ def _migrate(conn: sqlite3.Connection) -> None:
         [(row[4], row[0]) for row in _SETTINGS_SEED],
     )
 
-    # Reconcile orphaned references: face_embeddings whose source crop no longer has
-    # a detection (e.g. the detection was deleted by an older build that didn't cascade).
-    # Null the representative of affected identities so it's recomputed from the survivors.
-    affected = conn.execute(
-        """SELECT DISTINCT fe.identity_id FROM face_embeddings fe
-           WHERE fe.source_image_path IS NOT NULL
-             AND NOT EXISTS (
-                 SELECT 1 FROM detections d
-                 WHERE d.identity_id = fe.identity_id
-                   AND d.crop_path = fe.source_image_path)""",
-    ).fetchall()
-    if affected:
-        conn.execute(
-            """DELETE FROM face_embeddings
-               WHERE source_image_path IS NOT NULL
-                 AND NOT EXISTS (
-                     SELECT 1 FROM detections d
-                     WHERE d.identity_id = face_embeddings.identity_id
-                       AND d.crop_path = face_embeddings.source_image_path)""",
-        )
-        conn.executemany(
-            "UPDATE identities SET representative_embedding = NULL WHERE id = ?",
-            [(r[0],) for r in affected],
-        )
+    # Reconcile orphaned references left by older builds / direct DB edits.
+    _reconcile_orphan_references(conn)
 
 
 # ---------------------------------------------------------------------------
@@ -741,6 +719,47 @@ def get_representative_embedding(identity_id: int, user_id: int) -> bytes | None
             (identity_id, user_id),
         ).fetchone()
         return bytes(row["representative_embedding"]) if row and row["representative_embedding"] else None
+
+
+def _reconcile_orphan_references(conn, user_id: int | None = None) -> int:
+    """Delete references whose source crop no longer has a detection, and null the
+    representative of affected identities (recomputed lazily). Optionally scoped to
+    one user. Returns the number of references removed. Operates on the given conn.
+    """
+    scope = "" if user_id is None else (
+        " AND face_embeddings.identity_id IN (SELECT id FROM identities WHERE user_id = :uid)"
+    )
+    params = {} if user_id is None else {"uid": user_id}
+    # Unaliased table name so the same predicate works in both SELECT and DELETE
+    # (SQLite can't alias the DELETE target).
+    orphan_where = f"""
+        face_embeddings.source_image_path IS NOT NULL
+        AND NOT EXISTS (
+            SELECT 1 FROM detections d
+            WHERE d.identity_id = face_embeddings.identity_id
+              AND d.crop_path = face_embeddings.source_image_path){scope}"""
+
+    affected = [r[0] for r in conn.execute(
+        f"SELECT DISTINCT identity_id FROM face_embeddings WHERE {orphan_where}",
+        params,
+    ).fetchall()]
+    if not affected:
+        return 0
+
+    conn.execute(f"DELETE FROM face_embeddings WHERE {orphan_where}", params)
+    removed = conn.execute("SELECT changes()").fetchone()[0]
+    conn.executemany(
+        "UPDATE identities SET representative_embedding = NULL WHERE id = ?",
+        [(i,) for i in affected],
+    )
+    return removed
+
+
+def reconcile_orphan_references(user_id: int | None = None) -> int:
+    """Public entry point: reconcile orphaned references in their own transaction.
+    Returns the number of references removed."""
+    with _connect() as conn:
+        return _reconcile_orphan_references(conn, user_id)
 
 
 def remove_reference_by_detection(detection_id: int, user_id: int) -> bool:

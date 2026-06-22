@@ -252,3 +252,41 @@ def test_startup_reconciles_orphaned_references(client):
     # Startup migration removes the orphaned reference.
     store.init_db()
     assert client.get(f"/api/identities/{identity_id}", headers=h).json()["embedding_count"] == 0
+
+
+def test_reconcile_references_endpoint(client):
+    user_id, h = _setup(client)
+    identity_id = store.create_identity(user_id, "face", "Noah")
+    det_id = _insert_face_detection(user_id, identity_id, "crop1.jpg")
+    client.post(f"/api/detections/{det_id}/enroll", headers=h)
+
+    # Orphan it by deleting the detection row directly.
+    with store._connect() as conn:
+        conn.execute("DELETE FROM detections WHERE id = ?", (det_id,))
+
+    r = client.post("/api/references/reconcile", headers=h)
+    assert r.status_code == 200
+    assert r.json()["removed"] == 1
+    assert client.get(f"/api/identities/{identity_id}", headers=h).json()["embedding_count"] == 0
+
+    # Idempotent — nothing left to remove.
+    r2 = client.post("/api/references/reconcile", headers=h)
+    assert r2.json()["removed"] == 0
+
+
+def test_reconcile_references_scoped_to_user(client):
+    from app.core.security import hash_password
+    user_id, h = _setup(client)
+    identity_id = store.create_identity(user_id, "face", "Noah")
+    det_id = _insert_face_detection(user_id, identity_id, "crop1.jpg")
+    client.post(f"/api/detections/{det_id}/enroll", headers=h)
+    with store._connect() as conn:
+        conn.execute("DELETE FROM detections WHERE id = ?", (det_id,))
+
+    # A different user reconciling must not touch the first user's data.
+    u2 = store.create_user("bob", hash_password("pass12345"))
+    k2 = generate_api_key()
+    store.create_api_key(u2, hash_api_key(k2), "b")
+    r = client.post("/api/references/reconcile", headers={"X-API-Key": k2})
+    assert r.json()["removed"] == 0
+    assert client.get(f"/api/identities/{identity_id}", headers=h).json()["embedding_count"] == 1
