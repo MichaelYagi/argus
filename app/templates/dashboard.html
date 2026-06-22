@@ -223,13 +223,7 @@ async function loadMore(type) {
   s.loaded    = true;
   s.loading   = false;
 
-  if (data.total != null) {
-    const badge = document.getElementById('badge-' + type);
-    if (badge) {
-      badge.textContent = data.total > 99 ? '99+' : data.total;
-      badge.style.display = data.total > 0 ? 'inline' : 'none';
-    }
-  }
+  if (data.total != null) setTabBadge(type, data.total);
 
   const grid = document.getElementById('grid-' + type);
   if (grid.querySelector('.loading')) grid.innerHTML = '';
@@ -274,6 +268,17 @@ async function refreshStats() {
   document.getElementById('s-ident').textContent  = faceTotal + objTotal;
   document.getElementById('s-faces').textContent  = faceTotal;
   document.getElementById('s-review').textContent = rv.count ?? 0;
+
+  // Populate both tab badges on load so Objects isn't blank until first visited
+  setTabBadge('face', faceTotal);
+  setTabBadge('object', objTotal);
+}
+
+function setTabBadge(type, total) {
+  const badge = document.getElementById('badge-' + type);
+  if (!badge) return;
+  badge.textContent = total > 99 ? '99+' : total;
+  badge.style.display = total > 0 ? 'inline' : 'none';
 }
 refreshStats();
 setInterval(refreshStats, 30000);
