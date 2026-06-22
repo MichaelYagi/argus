@@ -7,10 +7,33 @@ Falls back to numpy cosine similarity if faiss is unavailable.
 from __future__ import annotations
 
 import logging
+import os
 import threading
 from typing import Any
 
 log = logging.getLogger(__name__)
+
+# On Apple Silicon, faiss-cpu and torch each vendor their own libomp; loading
+# both in one process segfaults. Set ARGUS_DISABLE_FAISS=true to skip faiss
+# entirely (its libomp loads at import) and use the numpy fallback — fine for
+# matching below tens of thousands of enrolled faces.
+_FAISS_DISABLED = os.environ.get("ARGUS_DISABLE_FAISS", "").strip().lower() in (
+    "1", "true", "yes", "on",
+)
+
+
+def _try_import_faiss() -> Any | None:
+    """Return the faiss module, or None if disabled or unavailable.
+
+    When disabled, faiss is never imported, so its libomp never loads.
+    """
+    if _FAISS_DISABLED:
+        return None
+    try:
+        import faiss
+        return faiss
+    except ImportError:
+        return None
 
 _lock = threading.Lock()
 _indices: dict[int, Any]       = {}  # user_id → faiss.IndexFlatIP (or numpy matrix)
@@ -51,11 +74,8 @@ def build_for_user(model_id: int, user_id: int) -> None:
             _id_maps[user_id] = []
             return
 
-        try:
-            import faiss
-            use_faiss = True
-        except ImportError:
-            use_faiss = False
+        faiss = _try_import_faiss()
+        use_faiss = faiss is not None
 
         vectors, id_map = [], []
         for row in rows:
@@ -85,10 +105,8 @@ def build_for_user(model_id: int, user_id: int) -> None:
 
 def build_all(model_id: int) -> None:
     """Rebuild index for every user that has face data for this model."""
-    try:
-        import faiss  # noqa: F401
-    except ImportError:
-        log.warning("faiss not available — falling back to numpy similarity search")
+    if _try_import_faiss() is None:
+        log.warning("faiss disabled or unavailable — using numpy similarity search")
 
     from app.db import store
     with store._connect() as conn:
@@ -134,18 +152,19 @@ def search(
     if norm > 0:
         vec /= norm
 
-    try:
-        import faiss
-        if isinstance(index, faiss.swigfaiss.Index):
-            k_actual = min(k, index.ntotal)
-            scores, idxs = index.search(vec.reshape(1, -1), k_actual)
-            return [
-                (id_map[i], float(s))
-                for s, i in zip(scores[0], idxs[0])
-                if i >= 0 and float(s) >= threshold
-            ]
-    except (ImportError, Exception):
-        pass
+    faiss = _try_import_faiss()
+    if faiss is not None:
+        try:
+            if isinstance(index, faiss.swigfaiss.Index):
+                k_actual = min(k, index.ntotal)
+                scores, idxs = index.search(vec.reshape(1, -1), k_actual)
+                return [
+                    (id_map[i], float(s))
+                    for s, i in zip(scores[0], idxs[0])
+                    if i >= 0 and float(s) >= threshold
+                ]
+        except Exception:
+            pass
 
     # numpy fallback
     if index is None or not hasattr(index, "shape"):

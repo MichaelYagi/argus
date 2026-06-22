@@ -6,6 +6,7 @@ import argparse
 import faulthandler
 import os
 import secrets
+import sys
 from pathlib import Path
 
 # Dump a native + Python traceback if the process crashes (segfaults from
@@ -33,6 +34,12 @@ for _omp_var in (
     "NUMEXPR_NUM_THREADS",
 ):
     os.environ.setdefault(_omp_var, "1")
+
+# On macOS, faiss-cpu and torch can't share a process (duplicate libomp →
+# segfault when the object detector runs). Default to the numpy matching
+# fallback there; Linux/CUDA keeps faiss. Override with ARGUS_DISABLE_FAISS=false.
+if sys.platform == "darwin":
+    os.environ.setdefault("ARGUS_DISABLE_FAISS", "true")
 
 from dotenv import load_dotenv  # noqa: E402
 

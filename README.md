@@ -328,6 +328,27 @@ The face engine failed to load silently at startup. Check the log for a `Failed 
 
 You can force a reload without restarting by calling `PUT /api/models/{id}/activate`.
 
+### Segfault on macOS / Apple Silicon when running object detection
+
+`faiss-cpu` and `torch` (used by YOLO object detection) each bundle their own
+OpenMP runtime, and loading both in one process segfaults on Apple Silicon —
+typically the process dies the first time the object detector runs, while face
+detection alone is fine.
+
+Argus auto-detects macOS and sets `ARGUS_DISABLE_FAISS=true`, which skips faiss
+entirely (it's never imported, so its OpenMP runtime never loads) and uses the
+numpy matching fallback — equivalent results, fine until tens of thousands of
+enrolled faces. No action needed; this is handled for you on the native run path.
+
+If you still hit it (e.g. running uvicorn directly, bypassing `python -m app`),
+set the flag yourself before starting:
+
+```bash
+export ARGUS_DISABLE_FAISS=true
+```
+
+Linux/CUDA is unaffected and keeps faiss for fast matching at scale.
+
 ---
 
 ## Development
