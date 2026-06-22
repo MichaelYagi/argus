@@ -12,11 +12,21 @@ from pathlib import Path
 # (segfaults from onnxruntime/faiss/CUDA are otherwise silent).
 faulthandler.enable()
 
-# macOS / Apple Silicon: faiss, onnxruntime, and numpy each bundle their own
-# OpenMP runtime; the second to initialize aborts with "libomp already
-# initialized". Allow the duplicate runtime — stable for inference workloads.
-# Must be set before numpy/faiss/onnxruntime are imported.
+# macOS / Apple Silicon: onnxruntime (faces), torch/YOLO (objects), and faiss
+# (matching) each bundle their own OpenMP runtime. KMP_DUPLICATE_LIB_OK stops the
+# hard abort, but when these runtimes spin up competing thread pools they can
+# segfault (e.g. an object detect right after a face detect). Pinning OpenMP/BLAS
+# to a single thread keeps the runtimes from fighting. Must be set before any of
+# numpy / faiss / onnxruntime / torch are imported.
 os.environ.setdefault("KMP_DUPLICATE_LIB_OK", "TRUE")
+for _omp_var in (
+    "OMP_NUM_THREADS",
+    "OPENBLAS_NUM_THREADS",
+    "MKL_NUM_THREADS",
+    "VECLIB_MAXIMUM_THREADS",
+    "NUMEXPR_NUM_THREADS",
+):
+    os.environ.setdefault(_omp_var, "1")
 
 from dotenv import load_dotenv  # noqa: E402
 
