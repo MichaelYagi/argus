@@ -3,11 +3,22 @@
 from __future__ import annotations
 
 import argparse
+import faulthandler
 import os
 import secrets
 from pathlib import Path
 
-from dotenv import load_dotenv
+# Dump a native + Python traceback to stderr if the process crashes
+# (segfaults from onnxruntime/faiss/CUDA are otherwise silent).
+faulthandler.enable()
+
+# macOS / Apple Silicon: faiss, onnxruntime, and numpy each bundle their own
+# OpenMP runtime; the second to initialize aborts with "libomp already
+# initialized". Allow the duplicate runtime — stable for inference workloads.
+# Must be set before numpy/faiss/onnxruntime are imported.
+os.environ.setdefault("KMP_DUPLICATE_LIB_OK", "TRUE")
+
+from dotenv import load_dotenv  # noqa: E402
 
 # Load .env before app.main is imported so all env vars are available
 # when FastAPI and SessionMiddleware are initialised at import time.
