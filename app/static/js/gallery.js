@@ -147,11 +147,15 @@
         img.alt = '';
         el.appendChild(img);
 
-        // Confidence badge (bottom-left, hover only)
-        const badge = document.createElement('div');
-        badge.className = 'g-badge';
-        badge.textContent = (item.confidence * 100).toFixed(0) + '%';
-        el.appendChild(badge);
+        // Match-similarity badge (bottom-left, hover only): how strongly this crop
+        // matches the person's reference set. Null when there are no references yet.
+        if (item.similarity != null) {
+          const badge = document.createElement('div');
+          badge.className = 'g-badge';
+          badge.textContent = (item.similarity * 100).toFixed(0) + '%';
+          badge.title = 'Similarity to this person’s reference set';
+          el.appendChild(badge);
+        }
 
         // Tag link (top-right, hover only)
         const tagLink = document.createElement('a');

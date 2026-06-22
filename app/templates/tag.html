@@ -38,7 +38,8 @@ function renderBoxes() {
 
     const tip = document.createElement('div');
     tip.className = 't-tip';
-    tip.textContent = (f.label || 'Unknown') + ' (' + f.confidence + ')';
+    tip.textContent = (f.label || 'Unknown')
+      + (f.similarity != null ? ' (' + (f.similarity * 100).toFixed(0) + '% match)' : '');
     div.appendChild(tip);
 
     div.addEventListener('click', () => labelBox(div, tip));

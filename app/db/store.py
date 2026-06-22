@@ -406,7 +406,7 @@ def get_identity_gallery(
         # LEFT JOIN face_embeddings (enrolled references are keyed by crop_path) so each
         # crop carries whether it's currently part of the reference set.
         sql = """SELECT d.id, d.crop_path, d.confidence, d.detected_at, d.review_status,
-                        d.source_image_id, fe.id AS embedding_id
+                        d.source_image_id, d.embedding, fe.id AS embedding_id
                  FROM detections d
                  LEFT JOIN face_embeddings fe
                         ON fe.identity_id = d.identity_id AND fe.source_image_path = d.crop_path
@@ -492,7 +492,7 @@ def get_image_detections(
     source_image_id: int, user_id: int, det_type: str | None = None
 ) -> list[sqlite3.Row]:
     with _connect() as conn:
-        sql = """SELECT d.id, d.type, d.identity_id, d.confidence,
+        sql = """SELECT d.id, d.type, d.identity_id, d.confidence, d.embedding,
                         d.bbox_x, d.bbox_y, d.bbox_w, d.bbox_h,
                         d.crop_path, d.review_status,
                         i.label AS identity_label
@@ -624,6 +624,34 @@ def delete_face_embedding(embedding_id: int, user_id: int) -> bool:
             (embedding_id, user_id),
         )
         return conn.execute("SELECT changes()").fetchone()[0] > 0
+
+
+def cosine_similarity(emb: bytes | None, rep: bytes | None) -> float | None:
+    """Cosine similarity between two raw float32 embedding blobs, rounded to 4 dp.
+    Returns None if either is missing, zero-norm, or numpy is unavailable/stubbed.
+    """
+    if not emb or not rep:
+        return None
+    try:
+        import numpy as np
+        a = np.frombuffer(bytes(emb), dtype=np.float32)
+        b = np.frombuffer(bytes(rep), dtype=np.float32)
+        denom = float(np.linalg.norm(a) * np.linalg.norm(b))
+        if denom == 0:
+            return None
+        return round(float(np.dot(a, b) / denom), 4)
+    except Exception:
+        return None
+
+
+def get_representative_embedding(identity_id: int, user_id: int) -> bytes | None:
+    """Return the stored representative embedding for an identity, or None."""
+    with _connect() as conn:
+        row = conn.execute(
+            "SELECT representative_embedding FROM identities WHERE id = ? AND user_id = ?",
+            (identity_id, user_id),
+        ).fetchone()
+        return bytes(row["representative_embedding"]) if row and row["representative_embedding"] else None
 
 
 def remove_reference_by_detection(detection_id: int, user_id: int) -> bool:

@@ -255,7 +255,9 @@ async function _pool(items, concurrency, fn) {
               box.style.height = (b.h * sy) + 'px';
               const lbl = document.createElement('div');
               lbl.className = 'det-lbl';
-              lbl.textContent = (det.label || det.class_name || 'Unknown') + ' ' + (det.confidence * 100).toFixed(0) + '%';
+              // Faces show match similarity; objects have no similarity, so show their score.
+              const pct = det.class_name ? det.confidence : (det.similarity ?? det.confidence);
+              lbl.textContent = (det.label || det.class_name || 'Unknown') + ' ' + (pct * 100).toFixed(0) + '%';
               box.appendChild(lbl);
               wrap.appendChild(box);
             });

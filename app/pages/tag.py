@@ -27,13 +27,23 @@ async def tag_page(source_image_id: int, request: Request):
         return HTMLResponse("<h2>Image not found</h2>", status_code=404)
 
     faces = store.get_image_detections(source_image_id, user_id, det_type="face")
+    _reps: dict = {}  # identity_id -> representative embedding (cached per request)
+
+    def _similarity(row):
+        iid = row["identity_id"]
+        if iid is None:
+            return None
+        if iid not in _reps:
+            _reps[iid] = store.get_representative_embedding(iid, user_id)
+        return store.cosine_similarity(row["embedding"], _reps[iid])
+
     face_data = [
         {
             "id": r["id"],
             "x": r["bbox_x"], "y": r["bbox_y"],
             "w": r["bbox_w"], "h": r["bbox_h"],
             "label": r["identity_label"] or "",
-            "confidence": round(r["confidence"], 3),
+            "similarity": _similarity(r),
         }
         for r in faces
     ]

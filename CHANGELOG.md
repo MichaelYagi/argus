@@ -7,6 +7,16 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+### Changed
+
+- Every face surface now shows **match similarity** instead of face-detection confidence (det_score), which was being mistaken for identity certainty:
+  - **Gallery** badge — each crop's similarity to the person's reference set.
+  - **Review** card — best-match similarity (subtitle reworded from "lowest confidence first").
+  - **Detect** page overlay — faces show similarity; objects keep their score (they have no similarity).
+  - **Tag** page tooltip — "Name (NN% match)".
+  - `GET /api/identities/{id}/gallery` items gained a `similarity` field; the detect API already returns `similarity` per face.
+  - Object detections continue to show their detection score (objects have no identity/similarity).
+
 ### Fixed
 
 - Detect with an inline `label` (human-asserted identity) now reports `similarity: 1.0` instead of the incidental match score against the prior reference set. A manually-named upload isn't a match — it's ground truth — so it no longer shows a misleading sub-100% confidence.
