@@ -9,15 +9,9 @@ import secrets
 import sys
 from pathlib import Path
 
-# Dump a native + Python traceback if the process crashes (segfaults from
-# onnxruntime/faiss/torch are otherwise silent). Write to a file as well as
-# stderr — terminal output truncates when the OS kills the process mid-write.
+# Dump a native + Python traceback to stderr if the process crashes
+# (segfaults from onnxruntime/faiss/torch are otherwise silent).
 faulthandler.enable()
-try:
-    _crash_log = open("argus-crash.log", "a", buffering=1)  # noqa: SIM115
-    faulthandler.enable(file=_crash_log, all_threads=True)
-except OSError:
-    pass
 
 # macOS / Apple Silicon: onnxruntime (faces), torch/YOLO (objects), and faiss
 # (matching) each bundle their own OpenMP runtime. KMP_DUPLICATE_LIB_OK stops the

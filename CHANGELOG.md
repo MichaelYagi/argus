@@ -9,7 +9,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Fixed
 
-- macOS / Apple Silicon: `faiss-cpu` and `torch` (YOLO object detection) each vendor their own OpenMP runtime and segfault when loaded together. `ARGUS_DISABLE_FAISS=true` now skips faiss entirely (never imported) and uses the numpy matching fallback. Auto-enabled on macOS; Linux/CUDA is unaffected and keeps faiss. Also pins OpenMP/BLAS thread counts and adds `faulthandler` crash logging to `argus-crash.log` on the native run path.
+- macOS / Apple Silicon: `faiss-cpu` and `torch` (YOLO object detection) each vendor their own OpenMP runtime and segfault when loaded together. `ARGUS_DISABLE_FAISS=true` now skips faiss entirely (never imported) and uses the numpy matching fallback. Auto-enabled on macOS; Linux/CUDA is unaffected and keeps faiss. Also pins OpenMP/BLAS thread counts and enables `faulthandler` (native traceback to stderr on crash) on the native run path.
 
 ### Added
 
