@@ -162,6 +162,9 @@ async def bulk_review(items: list[_BulkItem], user_id: int = Depends(require_aut
 async def delete_detection(detection_id: int, user_id: int = Depends(require_auth)):
     if not store.delete_detection(detection_id, user_id):
         raise HTTPException(404, "Detection not found")
+    # The reference set may have shrunk — refresh the match index.
+    from app.core import face_index as _fi
+    _fi.rebuild_user(user_id)
 
 
 # ---------------------------------------------------------------------------

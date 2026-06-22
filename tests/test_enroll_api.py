@@ -220,3 +220,17 @@ def test_reference_remove_when_not_enrolled_is_noop(client):
     r = client.delete(f"/api/detections/{det_id}/enroll", headers=h)
     assert r.status_code == 200
     assert r.json()["removed"] is False
+
+
+def test_delete_detection_removes_its_reference(client):
+    user_id, h = _setup(client)
+    identity_id = store.create_identity(user_id, "face", "Noah")
+    det_id = _insert_face_detection(user_id, identity_id, "crop1.jpg")
+
+    client.post(f"/api/detections/{det_id}/enroll", headers=h)
+    assert client.get(f"/api/identities/{identity_id}", headers=h).json()["embedding_count"] == 1
+
+    # Deleting the detection must also drop its reference (no orphan).
+    r = client.delete(f"/api/detections/{det_id}", headers=h)
+    assert r.status_code == 204
+    assert client.get(f"/api/identities/{identity_id}", headers=h).json()["embedding_count"] == 0

@@ -778,12 +778,36 @@ def reassign_detection(detection_id: int, user_id: int, identity_id: int) -> boo
 
 
 def delete_detection(detection_id: int, user_id: int) -> bool:
+    """Delete a detection. Also removes any reference embedding enrolled from its crop
+    (keeping the reference count consistent) and recomputes the representative. The
+    cover photo is cleared automatically via the cover_detection_id ON DELETE SET NULL FK.
+    """
+    ref_identity = None
     with _connect() as conn:
+        row = conn.execute(
+            "SELECT identity_id, crop_path FROM detections WHERE id = ? AND user_id = ?",
+            (detection_id, user_id),
+        ).fetchone()
+        if not row:
+            return False
+        if row["identity_id"] is not None:
+            conn.execute(
+                "DELETE FROM face_embeddings WHERE identity_id = ? AND source_image_path = ?",
+                (row["identity_id"], row["crop_path"]),
+            )
+            if conn.execute("SELECT changes()").fetchone()[0] > 0:
+                ref_identity = row["identity_id"]
         conn.execute(
             "DELETE FROM detections WHERE id = ? AND user_id = ?",
             (detection_id, user_id),
         )
-        return conn.execute("SELECT changes()").fetchone()[0] > 0
+        deleted = conn.execute("SELECT changes()").fetchone()[0] > 0
+
+    if ref_identity is not None:
+        model_row = get_active_model("face")
+        if model_row:
+            compute_and_store_representative(ref_identity, model_row["id"])
+    return deleted
 
 
 def label_detection(detection_id: int, user_id: int, identity_id: int) -> bool:
