@@ -217,7 +217,8 @@ a:hover { text-decoration: underline; }
 }
 .g-item:hover .g-enroll-btn { opacity: 1; }
 .g-enroll-btn:hover { color: #5b8af5; }
-.g-enroll-btn.enrolled { color: #5b8af5; }
+/* Enrolled references stay visible and blue even when not hovering */
+.g-enroll-btn.enrolled { opacity: 1; color: #5b8af5; }
 
 /* Delete button — bottom-left (beside confidence badge), appears on hover */
 .g-del-btn {
@@ -240,6 +241,8 @@ a:hover { text-decoration: underline; }
 }
 .g-item:hover .g-cover-btn { opacity: 1; }
 .g-cover-btn:hover { color: #ffd700; }
+/* The current cover photo's star stays visible and gold */
+.g-cover-btn.is-cover { opacity: 1; color: #ffd700; }
 
 /* Checkbox — top-left, appears on hover or when anything is selected */
 .g-check {

@@ -168,3 +168,55 @@ def test_enroll_existing_not_found(client):
         headers=h,
     )
     assert r.status_code == 404
+
+
+# ---------------------------------------------------------------------------
+# Reference toggle — POST/DELETE /api/detections/{id}/enroll + gallery flag
+# ---------------------------------------------------------------------------
+
+def _insert_face_detection(user_id: int, identity_id: int, crop: str) -> int:
+    src_id = store.get_or_create_source_image(user_id, f"src-{crop}", 640, 480)
+    with store._connect() as conn:
+        conn.execute(
+            """INSERT INTO detections
+               (user_id, identity_id, source_image_id, type, model_id, confidence,
+                bbox_x, bbox_y, bbox_w, bbox_h, crop_path, embedding, review_status)
+               VALUES (?, ?, ?, 'face', NULL, 0.9, 0, 0, 80, 80, ?, ?, 'confirmed')""",
+            (user_id, identity_id, src_id, crop, b"\x00" * 2048),
+        )
+        return conn.execute("SELECT last_insert_rowid()").fetchone()[0]
+
+
+def test_reference_toggle_add_and_remove(client):
+    user_id, h = _setup(client)
+    identity_id = store.create_identity(user_id, "face", "Noah")
+    det_id = _insert_face_detection(user_id, identity_id, "crop1.jpg")
+
+    # Gallery: not a reference yet
+    g = client.get(f"/api/identities/{identity_id}/gallery", headers=h).json()
+    assert g["items"][0]["enrolled"] is False
+
+    # Add to references
+    r = client.post(f"/api/detections/{det_id}/enroll", headers=h)
+    assert r.status_code == 201
+    assert r.json()["enrolled"] is True
+    g = client.get(f"/api/identities/{identity_id}/gallery", headers=h).json()
+    assert g["items"][0]["enrolled"] is True
+
+    # Remove from references
+    r = client.delete(f"/api/detections/{det_id}/enroll", headers=h)
+    assert r.status_code == 200
+    assert r.json()["removed"] is True
+    assert r.json()["enrolled"] is False
+    g = client.get(f"/api/identities/{identity_id}/gallery", headers=h).json()
+    assert g["items"][0]["enrolled"] is False
+
+
+def test_reference_remove_when_not_enrolled_is_noop(client):
+    user_id, h = _setup(client)
+    identity_id = store.create_identity(user_id, "face", "Noah")
+    det_id = _insert_face_detection(user_id, identity_id, "crop1.jpg")
+
+    r = client.delete(f"/api/detections/{det_id}/enroll", headers=h)
+    assert r.status_code == 200
+    assert r.json()["removed"] is False

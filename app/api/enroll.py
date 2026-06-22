@@ -69,7 +69,21 @@ async def enroll_detection(detection_id: int, user_id: int = Depends(require_aut
         raise HTTPException(409, "No embedding stored for this detection")
 
     added = enroll_from_detection(det, user_id)
-    return {"detection_id": detection_id, "identity_id": det["identity_id"], "added": added}
+    return {"detection_id": detection_id, "identity_id": det["identity_id"], "added": added, "enrolled": True}
+
+
+@router.delete("/api/detections/{detection_id}/enroll", status_code=200)
+async def unenroll_detection(detection_id: int, user_id: int = Depends(require_auth)):
+    """Remove this detection's crop from the identity's reference set (inverse of enroll)."""
+    det = store.get_detection(detection_id, user_id)
+    if not det:
+        raise HTTPException(404, "Detection not found")
+    removed = store.remove_reference_by_detection(detection_id, user_id)
+    if removed:
+        from app.core import face_index as _fi
+        _fi.rebuild_user(user_id)
+    return {"detection_id": detection_id, "identity_id": det["identity_id"],
+            "removed": removed, "enrolled": False}
 
 
 @router.delete("/api/face_embeddings/{embedding_id}", status_code=204)

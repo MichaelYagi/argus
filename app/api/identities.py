@@ -155,6 +155,7 @@ async def identity_gallery(
         "confidence": r["confidence"],
         "detected_at": r["detected_at"],
         "review_status": r["review_status"],
+        "enrolled": r["embedding_id"] is not None,
     })
 
 

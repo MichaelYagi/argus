@@ -8,7 +8,7 @@
   <span class="badge badge-{{ identity.type }}">{{ identity.type }}</span>
   <span class="muted" style="font-size:12px">
     {{ identity.detection_count }} detection{{ 's' if identity.detection_count != 1 else '' }}
-    &middot; {{ identity.embedding_count }} reference{{ 's' if identity.embedding_count != 1 else '' }}
+    &middot; <span id="ref-count-label">{{ identity.embedding_count }} reference{{ 's' if identity.embedding_count != 1 else '' }}</span>
   </span>
   <span class="nav-spacer"></span>
   <a href="/enroll" class="btn btn-ghost">Enroll more</a>
@@ -23,7 +23,8 @@
   <button class="btn btn-ghost" onclick="clearSelection()" style="color:#fff;border-color:#555">Clear</button>
 </div>
 
-<div id="gallery" data-identity-id="{{ identity.id }}" data-identity-type="{{ identity.type }}"></div>
+<div id="gallery" data-identity-id="{{ identity.id }}" data-identity-type="{{ identity.type }}"
+     data-cover-id="{{ identity.cover_detection_id if identity.cover_detection_id is not none else '' }}"></div>
 <p id="gallery-loading" class="loading" hidden>Loading…</p>
 <p id="gallery-empty" class="muted" hidden style="text-align:center;padding:48px">No detections yet.</p>
 {% endblock %}

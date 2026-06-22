@@ -5,7 +5,16 @@
 
   const identityId   = container.dataset.identityId;
   const identityType = container.dataset.identityType;
+  let   coverId      = container.dataset.coverId || null;
   const PAGE = 30;
+
+  function adjustRefCount(delta) {
+    const el = document.getElementById('ref-count-label');
+    if (!el) return;
+    const cur = parseInt(el.textContent, 10) || 0;
+    const n = Math.max(0, cur + delta);
+    el.textContent = `${n} reference${n !== 1 ? 's' : ''}`;
+  }
   const GAP = 4;
   const TARGET_H = 200;
   let cursor = null, hasMore = true, loading = false;
@@ -172,29 +181,55 @@
         });
         el.appendChild(delBtn);
 
-        // Add-to-references button (bottom-right, hover only, face identities only)
+        // Reference toggle (bottom-right, face identities only).
+        // Shows "+" to add, "✓" (persistent, blue) when the crop is a reference.
         if (identityType === 'face') {
           const enrollBtn = document.createElement('button');
-          enrollBtn.title = 'Add to reference set';
           enrollBtn.className = 'g-enroll-btn';
-          enrollBtn.textContent = '+';
+          let enrolled = !!item.enrolled;
+          const renderEnroll = () => {
+            enrollBtn.textContent = enrolled ? '✓' : '+';
+            enrollBtn.classList.toggle('enrolled', enrolled);
+            enrollBtn.title = enrolled
+              ? 'In reference set — click to remove'
+              : 'Add to reference set';
+          };
+          renderEnroll();
           enrollBtn.addEventListener('click', async e => {
             e.stopPropagation();
-            const resp = await fetch(`/api/detections/${item.detection_id}/enroll`, { method: 'POST' });
-            if (resp.ok) {
-              const d = await resp.json();
-              enrollBtn.classList.add('enrolled');
-              enrollBtn.title = d.added ? 'Added to reference set' : 'Already in reference set';
+            enrollBtn.disabled = true;
+            try {
+              if (!enrolled) {
+                const resp = await fetch(`/api/detections/${item.detection_id}/enroll`, { method: 'POST' });
+                if (resp.ok) {
+                  const d = await resp.json();
+                  if (d.added) adjustRefCount(1);
+                  enrolled = true;
+                }
+              } else {
+                const resp = await fetch(`/api/detections/${item.detection_id}/enroll`, { method: 'DELETE' });
+                if (resp.ok) {
+                  const d = await resp.json();
+                  if (d.removed) adjustRefCount(-1);
+                  enrolled = false;
+                }
+              }
+              item.enrolled = enrolled;
+              renderEnroll();
+            } finally {
+              enrollBtn.disabled = false;
             }
           });
           el.appendChild(enrollBtn);
         }
 
-        // Set-cover button (bottom-right, hover only)
+        // Set-cover button (bottom-right). Gold + persistent when this is the cover.
         const coverBtn = document.createElement('button');
-        coverBtn.title = 'Set as cover photo';
         coverBtn.className = 'g-cover-btn';
         coverBtn.textContent = '★';
+        const isCover = coverId && String(item.detection_id) === String(coverId);
+        coverBtn.classList.toggle('is-cover', !!isCover);
+        coverBtn.title = isCover ? 'Current cover photo' : 'Set as cover photo';
         coverBtn.addEventListener('click', async e => {
           e.stopPropagation();
           const resp = await fetch(`/api/identities/${identityId}/cover`, {
@@ -202,7 +237,15 @@
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ detection_id: item.detection_id }),
           });
-          if (resp.ok) coverBtn.style.color = '#ffd700';
+          if (resp.ok) {
+            container.querySelectorAll('.g-cover-btn.is-cover').forEach(b => {
+              b.classList.remove('is-cover');
+              b.title = 'Set as cover photo';
+            });
+            coverBtn.classList.add('is-cover');
+            coverBtn.title = 'Current cover photo';
+            coverId = String(item.detection_id);
+          }
         });
         el.appendChild(coverBtn);
 

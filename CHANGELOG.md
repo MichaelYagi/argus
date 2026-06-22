@@ -14,6 +14,8 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Added
 
+- `DELETE /api/detections/{id}/enroll` — removes a crop from an identity's reference set (inverse of the existing `POST`), so the gallery's reference button is a true toggle.
+- Identity gallery items now include an `enrolled` flag (whether the crop is in the reference set).
 - `POST /api/detect/faces|all` now returns a `similarity` field per face — the match strength (0–1) against the matched enrolled identity, distinct from `confidence` (the face-detection quality score). Lets clients store/display the real match %.
 - `DELETE /api/images/{source_image_id}` — cascade-deletes a source image and all its detections (faces + objects) and removes their crop files. The enrolled face reference set is untouched.
 - `replace` flag on `POST /api/detect/faces|objects|all` (form field, JSON body, or `?replace=true`) — clears the image's existing detections of the type being run before writing new ones, making re-detection of the same image idempotent. Uses the existing content-hash source-image dedup, so clients don't need to track `source_image_id`.

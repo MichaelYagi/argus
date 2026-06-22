@@ -403,13 +403,19 @@ def get_identity_gallery(
     identity_id: int, user_id: int, cursor: str | None = None, limit: int = 30
 ) -> list[sqlite3.Row]:
     with _connect() as conn:
-        sql = """SELECT id, crop_path, confidence, detected_at, review_status, source_image_id
-                 FROM detections WHERE identity_id = ? AND user_id = ?"""
+        # LEFT JOIN face_embeddings (enrolled references are keyed by crop_path) so each
+        # crop carries whether it's currently part of the reference set.
+        sql = """SELECT d.id, d.crop_path, d.confidence, d.detected_at, d.review_status,
+                        d.source_image_id, fe.id AS embedding_id
+                 FROM detections d
+                 LEFT JOIN face_embeddings fe
+                        ON fe.identity_id = d.identity_id AND fe.source_image_path = d.crop_path
+                 WHERE d.identity_id = ? AND d.user_id = ?"""
         params: list = [identity_id, user_id]
         if cursor:
-            sql += " AND detected_at < ?"
+            sql += " AND d.detected_at < ?"
             params.append(cursor)
-        sql += " ORDER BY detected_at DESC, id DESC LIMIT ?"
+        sql += " ORDER BY d.detected_at DESC, d.id DESC LIMIT ?"
         params.append(limit + 1)
         return conn.execute(sql, params).fetchall()
 
@@ -618,6 +624,30 @@ def delete_face_embedding(embedding_id: int, user_id: int) -> bool:
             (embedding_id, user_id),
         )
         return conn.execute("SELECT changes()").fetchone()[0] > 0
+
+
+def remove_reference_by_detection(detection_id: int, user_id: int) -> bool:
+    """Remove the reference embedding enrolled from this detection's crop and recompute
+    the identity's representative. Returns True if a reference was removed.
+    """
+    with _connect() as conn:
+        det = conn.execute(
+            "SELECT identity_id, crop_path FROM detections WHERE id = ? AND user_id = ?",
+            (detection_id, user_id),
+        ).fetchone()
+        if not det or det["identity_id"] is None:
+            return False
+        identity_id = det["identity_id"]
+        conn.execute(
+            "DELETE FROM face_embeddings WHERE identity_id = ? AND source_image_path = ?",
+            (identity_id, det["crop_path"]),
+        )
+        removed = conn.execute("SELECT changes()").fetchone()[0] > 0
+    if removed:
+        model_row = get_active_model("face")
+        if model_row:
+            compute_and_store_representative(identity_id, model_row["id"])
+    return removed
 
 
 def compute_and_store_representative(identity_id: int, model_id: int) -> None:
