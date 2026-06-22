@@ -207,7 +207,10 @@ def _run_faces(user_id: int, img: Any, source_id: int, label: str | None = None)
 
         if label:
             # Caller already knows who this is — assign directly and confirm.
+            # The identity is asserted, not matched, so report full confidence
+            # rather than the incidental score against the prior reference set.
             identity_id = store.get_or_create_identity(user_id, "face", label)
+            sim = 1.0
             review_status = "confirmed"
         else:
             if identity_id is None and not save_unknown:

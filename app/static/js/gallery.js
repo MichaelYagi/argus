@@ -227,7 +227,10 @@
         const coverBtn = document.createElement('button');
         coverBtn.className = 'g-cover-btn';
         coverBtn.textContent = '★';
-        const isCover = coverId && String(item.detection_id) === String(coverId);
+        // Effective cover: the explicitly-set one, or the most-recent detection
+        // (first item) when none is set — matching the thumbnail fallback.
+        const effectiveCover = coverId || (allItems[0] && String(allItems[0].detection_id));
+        const isCover = effectiveCover && String(item.detection_id) === String(effectiveCover);
         coverBtn.classList.toggle('is-cover', !!isCover);
         coverBtn.title = isCover ? 'Current cover photo' : 'Set as cover photo';
         coverBtn.addEventListener('click', async e => {
