@@ -350,7 +350,7 @@ def list_identities_summary(
                            WHERE dc.id = i.cover_detection_id),
                           (SELECT d2.crop_path FROM detections d2
                            WHERE d2.identity_id = i.id AND d2.user_id = i.user_id
-                           ORDER BY d2.detected_at DESC LIMIT 1)
+                           ORDER BY d2.detected_at ASC LIMIT 1)
                         ) AS thumbnail_crop
                  FROM identities i
                  LEFT JOIN detections d      ON d.identity_id  = i.id
@@ -379,7 +379,7 @@ def get_identity_with_counts(identity_id: int, user_id: int) -> sqlite3.Row | No
                          WHERE d_cover.id = i.cover_detection_id),
                         (SELECT d2.crop_path FROM detections d2
                          WHERE d2.identity_id = i.id AND d2.user_id = i.user_id
-                         ORDER BY d2.detected_at DESC LIMIT 1)
+                         ORDER BY d2.detected_at ASC LIMIT 1)
                       ) AS thumbnail_crop
                FROM identities i
                LEFT JOIN detections d  ON d.identity_id = i.id
@@ -694,6 +694,18 @@ def get_identity_reference_blobs(identity_id: int, user_id: int) -> list[bytes]:
             (identity_id, user_id),
         ).fetchall()
         return [bytes(r["embedding"]) for r in rows]
+
+
+def get_oldest_detection_id(identity_id: int, user_id: int) -> int | None:
+    """The first (oldest) detection for an identity — the stable default cover."""
+    with _connect() as conn:
+        row = conn.execute(
+            """SELECT id FROM detections
+               WHERE identity_id = ? AND user_id = ?
+               ORDER BY detected_at ASC, id ASC LIMIT 1""",
+            (identity_id, user_id),
+        ).fetchone()
+        return row["id"] if row else None
 
 
 def get_representative_embedding(identity_id: int, user_id: int) -> bytes | None:

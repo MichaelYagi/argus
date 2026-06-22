@@ -231,10 +231,9 @@
         const coverBtn = document.createElement('button');
         coverBtn.className = 'g-cover-btn';
         coverBtn.textContent = '★';
-        // Effective cover: the explicitly-set one, or the most-recent detection
-        // (first item) when none is set — matching the thumbnail fallback.
-        const effectiveCover = coverId || (allItems[0] && String(allItems[0].detection_id));
-        const isCover = effectiveCover && String(item.detection_id) === String(effectiveCover);
+        // Cover is resolved server-side (explicit choice, else the oldest photo) and
+        // passed in, so the star is stable as new detections arrive.
+        const isCover = coverId && String(item.detection_id) === String(coverId);
         coverBtn.classList.toggle('is-cover', !!isCover);
         coverBtn.title = isCover ? 'Current cover photo' : 'Set as cover photo';
         coverBtn.addEventListener('click', async e => {

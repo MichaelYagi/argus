@@ -89,6 +89,12 @@ async def gallery(identity_id: int, request: Request):
     if not identity:
         return _r(request, "dashboard.html", {**ctx, "error": "Identity not found"}, status_code=404)
     ctx["identity"] = identity
+    # Effective cover: explicit choice, else the first/oldest photo (stable — doesn't
+    # jump to newer detections as more are matched).
+    cover_id = identity["cover_detection_id"]
+    if cover_id is None:
+        cover_id = store.get_oldest_detection_id(identity_id, ctx["user_id"])
+    ctx["effective_cover_id"] = cover_id
     return _r(request, "gallery.html", ctx)
 
 

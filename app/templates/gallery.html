@@ -24,7 +24,7 @@
 </div>
 
 <div id="gallery" data-identity-id="{{ identity.id }}" data-identity-type="{{ identity.type }}"
-     data-cover-id="{{ identity.cover_detection_id if identity.cover_detection_id is not none else '' }}"></div>
+     data-cover-id="{{ effective_cover_id if effective_cover_id is not none else '' }}"></div>
 <p id="gallery-loading" class="loading" hidden>Loading…</p>
 <p id="gallery-empty" class="muted" hidden style="text-align:center;padding:48px">No detections yet.</p>
 {% endblock %}
