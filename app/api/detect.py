@@ -247,7 +247,8 @@ def _run_faces(user_id: int, img: Any, source_id: int, label: str | None = None)
         results.append({
             "detection_id": detection_id,
             "bbox": {"x": det.bbox[0], "y": det.bbox[1], "w": det.bbox[2], "h": det.bbox[3]},
-            "confidence": det.confidence,
+            "confidence": det.confidence,        # face-detection quality score
+            "similarity": round(float(sim), 4),  # match strength vs the enrolled identity
             "identity_id": identity_id,
             "label": display_label,
             "crop_url": f"/media/crops/{crop_filename}",
