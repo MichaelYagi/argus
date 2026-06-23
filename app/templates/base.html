@@ -118,7 +118,7 @@ setInterval(_updateReviewBadge, 30000);
   {% endif %}
   <a href="/docs"     class="nav-desktop {% if active == 'docs'      %}active{% endif %}">API docs</a>
   <span class="nav-spacer nav-desktop"></span>
-  <a href="/account"  class="nav-desktop" style="color:#aaa;font-size:12px">{{ username }}</a>
+  <a href="/account"  class="nav-desktop" style="color:var(--nav-text);font-size:12px">{{ username }}</a>
 
   <!-- Theme picker -->
   <div class="nav-desktop" style="position:relative">
@@ -136,13 +136,13 @@ setInterval(_updateReviewBadge, 30000);
     </button>
     <div id="theme-menu"
          style="display:none;position:absolute;right:0;top:calc(100% + 8px);
-                background:#1e2430;border:1px solid #30363d;border-radius:8px;
+                background:var(--surface);border:1px solid var(--border);border-radius:8px;
                 box-shadow:0 4px 20px rgba(0,0,0,.4);padding:6px;
                 flex-direction:column;gap:2px;min-width:130px;z-index:300">
       <button class="theme-opt" data-theme="light"
               style="display:flex;align-items:center;gap:10px;padding:7px 10px;
                      border:none;cursor:pointer;border-radius:5px;background:none;
-                     font-size:13px;font-family:inherit;text-align:left;width:100%;color:#e6edf3">
+                     font-size:13px;font-family:inherit;text-align:left;width:100%;color:var(--text)">
         <span style="display:flex;flex-direction:column;width:14px;height:14px;
                      border-radius:2px;overflow:hidden;flex-shrink:0">
           <span style="flex:1;background:#f0f2f5"></span>
@@ -154,7 +154,7 @@ setInterval(_updateReviewBadge, 30000);
       <button class="theme-opt" data-theme="dark"
               style="display:flex;align-items:center;gap:10px;padding:7px 10px;
                      border:none;cursor:pointer;border-radius:5px;background:none;
-                     font-size:13px;font-family:inherit;text-align:left;width:100%;color:#e6edf3">
+                     font-size:13px;font-family:inherit;text-align:left;width:100%;color:var(--text)">
         <span style="display:flex;flex-direction:column;width:14px;height:14px;
                      border-radius:2px;overflow:hidden;flex-shrink:0">
           <span style="flex:1;background:#0d1117"></span>
@@ -166,7 +166,7 @@ setInterval(_updateReviewBadge, 30000);
       <button class="theme-opt" data-theme="ember"
               style="display:flex;align-items:center;gap:10px;padding:7px 10px;
                      border:none;cursor:pointer;border-radius:5px;background:none;
-                     font-size:13px;font-family:inherit;text-align:left;width:100%;color:#e6edf3">
+                     font-size:13px;font-family:inherit;text-align:left;width:100%;color:var(--text)">
         <span style="display:flex;flex-direction:column;width:14px;height:14px;
                      border-radius:2px;overflow:hidden;flex-shrink:0">
           <span style="flex:1;background:#1a1612"></span>

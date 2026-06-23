@@ -213,7 +213,7 @@
            style="padding:8px 14px;cursor:pointer;font-size:13px;font-family:inherit;
                   border-bottom:1px solid var(--border);background:var(--surface);color:var(--text);
                   white-space:nowrap;overflow:hidden;text-overflow:ellipsis">
-        ${m.replace(new RegExp('(' + esc(ql) + ')', 'gi'), '<strong style="color:#3a8ef6">$1</strong>')}
+        ${m.replace(new RegExp('(' + esc(ql) + ')', 'gi'), '<strong style="color:var(--accent)">$1</strong>')}
        </li>`
     ).join('');
     ul.querySelectorAll('li').forEach((li, i) => {

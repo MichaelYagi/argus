@@ -19,13 +19,13 @@
 <div class="tab-bar">
   <button class="tab-btn active" data-type="face"   onclick="switchTab('face')">
     People <span id="badge-face"
-      style="display:none;background:#3a8ef6;color:#fff;border-radius:99px;
+      style="display:none;background:var(--accent);color:#fff;border-radius:99px;
              padding:1px 7px;font-size:10px;font-weight:700;margin-left:4px;
              vertical-align:middle;line-height:16px"></span>
   </button>
   <button class="tab-btn"        data-type="object" onclick="switchTab('object')">
     Objects <span id="badge-object"
-      style="display:none;background:#3a8ef6;color:#fff;border-radius:99px;
+      style="display:none;background:var(--accent);color:#fff;border-radius:99px;
              padding:1px 7px;font-size:10px;font-weight:700;margin-left:4px;
              vertical-align:middle;line-height:16px"></span>
   </button>
@@ -156,7 +156,7 @@ function makeCard(d, type) {
   cb.type = 'checkbox';
   cb.className = 'card-cb';
   cb.style.cssText = 'position:absolute;top:6px;left:6px;z-index:3;opacity:0;' +
-    'width:16px;height:16px;cursor:pointer;accent-color:#3a8ef6';
+    'width:16px;height:16px;cursor:pointer;accent-color:var(--accent)';
   a.prepend(cb);
 
   // Show checkbox on hover
