@@ -146,8 +146,8 @@ a:hover { text-decoration: underline; }
 
 /* ---------- Badges ---------- */
 .badge { display: inline-block; padding: 2px 8px; border-radius: 99px; font-size: 11px; font-weight: 500; }
-.badge-face    { background: #dbeafe; color: #1d4ed8; }
-.badge-object  { background: #d1fae5; color: #065f46; }
+.badge-face    { background: rgba(59,130,246,.15);  color: #3b82f6; }
+.badge-object  { background: rgba(16,185,129,.15);  color: #10b981; }
 .badge-active  { background: var(--success); color: #fff; }
 .badge-pending { background: var(--warn); color: #fff; }
 
@@ -216,9 +216,9 @@ a:hover { text-decoration: underline; }
   line-height: 1;
 }
 .g-item:hover .g-enroll-btn { opacity: 1; }
-.g-enroll-btn:hover { color: #5b8af5; }
+.g-enroll-btn:hover { color: var(--accent); }
 /* Reference crops show a blue check (on hover); non-references show a grey + */
-.g-enroll-btn.enrolled { color: #5b8af5; }
+.g-enroll-btn.enrolled { color: var(--accent); }
 
 /* Delete button — bottom-left (beside confidence badge), appears on hover */
 .g-del-btn {
@@ -262,9 +262,9 @@ label.lbl { display: block; font-size: 12px; font-weight: 500; color: var(--mute
 input[type=text], input[type=password], input[type=number], input[type=url], select, textarea {
   width: 100%; padding: 8px 12px; border: 1px solid var(--border); border-radius: var(--radius);
   font-size: 14px; font-family: inherit; outline: none; transition: border-color .15s;
-  background: #fff; color: #1a1a1a;
+  background: var(--surface); color: var(--text);
 }
-input::placeholder, textarea::placeholder { color: #999; }
+input::placeholder, textarea::placeholder { color: var(--muted); }
 input:focus, select:focus, textarea:focus { border-color: var(--accent); }
 .docs-page input:focus, .docs-page select:focus, .docs-page textarea:focus { border-color: #3a8ef6; }
 
@@ -278,7 +278,7 @@ input:focus, select:focus, textarea:focus { border-color: var(--accent); }
 .review-card img { width: 110px; height: 110px; object-fit: cover; border-radius: 4px; flex-shrink: 0; }
 .review-card .rc-info { flex: 1; }
 .review-card .rc-actions { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 8px; }
-.suggest-btn { padding: 3px 10px; border-radius: 99px; border: 1px solid var(--border); background: transparent; font-size: 12px; cursor: pointer; font-family: inherit; }
+.suggest-btn { padding: 3px 10px; border-radius: 99px; border: 1px solid var(--border); background: transparent; color: var(--text); font-size: 12px; cursor: pointer; font-family: inherit; }
 .suggest-btn:hover { border-color: var(--accent); color: var(--accent); }
 
 /* ---------- Detect overlay ---------- */
@@ -317,8 +317,8 @@ input[type=range] { width: 150px; cursor: pointer; }
 
 /* ---------- Alerts ---------- */
 .alert { padding: 10px 14px; border-radius: var(--radius); font-size: 13px; margin-bottom: 12px; }
-.alert-error   { background: #fee2e2; color: #991b1b; }
-.alert-success { background: #d1fae5; color: #065f46; }
+.alert-error   { background: rgba(239,68,68,.12);  color: var(--danger);  border: 1px solid rgba(239,68,68,.3); }
+.alert-success { background: rgba(52,211,153,.12); color: var(--success); border: 1px solid rgba(52,211,153,.3); }
 .muted { color: var(--muted); }
 .loading { text-align: center; padding: 24px; color: var(--muted); }
 
@@ -335,7 +335,7 @@ input[type=range] { width: 150px; cursor: pointer; }
 /* ---------- Docs page — always white regardless of theme ---------- */
 .docs-page { background: #fff !important; }
 .docs-page .main-content { background: #fff !important; }
-.docs-page input { border-color: #e0e0e0 !important; }
+.docs-page input { background: #fff !important; color: #1a1a1a !important; border-color: #e0e0e0 !important; }
 
 /* ---------- Auth pages ---------- */
 .auth-page { min-height: 100vh; display: flex; align-items: center; justify-content: center; background: var(--bg); }
