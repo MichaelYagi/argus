@@ -254,39 +254,29 @@ def test_startup_reconciles_orphaned_references(client):
     assert client.get(f"/api/identities/{identity_id}", headers=h).json()["embedding_count"] == 0
 
 
-def test_reconcile_references_endpoint(client):
+def test_replace_detect_cleans_reference(client):
+    """clear_detections_for_source (replace mode) must drop references of cleared crops."""
     user_id, h = _setup(client)
     identity_id = store.create_identity(user_id, "face", "Noah")
     det_id = _insert_face_detection(user_id, identity_id, "crop1.jpg")
     client.post(f"/api/detections/{det_id}/enroll", headers=h)
+    assert client.get(f"/api/identities/{identity_id}", headers=h).json()["embedding_count"] == 1
 
-    # Orphan it by deleting the detection row directly.
-    with store._connect() as conn:
-        conn.execute("DELETE FROM detections WHERE id = ?", (det_id,))
+    # Find the source image id for that detection and clear it (what replace=true does).
+    det = store.get_detection(det_id, user_id)
+    store.clear_detections_for_source(det["source_image_id"], user_id, "face")
 
-    r = client.post("/api/references/reconcile", headers=h)
-    assert r.status_code == 200
-    assert r.json()["removed"] == 1
     assert client.get(f"/api/identities/{identity_id}", headers=h).json()["embedding_count"] == 0
 
-    # Idempotent — nothing left to remove.
-    r2 = client.post("/api/references/reconcile", headers=h)
-    assert r2.json()["removed"] == 0
 
-
-def test_reconcile_references_scoped_to_user(client):
-    from app.core.security import hash_password
+def test_delete_source_image_cleans_references(client):
     user_id, h = _setup(client)
     identity_id = store.create_identity(user_id, "face", "Noah")
     det_id = _insert_face_detection(user_id, identity_id, "crop1.jpg")
     client.post(f"/api/detections/{det_id}/enroll", headers=h)
-    with store._connect() as conn:
-        conn.execute("DELETE FROM detections WHERE id = ?", (det_id,))
-
-    # A different user reconciling must not touch the first user's data.
-    u2 = store.create_user("bob", hash_password("pass12345"))
-    k2 = generate_api_key()
-    store.create_api_key(u2, hash_api_key(k2), "b")
-    r = client.post("/api/references/reconcile", headers={"X-API-Key": k2})
-    assert r.json()["removed"] == 0
+    src_id = store.get_detection(det_id, user_id)["source_image_id"]
     assert client.get(f"/api/identities/{identity_id}", headers=h).json()["embedding_count"] == 1
+
+    r = client.delete(f"/api/images/{src_id}", headers=h)
+    assert r.status_code == 200
+    assert client.get(f"/api/identities/{identity_id}", headers=h).json()["embedding_count"] == 0

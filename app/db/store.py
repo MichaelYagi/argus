@@ -532,6 +532,9 @@ def clear_detections_for_source(
             del_sql += " AND type = ?"
             del_params.append(det_type)
         conn.execute(del_sql, del_params)
+
+        # Drop any references whose crop was just removed, and recompute reps.
+        _reconcile_orphan_references(conn, user_id)
         return crops
 
 
@@ -562,6 +565,9 @@ def delete_source_image(source_image_id: int, user_id: int) -> list[str] | None:
             "DELETE FROM source_images WHERE id = ? AND user_id = ?",
             (source_image_id, user_id),
         )
+        # Cascade removed the detections but not their references (keyed by crop_path,
+        # not an FK) — reconcile so no orphaned references remain.
+        _reconcile_orphan_references(conn, user_id)
         return crops
 
 
@@ -753,13 +759,6 @@ def _reconcile_orphan_references(conn, user_id: int | None = None) -> int:
         [(i,) for i in affected],
     )
     return removed
-
-
-def reconcile_orphan_references(user_id: int | None = None) -> int:
-    """Public entry point: reconcile orphaned references in their own transaction.
-    Returns the number of references removed."""
-    with _connect() as conn:
-        return _reconcile_orphan_references(conn, user_id)
 
 
 def remove_reference_by_detection(detection_id: int, user_id: int) -> bool:

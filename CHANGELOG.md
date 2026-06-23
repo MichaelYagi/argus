@@ -19,6 +19,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Fixed
 
+- Re-detecting with `replace=true` and `DELETE /api/images/{id}` now also remove references enrolled from the cleared crops (and refresh the match index), instead of leaving them orphaned. Previously a rescan-with-replace or source delete could leave a reference with no crop (showing e.g. "1 detection · 2 references") — and, worse, keep a deleted/wrong face in the reference set where it polluted matching.
 - Startup now reconciles **orphaned references** — `face_embeddings` whose source crop no longer has a detection (left behind by older builds that deleted a detection without removing its reference). Affected identities' representatives are recomputed. Fixes "1 detection · 3 references" style mismatches.
 - The cover photo (and gallery star) no longer jumps to the newest detection as more faces are matched. When no cover is explicitly set, the **oldest** detection is used as a stable default — consistently for both the dashboard thumbnail and the gallery star — instead of the most-recent one, which shifted on every new match.
 - Detect with an inline `label` (human-asserted identity) now reports `similarity: 1.0` instead of the incidental match score against the prior reference set. A manually-named upload isn't a match — it's ground truth — so it no longer shows a misleading sub-100% confidence.
@@ -28,7 +29,6 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Added
 
-- `POST /api/references/reconcile` + a **Maintenance → Clean up references** button on the Settings page — runs the orphaned-reference cleanup on demand (scoped to the caller) without a restart, recomputes affected representatives, and rebuilds the match index. Reports how many were removed.
 - `face.match_strategy` setting — **Best match** (default; compares against every reference photo and uses the closest) or **Average** (one blended centroid per person, faster/steadier). Best match keeps enrolled photos at ~100% and recognizes people who look different across photos (age, glasses, lighting) better; the cost is indexing every reference instead of one centroid (negligible at self-hosted scale). Changing it rebuilds the match index; the gallery/tag similarity shown follows the active strategy.
 - `DELETE /api/detections/{id}/enroll` — removes a crop from an identity's reference set (inverse of the existing `POST`), so the gallery's reference button is a true toggle.
 - Identity gallery items now include an `enrolled` flag (whether the crop is in the reference set).

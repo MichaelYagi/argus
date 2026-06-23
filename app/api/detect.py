@@ -174,13 +174,18 @@ async def _extract_replace(request: Request) -> bool:
 
 
 def _clear_detections(user_id: int, source_id: int, det_type: str | None) -> None:
-    """Remove prior detections (and their crop files) for a source image."""
+    """Remove prior detections (and their crop files) for a source image.
+    References enrolled from those crops are dropped too (in the store call), so
+    refresh the match index to drop them before re-detecting."""
     crops = store.clear_detections_for_source(source_id, user_id, det_type)
     for crop in crops:
         try:
             (crops_dir() / crop).unlink(missing_ok=True)
         except OSError:
             pass
+    if det_type != "object":
+        from app.core import face_index
+        face_index.rebuild_user(user_id)
 
 
 def _run_faces(user_id: int, img: Any, source_id: int, label: str | None = None) -> list[dict]:

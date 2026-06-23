@@ -45,8 +45,8 @@ async def image_faces(source_image_id: int, user_id: int = Depends(require_auth)
 async def delete_source_image(source_image_id: int, user_id: int = Depends(require_auth)):
     """Delete a source image and cascade-delete all its detections (faces + objects).
 
-    Use this before re-detecting a photo to avoid duplicate detections. The enrolled
-    face reference set (face_embeddings) is not affected.
+    Use this before re-detecting a photo to avoid duplicate detections. References
+    enrolled from the removed crops are dropped too, so no orphaned references remain.
     """
     crops = store.delete_source_image(source_image_id, user_id)
     if crops is None:
@@ -59,6 +59,10 @@ async def delete_source_image(source_image_id: int, user_id: int = Depends(requi
             removed += 1
         except OSError:
             pass
+
+    # References enrolled from the removed crops were dropped too — refresh the index.
+    from app.core import face_index
+    face_index.rebuild_user(user_id)
 
     return {"source_image_id": source_image_id, "detections_deleted": len(crops),
             "crops_removed": removed}

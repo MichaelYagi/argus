@@ -125,17 +125,6 @@ async def delete_identity(identity_id: int, user_id: int = Depends(require_auth)
     _fi.rebuild_user(user_id)
 
 
-@router.post("/api/references/reconcile", status_code=200)
-async def reconcile_references(user_id: int = Depends(require_auth)):
-    """Remove orphaned references (a reference whose source crop no longer exists) for
-    the caller, recompute affected representatives, and rebuild the match index."""
-    removed = store.reconcile_orphan_references(user_id)
-    if removed:
-        from app.core import face_index as _fi
-        _fi.rebuild_user(user_id)
-    return {"removed": removed}
-
-
 @router.delete("/api/identities", status_code=200)
 async def delete_all_identities(user_id: int = Depends(require_auth)):
     count = store.delete_all_identities(user_id)
