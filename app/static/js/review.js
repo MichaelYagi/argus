@@ -119,7 +119,7 @@
       <div style="display:flex;width:100%;align-items:flex-start;gap:8px">
         <input type="checkbox" class="rc-check" data-id="${item.detection_id}" style="margin-top:4px;flex-shrink:0">
         <img src="${esc(item.crop_url)}" alt=""
-             style="width:110px;height:110px;object-fit:cover;border-radius:4px;flex-shrink:0;${item.source_image_url ? 'cursor:pointer' : ''}"
+             style="width:110px;height:110px;object-fit:cover;border-radius:4px;flex-shrink:0;${item.source_image_url ? 'cursor:zoom-in' : ''}"
              ${item.source_image_url ? `onclick="openSourceModal('${esc(item.source_image_url)}')"` : ''}>
         <div class="rc-info" style="flex:1;min-width:0">
 
