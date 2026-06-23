@@ -244,7 +244,8 @@ curl -X POST \
 (`"M"`/`"F"`), and `pose` (`[pitch, yaw, roll]` in degrees) when the active model provides
 them — all three bundled packs (buffalo_l, buffalo_s, antelopev2) do. They're returned by
 `/api/detect/*`, `/api/identify`, `/api/verify`, and `/api/images/{id}/faces`, and stored
-per detection. Any value the model doesn't produce comes back as `null`.
+per detection. Any value the model doesn't produce comes back as `null`. These fields are
+API-only and not displayed in the UI.
 
 **Example — identify (1:N, read-only): "who is in this photo?"**
 

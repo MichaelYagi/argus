@@ -1,13 +1,5 @@
 'use strict';
 
-// "32y · M · yaw 12°" from a face's age/gender/pose — omits missing parts.
-function faceAttrText(f) {
-  const parts = [];
-  if (f.age != null) parts.push(f.age + 'y');
-  if (f.gender) parts.push(f.gender);
-  if (Array.isArray(f.pose) && f.pose.length === 3) parts.push('yaw ' + Math.round(f.pose[1]) + '°');
-  return parts.join(' · ');
-}
 
 async function _pool(items, concurrency, fn) {
   let idx = 0;
@@ -266,12 +258,7 @@ async function _pool(items, concurrency, fn) {
               lbl.className = 'det-lbl';
               // Faces show match similarity; objects have no similarity, so show their score.
               const pct = det.class_name ? det.confidence : (det.similarity ?? det.confidence);
-              let text = (det.label || det.class_name || 'Unknown') + ' ' + (pct * 100).toFixed(0) + '%';
-              // Faces also show age/gender/pose when the model provided them.
-              if (!det.class_name) {
-                const attr = faceAttrText(det);
-                if (attr) text += ' · ' + attr;
-              }
+              const text = (det.label || det.class_name || 'Unknown') + ' ' + (pct * 100).toFixed(0) + '%';
               lbl.textContent = text;
               box.appendChild(lbl);
               wrap.appendChild(box);

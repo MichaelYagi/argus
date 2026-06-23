@@ -20,14 +20,6 @@
 const NAT_W = {{ nat_w }}, NAT_H = {{ nat_h }};
 const FACES = {{ faces_json | safe }};
 
-// "32y · M · yaw 12°" — omits parts the model didn't provide
-function faceAttrText(f) {
-  const parts = [];
-  if (f.age != null) parts.push(f.age + 'y');
-  if (f.gender) parts.push(f.gender);
-  if (Array.isArray(f.pose) && f.pose.length === 3) parts.push('yaw ' + Math.round(f.pose[1]) + '°');
-  return parts.join(' · ');
-}
 
 function renderBoxes() {
   const img = document.getElementById('tag-photo');
@@ -47,10 +39,8 @@ function renderBoxes() {
 
     const tip = document.createElement('div');
     tip.className = 't-tip';
-    let tipText = (f.label || 'Unknown')
+    const tipText = (f.label || 'Unknown')
       + (f.similarity != null ? ' (' + (f.similarity * 100).toFixed(0) + '% match)' : '');
-    const attr = faceAttrText(f);
-    if (attr) tipText += ' · ' + attr;
     tip.textContent = tipText;
     div.appendChild(tip);
 
