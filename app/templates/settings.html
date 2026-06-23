@@ -128,27 +128,6 @@
 </div>
 {% endif %}
 {% endif %}
-
-<!-- Danger zone -->
-<div class="card" style="margin-top:24px;border:1px solid #e53e3e;background:#fff5f5">
-  <h2 style="color:#c53030;margin-bottom:4px">Danger zone</h2>
-  <div style="display:flex;align-items:center;gap:16px;flex-wrap:wrap">
-    <div style="flex:1;min-width:200px">
-      <strong style="font-size:13px;color:#1a1a1a">Delete all identity data</strong>
-      <p style="font-size:12px;margin:4px 0 0;color:#666">
-        Permanently removes all enrolled people, detected objects, detections,
-        face embeddings, and stored images. Settings, API keys, and model
-        configuration are not affected. Cannot be undone.
-      </p>
-    </div>
-    <button id="delete-all-data-btn"
-            style="background:#e53e3e;color:#fff;border:none;border-radius:var(--radius);
-                   padding:8px 16px;font-size:13px;font-weight:500;cursor:pointer;
-                   white-space:nowrap;flex-shrink:0">
-      Delete all data
-    </button>
-  </div>
-</div>
 {% endblock %}
 
 {% block scripts %}
@@ -299,16 +278,4 @@
 })();
 </script>
 {% endif %}
-<script>
-document.getElementById('delete-all-data-btn').addEventListener('click', () => {
-  showConfirm(
-    'This will permanently delete all enrolled people, detected objects, detections, face embeddings, and stored images. Settings and model configuration will not be affected. This cannot be undone.',
-    async () => {
-      const r = await fetch('/api/identities', { method: 'DELETE' });
-      if (r.ok) showMessage('All data deleted successfully.');
-    },
-    { confirmText: 'Delete all data', danger: true }
-  );
-});
-</script>
 {% endblock %}

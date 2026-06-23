@@ -128,21 +128,33 @@ def update_password(user_id: int, password_hash: str) -> None:
         )
 
 
-def get_pending_users() -> list[sqlite3.Row]:
+def list_managed_users(exclude_user_id: int) -> list[sqlite3.Row]:
+    """All accounts except the given one (the admin viewing the page), for management."""
     with _connect() as conn:
         return conn.execute(
-            "SELECT id, username, created_at FROM users WHERE is_approved = 0 ORDER BY created_at"
+            """SELECT id, username, created_at, is_approved, is_admin
+               FROM users WHERE id != ?
+               ORDER BY is_approved ASC, created_at ASC""",
+            (exclude_user_id,),
         ).fetchall()
 
 
-def approve_user(user_id: int) -> None:
+def set_user_approved(user_id: int, approved: bool) -> bool:
+    """Grant or revoke a non-admin account's access. Admin accounts are never changed."""
     with _connect() as conn:
-        conn.execute("UPDATE users SET is_approved = 1 WHERE id = ?", (user_id,))
+        conn.execute(
+            "UPDATE users SET is_approved = ? WHERE id = ? AND is_admin = 0",
+            (1 if approved else 0, user_id),
+        )
+        return conn.execute("SELECT changes()").fetchone()[0] > 0
 
 
-def reject_user(user_id: int) -> None:
+def delete_user(user_id: int) -> bool:
+    """Delete a non-admin account and cascade all its data (identities, detections,
+    references, source images, API keys). Admin accounts cannot be deleted."""
     with _connect() as conn:
-        conn.execute("DELETE FROM users WHERE id = ? AND is_approved = 0", (user_id,))
+        conn.execute("DELETE FROM users WHERE id = ? AND is_admin = 0", (user_id,))
+        return conn.execute("SELECT changes()").fetchone()[0] > 0
 
 
 def get_user_by_username(username: str) -> sqlite3.Row | None:

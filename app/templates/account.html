@@ -147,25 +147,45 @@
 </div>
 
 {% if is_admin %}
-<!-- Admin: pending registrations -->
-<div class="card">
-  <h2 style="margin-bottom:12px">Pending registrations</h2>
-  {% if pending_users %}
-    {% for u in pending_users %}
-    <div style="display:flex;align-items:center;gap:12px;padding:10px 0;border-bottom:1px solid var(--border)">
+<!-- Admin: user management -->
+<div class="card" style="margin-bottom:16px">
+  <h2 style="margin-bottom:4px">Users</h2>
+  <p class="muted" style="font-size:12px;margin-bottom:12px">
+    Approve registrations, revoke or restore access, and delete accounts.
+    Deleting an account permanently removes all of that user's data.
+  </p>
+  {% if managed_users %}
+    {% for u in managed_users %}
+    <div style="display:flex;align-items:center;gap:12px;padding:10px 0;border-bottom:1px solid var(--border);flex-wrap:wrap">
       <strong style="font-size:14px">{{ u.username }}</strong>
+      {% if u.is_approved %}
+      <span style="font-size:11px;font-weight:600;color:var(--success);border:1px solid var(--success);
+                   border-radius:10px;padding:1px 8px">Active</span>
+      {% else %}
+      <span style="font-size:11px;font-weight:600;color:var(--muted);border:1px solid var(--border);
+                   border-radius:10px;padding:1px 8px">No access</span>
+      {% endif %}
       <span class="muted" style="font-size:12px">Registered <time class="fmt-date" datetime="{{ u.created_at }}">{{ u.created_at }}</time></span>
       <span style="flex:1"></span>
+      {% if u.is_approved %}
+      <form method="post" action="/admin/revoke/{{ u.id }}" style="display:inline">
+        <button class="btn btn-ghost" style="padding:5px 12px;font-size:12px"
+                title="Block this user from signing in (keeps their data)">Revoke access</button>
+      </form>
+      {% else %}
       <form method="post" action="/admin/approve/{{ u.id }}" style="display:inline">
         <button class="btn btn-success" style="padding:5px 12px;font-size:12px">Approve</button>
       </form>
-      <form method="post" action="/admin/reject/{{ u.id }}" style="display:inline">
-        <button class="btn btn-danger" style="padding:5px 12px;font-size:12px">Reject</button>
-      </form>
+      {% endif %}
+      <button class="btn btn-danger" style="padding:5px 12px;font-size:12px"
+              onclick="showConfirm('Delete account &quot;{{ u.username }}&quot;? All of this user\'s identities, detections, references, and images will be permanently removed. This cannot be undone.',
+                () => document.getElementById('del-user-{{ u.id }}').submit(),
+                {confirmText:'Delete account', danger:true})">Delete</button>
+      <form id="del-user-{{ u.id }}" method="post" action="/admin/user/{{ u.id }}/delete" style="display:none"></form>
     </div>
     {% endfor %}
   {% else %}
-    <p class="muted">No pending registrations.</p>
+    <p class="muted">No other users.</p>
   {% endif %}
 </div>
 {% endif %}
@@ -201,10 +221,75 @@
   </div>
   <div id="import-result" style="margin-top:10px"></div>
 </div>
+
+<!-- Danger zone -->
+<div class="card" style="margin-top:16px;border:1px solid #e53e3e;background:#fff5f5">
+  <h2 style="color:#c53030;margin-bottom:4px">Danger zone</h2>
+  <div style="display:flex;align-items:center;gap:16px;flex-wrap:wrap">
+    <div style="flex:1;min-width:200px">
+      <strong style="font-size:13px;color:#1a1a1a">Delete all identity data</strong>
+      <p style="font-size:12px;margin:4px 0 0;color:#666">
+        Permanently removes all of your enrolled people, detected objects, detections,
+        face embeddings, and stored images. Your account, API keys, settings, and
+        model configuration are not affected. Cannot be undone.
+      </p>
+    </div>
+    <button id="delete-all-data-btn"
+            style="background:#e53e3e;color:#fff;border:none;border-radius:var(--radius);
+                   padding:8px 16px;font-size:13px;font-weight:500;cursor:pointer;
+                   white-space:nowrap;flex-shrink:0">
+      Delete all data
+    </button>
+  </div>
+  {% if not is_admin %}
+  <div style="display:flex;align-items:center;gap:16px;flex-wrap:wrap;margin-top:14px;
+              padding-top:14px;border-top:1px solid #f3c2c2">
+    <div style="flex:1;min-width:200px">
+      <strong style="font-size:13px;color:#1a1a1a">Delete account</strong>
+      <p style="font-size:12px;margin:4px 0 0;color:#666">
+        Permanently deletes your account and all of your data, then signs you out.
+        Cannot be undone.
+      </p>
+    </div>
+    <button id="delete-account-btn"
+            style="background:#fff;color:#c53030;border:1px solid #e53e3e;border-radius:var(--radius);
+                   padding:8px 16px;font-size:13px;font-weight:500;cursor:pointer;
+                   white-space:nowrap;flex-shrink:0">
+      Delete account
+    </button>
+  </div>
+  <form id="delete-account-form" method="post" action="/account/delete" style="display:none"></form>
+  {% endif %}
+</div>
 {% endblock %}
 
 {% block scripts %}
 <script>
+// ---------------------------------------------------------------------------
+// Danger zone — delete all of the current user's identity data
+// ---------------------------------------------------------------------------
+document.getElementById('delete-all-data-btn').addEventListener('click', () => {
+  showConfirm(
+    'This will permanently delete all of your enrolled people, detected objects, detections, face embeddings, and stored images. Your account, API keys, settings, and model configuration will not be affected. This cannot be undone.',
+    async () => {
+      const r = await fetch('/api/identities', { method: 'DELETE' });
+      if (r.ok) showMessage('All identity data deleted.');
+    },
+    { confirmText: 'Delete all data', danger: true }
+  );
+});
+
+const delAccountBtn = document.getElementById('delete-account-btn');
+if (delAccountBtn) {
+  delAccountBtn.addEventListener('click', () => {
+    showConfirm(
+      'This permanently deletes your account and all of your data, and signs you out. This cannot be undone.',
+      () => document.getElementById('delete-account-form').submit(),
+      { confirmText: 'Delete my account', danger: true }
+    );
+  });
+}
+
 function copyKey() {
   const text = document.getElementById('key-display').textContent;
 

@@ -52,13 +52,13 @@ LOCALES = [
 
 def _render(request: Request, user, error: str = "", success: str = ""):
     new_key = request.session.pop("new_key", None)
-    pending = store.get_pending_users() if user["is_admin"] else []
+    managed = store.list_managed_users(user["id"]) if user["is_admin"] else []
     keys = store.list_api_keys(user["id"])
     return templates.TemplateResponse(request, "account.html", {
         "username": user["username"],
         "is_admin": bool(user["is_admin"]),
         "keys": [dict(k) for k in keys],
-        "pending_users": [dict(p) for p in pending],
+        "managed_users": [dict(u) for u in managed],
         "new_key": new_key,
         "error": error,
         "success": success,
@@ -170,26 +170,62 @@ async def change_password(
 
 
 # ---------------------------------------------------------------------------
-# Admin — registration approvals
+# Self-service — delete own account (non-admin only)
 # ---------------------------------------------------------------------------
+
+@router.post("/account/delete")
+async def delete_own_account(request: Request):
+    user, redir = _require(request)
+    if redir:
+        return redir
+    if user["is_admin"]:
+        return _render(request, user, error="The admin account cannot be deleted.")
+    store.delete_user(user["id"])
+    request.session.clear()
+    resp = RedirectResponse("/login", status_code=303)
+    resp.delete_cookie("argus_remember")
+    return resp
+
+
+# ---------------------------------------------------------------------------
+# Admin — user management (approve, revoke/grant access, delete)
+# ---------------------------------------------------------------------------
+
+def _admin_or_redirect(request: Request):
+    """Return (user, None) if the caller is an admin, else (None, redirect)."""
+    user, redir = _require(request)
+    if redir:
+        return None, redir
+    if not user["is_admin"]:
+        return None, RedirectResponse("/account", status_code=303)
+    return user, None
+
 
 @router.post("/admin/approve/{user_id}")
 async def approve_user(user_id: int, request: Request):
-    user, redir = _require(request)
+    user, redir = _admin_or_redirect(request)
     if redir:
         return redir
-    if not user["is_admin"]:
-        return RedirectResponse("/account", status_code=303)
-    store.approve_user(user_id)
+    store.set_user_approved(user_id, True)
     return RedirectResponse("/account", status_code=303)
 
 
-@router.post("/admin/reject/{user_id}")
-async def reject_user(user_id: int, request: Request):
-    user, redir = _require(request)
+@router.post("/admin/revoke/{user_id}")
+async def revoke_user(user_id: int, request: Request):
+    user, redir = _admin_or_redirect(request)
     if redir:
         return redir
-    if not user["is_admin"]:
-        return RedirectResponse("/account", status_code=303)
-    store.reject_user(user_id)
+    store.set_user_approved(user_id, False)
+    return RedirectResponse("/account", status_code=303)
+
+
+@router.post("/admin/user/{user_id}/delete")
+async def admin_delete_user(user_id: int, request: Request):
+    user, redir = _admin_or_redirect(request)
+    if redir:
+        return redir
+    if user_id != user["id"]:  # never delete yourself here
+        store.delete_user(user_id)
+        from app.core import face_index as _fi
+        _fi.rebuild_user(user_id)  # drop their entries from the in-memory index
     return RedirectResponse("/account", status_code=303)

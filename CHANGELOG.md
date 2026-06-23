@@ -10,6 +10,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 ### Changed
 
 - The identity gallery header ("N detections · M references") now updates **live** when you delete a detection, bulk-remove, or bulk-reassign — no page reload. Removing a crop decrements the detection count, and if it was an enrolled reference, the reference count too.
+- **"Delete all identity data" moved from Settings to the Account page.** Identity data is per-user, but Settings is now admin-only — so the wipe action lives on Account, where every user can clear their *own* data (the `DELETE /api/identities` endpoint is already user-scoped). Wording updated to "all of your … data".
 - **Settings and Models are now admin-only.** Both are instance-global (settings and the model registry are shared by every account in a single Argus instance), so only the admin (the first registered account) can view or change them. Non-admin accounts no longer see the Settings/Models nav links, are redirected away from those pages, and get `403` from `/api/settings/*` and `/api/models/*`. This prevents a secondary/test account from changing thresholds, the active model, or the match strategy for everyone.
 - Every face surface now shows **match similarity** instead of face-detection confidence (det_score), which was being mistaken for identity certainty:
   - **Gallery** badge — each crop's similarity to the person's reference set.
@@ -32,6 +33,8 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Added
 
+- **Account management.** Any non-admin user can now **delete their own account** (Account → Danger zone → Delete account), which removes their account and cascades all their data, then signs them out. The admin account cannot self-delete.
+- **Admin user management** on the Account page (replaces the old "Pending registrations" card with a fuller "Users" card): approve pending registrations, **revoke** or **restore** access (block sign-in without deleting data), and **delete** any non-admin account. Admin accounts are protected at the store level (cannot be revoked or deleted).
 - `face.match_strategy` setting — **Best match** (default; compares against every reference photo and uses the closest) or **Average** (one blended centroid per person, faster/steadier). Best match keeps enrolled photos at ~100% and recognizes people who look different across photos (age, glasses, lighting) better; the cost is indexing every reference instead of one centroid (negligible at self-hosted scale). Changing it rebuilds the match index; the gallery/tag similarity shown follows the active strategy.
 - `DELETE /api/detections/{id}/enroll` — removes a crop from an identity's reference set (inverse of the existing `POST`), so the gallery's reference button is a true toggle.
 - Identity gallery items now include an `enrolled` flag (whether the crop is in the reference set).
