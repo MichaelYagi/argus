@@ -10,8 +10,9 @@
 </div>
 
 <div class="stat-grid" id="stats">
-  <div class="stat"><div class="num" id="s-ident">—</div><div class="lbl">Identities</div></div>
   <div class="stat"><div class="num" id="s-faces">—</div><div class="lbl">People</div></div>
+  <div class="stat"><div class="num" id="s-objects">—</div><div class="lbl">Objects</div></div>
+  <div class="stat"><div class="num" id="s-images">—</div><div class="lbl">Images processed</div></div>
   <div class="stat"><div class="num" id="s-review">—</div><div class="lbl">Pending review</div></div>
 </div>
 
@@ -260,22 +261,17 @@ async function loadMore(type) {
 
 // Stats — refreshed on load, every 30s, and after bulk actions
 async function refreshStats() {
-  const [faceResp, objResp, rvResp] = await Promise.all([
-    fetch('/api/identities/summary?type=face&limit=1'),
-    fetch('/api/identities/summary?type=object&limit=1'),
-    fetch('/api/review/count'),
-  ]);
-  if (!faceResp.ok || !objResp.ok || !rvResp.ok) return;
-  const [fd, od, rv] = await Promise.all([faceResp.json(), objResp.json(), rvResp.json()]);
-  const faceTotal = fd.total ?? 0;
-  const objTotal  = od.total ?? 0;
-  document.getElementById('s-ident').textContent  = faceTotal + objTotal;
-  document.getElementById('s-faces').textContent  = faceTotal;
-  document.getElementById('s-review').textContent = rv.count ?? 0;
+  const resp = await fetch('/api/stats');
+  if (!resp.ok) return;
+  const d = await resp.json();
+  document.getElementById('s-faces').textContent   = d.people   ?? 0;
+  document.getElementById('s-objects').textContent = d.objects  ?? 0;
+  document.getElementById('s-images').textContent  = d.images   ?? 0;
+  document.getElementById('s-review').textContent  = d.pending_review ?? 0;
 
   // Populate both tab badges on load so Objects isn't blank until first visited
-  setTabBadge('face', faceTotal);
-  setTabBadge('object', objTotal);
+  setTabBadge('face',   d.people  ?? 0);
+  setTabBadge('object', d.objects ?? 0);
 }
 
 function setTabBadge(type, total) {

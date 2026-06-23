@@ -24,6 +24,17 @@ class _CreateBody(BaseModel):
 # Identity CRUD
 # ---------------------------------------------------------------------------
 
+@router.get("/api/stats")
+async def stats(user_id: int = Depends(require_auth)):
+    """Aggregate counts for the dashboard — single round-trip."""
+    return {
+        "people":         store.count_identities(user_id, identity_type="face"),
+        "objects":        store.count_identities(user_id, identity_type="object"),
+        "images":         store.count_source_images(user_id),
+        "pending_review": store.count_pending_review(user_id),
+    }
+
+
 @router.get("/api/identities/summary")
 async def identities_summary(
     type: Optional[str] = Query(None),

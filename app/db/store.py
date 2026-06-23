@@ -849,6 +849,14 @@ def get_face_embeddings_for_model(model_id: int, user_id: int) -> list[sqlite3.R
         ).fetchall()
 
 
+def count_source_images(user_id: int) -> int:
+    with _connect() as conn:
+        return conn.execute(
+            "SELECT COUNT(*) FROM source_images WHERE user_id = ?",
+            (user_id,),
+        ).fetchone()[0]
+
+
 def count_pending_review(user_id: int) -> int:
     with _connect() as conn:
         return conn.execute(
