@@ -15,6 +15,25 @@
     const n = Math.max(0, cur + delta);
     el.textContent = `${n} reference${n !== 1 ? 's' : ''}`;
   }
+  function adjustDetCount(delta) {
+    const el = document.getElementById('det-count-label');
+    if (!el) return;
+    const cur = parseInt(el.textContent, 10) || 0;
+    const n = Math.max(0, cur + delta);
+    el.textContent = `${n} detection${n !== 1 ? 's' : ''}`;
+  }
+  // Drop one or more items from the local model and update both header counts
+  // (a removed detection also removes its reference if it was enrolled).
+  function removeItems(ids) {
+    ids.forEach(id => {
+      const idx = allItems.findIndex(i => i.detection_id === id);
+      if (idx === -1) return;
+      const wasEnrolled = !!allItems[idx].enrolled;
+      allItems.splice(idx, 1);
+      adjustDetCount(-1);
+      if (wasEnrolled) adjustRefCount(-1);
+    });
+  }
   const GAP = 4;
   const TARGET_H = 200;
   let cursor = null, hasMore = true, loading = false;
@@ -46,10 +65,7 @@
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(items),
         });
-        selected.forEach(id => {
-          const idx = allItems.findIndex(i => i.detection_id === id);
-          if (idx !== -1) allItems.splice(idx, 1);
-        });
+        removeItems([...selected]);
         selected.clear();
         updateBulkBar();
         render();
@@ -69,10 +85,7 @@
         body: JSON.stringify(items),
       });
       addFaceLabel(label);
-      selected.forEach(id => {
-        const idx = allItems.findIndex(i => i.detection_id === id);
-        if (idx !== -1) allItems.splice(idx, 1);
-      });
+      removeItems([...selected]);
       selected.clear();
       updateBulkBar();
       render();
@@ -175,8 +188,7 @@
           showConfirm('Delete this detection permanently?', async () => {
             const resp = await fetch(`/api/detections/${item.detection_id}`, { method: 'DELETE' });
             if (resp.ok || resp.status === 204) {
-              const idx = allItems.findIndex(i => i.detection_id === item.detection_id);
-              if (idx !== -1) allItems.splice(idx, 1);
+              removeItems([item.detection_id]);
               selected.delete(item.detection_id);
               updateBulkBar();
               render();
