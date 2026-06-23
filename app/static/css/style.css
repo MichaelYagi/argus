@@ -322,6 +322,16 @@ input[type=range] { width: 150px; cursor: pointer; }
 .muted { color: var(--muted); }
 .loading { text-align: center; padding: 24px; color: var(--muted); }
 
+/* ---------- Source image modal ---------- */
+.src-modal { position: fixed; inset: 0; background: rgba(0,0,0,.85); z-index: 800;
+             display: flex; align-items: center; justify-content: center; }
+.src-modal img { max-width: 90vw; max-height: 85vh; object-fit: contain;
+                 display: block; border-radius: var(--radius); }
+.src-modal-close { position: absolute; top: 16px; right: 20px;
+                   background: rgba(0,0,0,.6); border: 1px solid rgba(255,255,255,.25);
+                   color: #fff; font-size: 20px; line-height: 1; padding: 4px 10px;
+                   border-radius: var(--radius); cursor: pointer; }
+
 /* ---------- Tag page ---------- */
 #tag-wrap { position: relative; display: inline-block; }
 #tag-wrap img { max-width: 90vw; max-height: 82vh; display: block; }

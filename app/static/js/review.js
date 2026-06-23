@@ -119,7 +119,8 @@
       <div style="display:flex;width:100%;align-items:flex-start;gap:8px">
         <input type="checkbox" class="rc-check" data-id="${item.detection_id}" style="margin-top:4px;flex-shrink:0">
         <img src="${esc(item.crop_url)}" alt=""
-             style="width:110px;height:110px;object-fit:cover;border-radius:4px;flex-shrink:0">
+             style="width:110px;height:110px;object-fit:cover;border-radius:4px;flex-shrink:0;${item.source_image_url ? 'cursor:pointer' : ''}"
+             ${item.source_image_url ? `onclick="openSourceModal('${esc(item.source_image_url)}')"` : ''}>
         <div class="rc-info" style="flex:1;min-width:0">
 
           <div style="display:flex;width:100%;align-items:baseline;margin-bottom:10px">
@@ -173,6 +174,27 @@
     const raInput = card.querySelector('#ra-' + item.detection_id);
     container.appendChild(card);
     makeAutocomplete(raInput);
+  }
+
+  window.openSourceModal = function openSourceModal(url) {
+    if (!url) return;
+    document.querySelectorAll('.src-modal').forEach(m => m.remove());
+    const overlay = document.createElement('div');
+    overlay.className = 'src-modal';
+    const img = document.createElement('img');
+    img.src = url;
+    img.alt = '';
+    const closeBtn = document.createElement('button');
+    closeBtn.className = 'src-modal-close';
+    closeBtn.textContent = '×';
+    overlay.appendChild(img);
+    overlay.appendChild(closeBtn);
+    document.body.appendChild(overlay);
+    const close = () => overlay.remove();
+    closeBtn.addEventListener('click', close);
+    overlay.addEventListener('click', e => { if (e.target === overlay) close(); });
+    const onKey = e => { if (e.key === 'Escape') { close(); document.removeEventListener('keydown', onKey); } };
+    document.addEventListener('keydown', onKey);
   }
 
   function removeCard(id) {

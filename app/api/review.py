@@ -234,10 +234,12 @@ def _fmt_review_item(row: Any, model_id: int | None, user_id: int) -> dict | Non
         {"identity_id": row["identity_id"], "label": row["current_label"]}
         if row["identity_id"] else None
     )
+    src_path = row["source_image_path"] if row["source_image_path"] else None
     return {
         "detection_id": row["id"],
         "crop_url": f"/media/crops/{row['crop_path']}",
         "source_image_id": row["source_image_id"],
+        "source_image_url": f"/media/sources/{src_path}" if src_path else None,
         "confidence": row["confidence"],
         "detected_at": row["detected_at"],
         "current_identity": current,

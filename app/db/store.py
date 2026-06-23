@@ -883,9 +883,11 @@ def get_review_queue(
             rows = conn.execute(
                 """SELECT d.id, d.source_image_id, d.model_id, d.confidence,
                           d.crop_path, d.detected_at, d.identity_id, d.embedding,
-                          i.label AS current_label
+                          i.label AS current_label,
+                          si.file_path AS source_image_path
                    FROM detections d
                    LEFT JOIN identities i ON d.identity_id = i.id
+                   LEFT JOIN source_images si ON si.id = d.source_image_id
                    WHERE d.user_id = ? AND d.review_status = 'pending' AND d.type = 'face'
                      AND (d.confidence > ? OR (d.confidence = ? AND d.id > ?))
                    ORDER BY d.confidence ASC, d.id ASC LIMIT ?""",
@@ -895,9 +897,11 @@ def get_review_queue(
             rows = conn.execute(
                 """SELECT d.id, d.source_image_id, d.model_id, d.confidence,
                           d.crop_path, d.detected_at, d.identity_id, d.embedding,
-                          i.label AS current_label
+                          i.label AS current_label,
+                          si.file_path AS source_image_path
                    FROM detections d
                    LEFT JOIN identities i ON d.identity_id = i.id
+                   LEFT JOIN source_images si ON si.id = d.source_image_id
                    WHERE d.user_id = ? AND d.review_status = 'pending' AND d.type = 'face'
                    ORDER BY d.confidence ASC, d.id ASC LIMIT ?""",
                 (user_id, limit + 1),
