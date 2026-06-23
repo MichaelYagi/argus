@@ -130,15 +130,28 @@ async def set_cover(identity_id: int, body: _CoverBody, user_id: int = Depends(r
 
 @router.delete("/api/identities/{identity_id}", status_code=204)
 async def delete_identity(identity_id: int, user_id: int = Depends(require_auth)):
-    if not store.delete_identity(identity_id, user_id):
+    from app.core.paths import crops_dir
+    deleted, crops = store.delete_identity(identity_id, user_id)
+    if not deleted:
         raise HTTPException(404, "Identity not found")
+    for crop in crops:
+        try:
+            (crops_dir() / crop).unlink(missing_ok=True)
+        except OSError:
+            pass
     from app.core import face_index as _fi
     _fi.rebuild_user(user_id)
 
 
 @router.delete("/api/identities", status_code=200)
 async def delete_all_identities(user_id: int = Depends(require_auth)):
-    count = store.delete_all_identities(user_id)
+    from app.core.paths import crops_dir
+    count, crops = store.delete_all_identities(user_id)
+    for crop in crops:
+        try:
+            (crops_dir() / crop).unlink(missing_ok=True)
+        except OSError:
+            pass
     from app.core import face_index as _fi
     _fi.rebuild_user(user_id)
     return {"deleted": count}

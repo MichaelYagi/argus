@@ -316,21 +316,68 @@ def create_identity(user_id: int, identity_type: str, label: str) -> int:
         return conn.execute("SELECT last_insert_rowid()").fetchone()[0]
 
 
-def delete_identity(identity_id: int, user_id: int) -> bool:
+def delete_identity(identity_id: int, user_id: int) -> tuple[bool, list[str]]:
+    """Delete an identity, its detections, and any source images that become orphaned.
+
+    Returns (deleted, crop_filenames) so the caller can remove crop files from disk.
+    face_embeddings are removed via FK ON DELETE CASCADE when the identity row is deleted.
+    """
     with _connect() as conn:
+        if not conn.execute(
+            "SELECT 1 FROM identities WHERE id = ? AND user_id = ?",
+            (identity_id, user_id),
+        ).fetchone():
+            return False, []
+
+        crops = [
+            r["crop_path"]
+            for r in conn.execute(
+                "SELECT crop_path FROM detections WHERE identity_id = ? AND user_id = ?",
+                (identity_id, user_id),
+            ).fetchall()
+        ]
+
+        source_ids = [
+            r[0]
+            for r in conn.execute(
+                "SELECT DISTINCT source_image_id FROM detections WHERE identity_id = ? AND user_id = ?",
+                (identity_id, user_id),
+            ).fetchall()
+        ]
+
+        conn.execute(
+            "DELETE FROM detections WHERE identity_id = ? AND user_id = ?",
+            (identity_id, user_id),
+        )
+
+        for sid in source_ids:
+            if conn.execute(
+                "SELECT COUNT(*) FROM detections WHERE source_image_id = ?", (sid,)
+            ).fetchone()[0] == 0:
+                conn.execute("DELETE FROM source_images WHERE id = ?", (sid,))
+
         conn.execute(
             "DELETE FROM identities WHERE id = ? AND user_id = ?",
             (identity_id, user_id),
         )
-        return conn.execute("SELECT changes()").fetchone()[0] > 0
+        return True, crops
 
 
-def delete_all_identities(user_id: int) -> int:
-    """Delete all identities and related data for a user. Returns count of identities deleted."""
+def delete_all_identities(user_id: int) -> tuple[int, list[str]]:
+    """Delete all identities and related data for a user.
+
+    Returns (count, crop_filenames) so the caller can remove crop files from disk.
+    """
     with _connect() as conn:
         count = conn.execute(
             "SELECT COUNT(*) FROM identities WHERE user_id = ?", (user_id,)
         ).fetchone()[0]
+        crops = [
+            r["crop_path"]
+            for r in conn.execute(
+                "SELECT crop_path FROM detections WHERE user_id = ?", (user_id,)
+            ).fetchall()
+        ]
         conn.execute(
             "DELETE FROM face_embeddings WHERE identity_id IN "
             "(SELECT id FROM identities WHERE user_id = ?)", (user_id,)
@@ -338,7 +385,7 @@ def delete_all_identities(user_id: int) -> int:
         conn.execute("DELETE FROM detections WHERE user_id = ?", (user_id,))
         conn.execute("DELETE FROM source_images WHERE user_id = ?", (user_id,))
         conn.execute("DELETE FROM identities WHERE user_id = ?", (user_id,))
-        return count
+        return count, crops
 
 
 def count_identities(user_id: int, identity_type: str | None = None) -> int:
@@ -475,14 +522,22 @@ def insert_face_embedding(
 
 def get_or_create_identity(user_id: int, identity_type: str, label: str) -> int:
     with _connect() as conn:
+        # Case-insensitive lookup first — prevents duplicate identities when a caller
+        # sends a different case than what's stored (e.g. "noah" vs "Noah").
+        # Returns the oldest matching identity to stay deterministic if duplicates exist.
+        existing = conn.execute(
+            """SELECT id FROM identities
+               WHERE user_id = ? AND type = ? AND LOWER(label) = LOWER(?)
+               ORDER BY id ASC LIMIT 1""",
+            (user_id, identity_type, label),
+        ).fetchone()
+        if existing:
+            return existing[0]
         conn.execute(
-            "INSERT OR IGNORE INTO identities (user_id, type, label) VALUES (?, ?, ?)",
+            "INSERT INTO identities (user_id, type, label) VALUES (?, ?, ?)",
             (user_id, identity_type, label),
         )
-        return conn.execute(
-            "SELECT id FROM identities WHERE user_id = ? AND type = ? AND label = ?",
-            (user_id, identity_type, label),
-        ).fetchone()[0]
+        return conn.execute("SELECT last_insert_rowid()").fetchone()[0]
 
 
 def get_identity(identity_id: int, user_id: int) -> sqlite3.Row | None:
