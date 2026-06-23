@@ -162,7 +162,11 @@
           img.style.cursor = 'zoom-in';
           img.addEventListener('click', e => {
             e.stopPropagation();
-            openSourceModal(item.source_image_url);
+            if (selected.size > 0) {
+              toggleItem();
+            } else {
+              openSourceModal(item.source_image_url);
+            }
           });
         }
         el.appendChild(img);
