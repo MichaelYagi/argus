@@ -114,7 +114,7 @@ def open_and_validate(image_bytes: bytes) -> Any:
 
     Returns a PIL Image.  Raises 400 for corrupt data, 415 for unsupported format.
     """
-    from PIL import Image
+    from PIL import Image, ImageOps
 
     try:
         img = Image.open(io.BytesIO(image_bytes))
@@ -128,6 +128,11 @@ def open_and_validate(image_bytes: bytes) -> Any:
 
     if fmt in ("GIF", "MPO"):
         img.seek(0)
+
+    # Apply EXIF orientation so that crops and source images are upright.
+    # Phone cameras store pixels sideways and embed a rotation tag; without this,
+    # face crops are saved rotated and InsightFace detects faces at the wrong angle.
+    img = ImageOps.exif_transpose(img)
 
     return img
 
