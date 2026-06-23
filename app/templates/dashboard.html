@@ -143,10 +143,7 @@ function makeCard(d, type) {
   a.className = 'identity-thumb';
   a.dataset.id = d.id;
   a.style.position = 'relative';
-  const refs = d.embedding_count ?? 0;
-  const countLine = d.type === 'face'
-    ? `${d.detection_count} detection${d.detection_count !== 1 ? 's' : ''} · ${refs} reference${refs !== 1 ? 's' : ''}`
-    : `${d.detection_count} detection${d.detection_count !== 1 ? 's' : ''}`;
+  const countLine = `${d.detection_count} detection${d.detection_count !== 1 ? 's' : ''}`;
   a.innerHTML = img +
     `<div class="it-name">${d.label}</div>` +
     `<div class="it-count">${countLine}</div>`;
