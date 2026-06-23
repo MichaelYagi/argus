@@ -240,6 +240,45 @@ curl -X POST \
   http://localhost:8100/api/faces/enroll
 ```
 
+**Facial attributes (age, gender, head pose).** Face detections include `age`, `gender`
+(`"M"`/`"F"`), and `pose` (`[pitch, yaw, roll]` in degrees) when the active model provides
+them — all three bundled packs (buffalo_l, buffalo_s, antelopev2) do. They're returned by
+`/api/detect/*`, `/api/identify`, `/api/verify`, and `/api/images/{id}/faces`, and stored
+per detection. Any value the model doesn't produce comes back as `null`.
+
+**Example — identify (1:N, read-only): "who is in this photo?"**
+
+Detects faces and matches them against your enrolled people **without storing anything**
+(no crops, detections, or review entries). Best match per face plus ranked suggestions.
+
+```bash
+curl -X POST \
+  -H "X-API-Key: argus_..." \
+  -F "file=@group.jpg" \
+  http://localhost:8100/api/identify
+# → {"threshold": 0.5, "faces": [
+#      {"bbox": {...}, "confidence": 0.99, "identity_id": 2, "label": "Noah",
+#       "similarity": 0.71, "suggestions": [...], "age": 9, "gender": "M", "pose": [...]}]}
+```
+
+Optional `threshold` (override) and `top_n` (suggestion count) via form field, JSON, or query.
+
+**Example — verify (1:1): "are these two faces the same person?"**
+
+Compares two images directly. Stores nothing.
+
+```bash
+curl -X POST \
+  -H "X-API-Key: argus_..." \
+  -F "file1=@a.jpg" -F "file2=@b.jpg" \
+  http://localhost:8100/api/verify
+# → {"similarity": 0.83, "match": true, "threshold": 0.5,
+#    "face1": {"bbox": {...}, "confidence": 0.99, "age": 31, "gender": "F", "pose": [...]},
+#    "face2": {...}}
+```
+
+Each image is one of `file{1,2}` / `image{1,2}_url` / `image{1,2}_base64`. Optional `threshold` override.
+
 **Example — relabel a detection:**
 
 ```bash

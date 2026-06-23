@@ -14,6 +14,11 @@ class FaceDetection:
     bbox: tuple[int, int, int, int]  # (x, y, w, h)
     confidence: float
     embedding: Any  # numpy float32 array, shape (embedding_dim,)
+    # Optional facial attributes from the model pack (genderage + 3d68 pose).
+    # None when a model/face object doesn't provide them — never required.
+    age: int | None = None
+    gender: str | None = None            # 'M' or 'F'
+    pose: tuple[float, float, float] | None = None  # (pitch, yaw, roll), degrees
 
 
 def _face_ctx_id() -> int:
@@ -57,5 +62,47 @@ class FaceEngine:
                 bbox=(x1, y1, w, h),
                 confidence=float(face.det_score),
                 embedding=face.embedding.astype(np.float32),
+                age=_attr_age(face),
+                gender=_attr_gender(face),
+                pose=_attr_pose(face),
             ))
         return detections
+
+
+# ---------------------------------------------------------------------------
+# Attribute extraction — defensive: any missing/odd value yields None, never raises
+# ---------------------------------------------------------------------------
+
+def _attr_age(face: Any) -> int | None:
+    try:
+        age = getattr(face, "age", None)
+        return int(age) if age is not None else None
+    except (TypeError, ValueError):
+        return None
+
+
+def _attr_gender(face: Any) -> str | None:
+    # InsightFace exposes `.sex` ('M'/'F') derived from the genderage model.
+    try:
+        sex = getattr(face, "sex", None)
+        if sex in ("M", "F"):
+            return sex
+        gender = getattr(face, "gender", None)  # fallback: 1=male, 0=female
+        if gender in (0, 1):
+            return "M" if gender == 1 else "F"
+    except (TypeError, ValueError):
+        pass
+    return None
+
+
+def _attr_pose(face: Any) -> tuple[float, float, float] | None:
+    try:
+        pose = getattr(face, "pose", None)
+        if pose is None:
+            return None
+        vals = [round(float(v), 1) for v in pose]
+        if len(vals) != 3:
+            return None
+        return (vals[0], vals[1], vals[2])
+    except (TypeError, ValueError):
+        return None

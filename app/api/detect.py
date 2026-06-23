@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+import json
 import uuid
 from typing import Any
 
@@ -11,7 +12,13 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from app.core import settings_cache
 from app.core.auth import require_auth
 from app.core.engine_registry import registry
-from app.core.image_input import acquire_image, fetch_url, open_and_validate, to_rgb_array
+from app.core.image_input import (
+    acquire_image,
+    acquire_image_slot,
+    fetch_url,
+    open_and_validate,
+    to_rgb_array,
+)
 from app.core.paths import crops_dir, sources_dir
 from app.db import store
 
@@ -128,6 +135,95 @@ async def detect_bulk(request: Request, user_id: int = Depends(require_auth)):
 
 
 # ---------------------------------------------------------------------------
+# Verify (1:1) and Identify (1:N, read-only) — neither stores anything
+# ---------------------------------------------------------------------------
+
+@router.post("/api/verify")
+async def verify(request: Request, user_id: int = Depends(require_auth)):
+    """1:1 face verification — are the two supplied images the same person?
+
+    Two images, each as exactly one of file{n}/image{n}_url/image{n}_base64.
+    Stores nothing. Uses the highest-confidence face in each image.
+    """
+    raw1 = await acquire_image_slot(request, 1)
+    raw2 = await acquire_image_slot(request, 2)
+    threshold = await _extract_threshold(request)
+
+    _require_face_engine()  # 503 if no active face model
+    engine = registry.get_face_engine()
+    if threshold is None:
+        threshold = settings_cache.cache.get_or("face.match_threshold", 0.5)
+
+    face1 = _top_face(engine, raw1)
+    if face1 is None:
+        raise HTTPException(400, "No face found in image 1")
+    face2 = _top_face(engine, raw2)
+    if face2 is None:
+        raise HTTPException(400, "No face found in image 2")
+
+    sim = store.cosine_similarity(
+        _embedding_to_bytes(face1.embedding), _embedding_to_bytes(face2.embedding)
+    )
+    sim = round(float(sim), 4) if sim is not None else 0.0
+    return {
+        "similarity": sim,
+        "match": sim >= threshold,
+        "threshold": threshold,
+        "face1": _face_summary(face1),
+        "face2": _face_summary(face2),
+    }
+
+
+@router.post("/api/identify")
+async def identify(request: Request, user_id: int = Depends(require_auth)):
+    """1:N identification — who is each face, among this user's enrolled people?
+
+    One image (file/image_url/image_base64). Read-only: stores nothing. Returns the
+    best match per face (null below threshold, with the best-guess similarity) plus a
+    ranked suggestion list.
+    """
+    raw = await acquire_image(request)
+    threshold = await _extract_threshold(request)
+    top_n = await _extract_top_n(request)
+
+    _require_face_engine()
+    engine = registry.get_face_engine()
+    if threshold is None:
+        threshold = settings_cache.cache.get_or("face.match_threshold", 0.5)
+
+    from app.core import face_index
+
+    img = open_and_validate(raw)
+    faces = engine.detect(to_rgb_array(img))
+
+    results = []
+    for det in faces:
+        ranked = face_index.search(det.embedding, user_id, threshold=0.0, k=top_n)
+        suggestions = []
+        for iid, s in ranked:
+            ident = store.get_identity(iid, user_id)
+            if ident:
+                suggestions.append({
+                    "identity_id": iid,
+                    "label": ident["label"],
+                    "similarity": round(float(s), 4),
+                })
+        best = suggestions[0] if suggestions else None
+        matched = best if (best and best["similarity"] >= threshold) else None
+        results.append({
+            "bbox": {"x": det.bbox[0], "y": det.bbox[1], "w": det.bbox[2], "h": det.bbox[3]},
+            "confidence": round(float(det.confidence), 4),
+            "identity_id": matched["identity_id"] if matched else None,
+            "label": matched["label"] if matched else None,
+            "similarity": best["similarity"] if best else None,
+            "suggestions": suggestions,
+            **_face_attrs(det),
+        })
+
+    return {"threshold": threshold, "faces": results}
+
+
+# ---------------------------------------------------------------------------
 # Detection pipelines
 # ---------------------------------------------------------------------------
 
@@ -226,6 +322,7 @@ def _run_faces(user_id: int, img: Any, source_id: int, label: str | None = None)
                 else "pending"
             )
 
+        attrs = _face_attrs(det)
         crop_filename = _save_crop(img, det.bbox, padding)
         detection_id = store.insert_detection(
             user_id=user_id,
@@ -241,6 +338,7 @@ def _run_faces(user_id: int, img: Any, source_id: int, label: str | None = None)
             crop_path=crop_filename,
             embedding=_embedding_to_bytes(det.embedding),
             review_status=review_status,
+            attributes=json.dumps(attrs),
         )
 
         display_label = label
@@ -261,6 +359,7 @@ def _run_faces(user_id: int, img: Any, source_id: int, label: str | None = None)
             "label": display_label,
             "crop_url": f"/media/crops/{crop_filename}",
             "review_status": review_status,
+            **attrs,
         })
 
     return results
@@ -342,6 +441,87 @@ def _save_crop(img: Any, bbox: tuple[int, int, int, int], padding: float) -> str
     filename = f"{uuid.uuid4().hex}.jpg"
     crop.save(crop_dir / filename, "JPEG")
     return filename
+
+
+def _face_attrs(det: Any) -> dict:
+    """Serializable facial attributes for a FaceDetection (age, gender, pose).
+    Values are None when the model didn't provide them."""
+    return {
+        "age": det.age,
+        "gender": det.gender,
+        "pose": list(det.pose) if det.pose is not None else None,
+    }
+
+
+def _require_face_engine() -> None:
+    """Raise 503 if no active face model / engine is loaded."""
+    if store.get_active_model("face") is None:
+        raise HTTPException(503, "No active face model. Download and activate one via /api/models.")
+    if registry.get_face_engine() is None:
+        raise HTTPException(503, "Face engine not loaded. Activate a model via /api/models/{id}/activate.")
+
+
+def _top_face(engine: Any, raw: bytes) -> Any | None:
+    """Highest-confidence face in an image, or None if no face is found."""
+    img = open_and_validate(raw)
+    faces = engine.detect(to_rgb_array(img))
+    return max(faces, key=lambda f: f.confidence) if faces else None
+
+
+def _face_summary(face: Any) -> dict:
+    """Compact face description for the verify response."""
+    return {
+        "bbox": {"x": face.bbox[0], "y": face.bbox[1], "w": face.bbox[2], "h": face.bbox[3]},
+        "confidence": round(float(face.confidence), 4),
+        **_face_attrs(face),
+    }
+
+
+async def _extract_threshold(request: Request) -> float | None:
+    """Read an optional `threshold` override (query param, multipart form, or JSON)."""
+    raw = request.query_params.get("threshold")
+    if raw is None:
+        ct = request.headers.get("content-type", "")
+        try:
+            if "multipart/form-data" in ct:
+                v = (await request.form()).get("threshold")
+                raw = str(v) if v is not None else None
+            elif "application/json" in ct:
+                v = (await request.json()).get("threshold")
+                raw = str(v) if v is not None else None
+        except Exception:
+            raw = None
+    if raw is None or str(raw).strip() == "":
+        return None
+    try:
+        val = float(raw)
+    except (TypeError, ValueError):
+        raise HTTPException(400, "threshold must be a number between 0 and 1")
+    if not 0.0 <= val <= 1.0:
+        raise HTTPException(400, "threshold must be between 0 and 1")
+    return val
+
+
+async def _extract_top_n(request: Request, default: int = 5) -> int:
+    """Read an optional `top_n` for the identify suggestion list (1..20)."""
+    raw = request.query_params.get("top_n")
+    if raw is None:
+        ct = request.headers.get("content-type", "")
+        try:
+            if "multipart/form-data" in ct:
+                v = (await request.form()).get("top_n")
+                raw = str(v) if v is not None else None
+            elif "application/json" in ct:
+                v = (await request.json()).get("top_n")
+                raw = str(v) if v is not None else None
+        except Exception:
+            raw = None
+    if raw is None or str(raw).strip() == "":
+        return default
+    try:
+        return max(1, min(20, int(raw)))
+    except (TypeError, ValueError):
+        return default
 
 
 def _embedding_to_bytes(embedding: Any) -> bytes | None:

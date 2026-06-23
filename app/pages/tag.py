@@ -42,16 +42,30 @@ async def tag_page(source_image_id: int, request: Request):
         return (store.best_cosine(row["embedding"], ref) if best_match
                 else store.cosine_similarity(row["embedding"], ref))
 
-    face_data = [
-        {
+    def _attrs(row):
+        try:
+            raw = row["attributes"]
+        except (IndexError, KeyError):
+            raw = None
+        data = {}
+        if raw:
+            try:
+                data = json.loads(raw) or {}
+            except (ValueError, TypeError):
+                data = {}
+        return data.get("age"), data.get("gender"), data.get("pose")
+
+    face_data = []
+    for r in faces:
+        age, gender, pose = _attrs(r)
+        face_data.append({
             "id": r["id"],
             "x": r["bbox_x"], "y": r["bbox_y"],
             "w": r["bbox_w"], "h": r["bbox_h"],
             "label": r["identity_label"] or "",
             "similarity": _similarity(r),
-        }
-        for r in faces
-    ]
+            "age": age, "gender": gender, "pose": pose,
+        })
 
     return templates.TemplateResponse(request, "tag.html", {
         "username": request.session.get("username", ""),

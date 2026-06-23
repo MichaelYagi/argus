@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -12,6 +13,21 @@ from app.core.paths import crops_dir
 from app.db import store
 
 router = APIRouter()
+
+
+def _parse_attributes(row) -> dict:
+    """Parse the stored attributes JSON into {age, gender, pose}; all None if absent."""
+    try:
+        raw = row["attributes"]
+    except (IndexError, KeyError):
+        raw = None
+    data = {}
+    if raw:
+        try:
+            data = json.loads(raw) or {}
+        except (ValueError, TypeError):
+            data = {}
+    return {"age": data.get("age"), "gender": data.get("gender"), "pose": data.get("pose")}
 
 
 @router.get("/api/images/{source_image_id}/faces")
@@ -35,6 +51,7 @@ async def image_faces(source_image_id: int, user_id: int = Depends(require_auth)
                 "label": r["identity_label"],
                 "crop_url": f"/media/crops/{r['crop_path']}",
                 "review_status": r["review_status"],
+                **_parse_attributes(r),
             }
             for r in rows
         ],

@@ -66,6 +66,49 @@ async def acquire_image(request: Request) -> bytes:
     return decode_base64(image_base64)  # type: ignore[arg-type]
 
 
+async def acquire_image_slot(request: Request, slot: int) -> bytes:
+    """Return raw bytes for a numbered image slot (verify takes two images).
+
+    Mirrors acquire_image's one-of-three rule, but with slot-prefixed field names:
+    ``file{n}`` (multipart) / ``image{n}_url`` / ``image{n}_base64``.
+    """
+    content_type = request.headers.get("content-type", "")
+    f, u, b = f"file{slot}", f"image{slot}_url", f"image{slot}_base64"
+
+    file_bytes: bytes | None = None
+    image_url: str | None = None
+    image_base64: str | None = None
+
+    if "multipart/form-data" in content_type:
+        form = await request.form()
+        file_field = form.get(f)
+        if file_field is not None and hasattr(file_field, "read"):
+            file_bytes = await file_field.read() or None
+        raw_url = form.get(u)
+        image_url = str(raw_url) if raw_url else None
+        raw_b64 = form.get(b)
+        image_base64 = str(raw_b64) if raw_b64 else None
+    elif "application/json" in content_type:
+        try:
+            body = await request.json()
+        except Exception:
+            raise HTTPException(400, "Invalid JSON body")
+        image_url = body.get(u)
+        image_base64 = body.get(b)
+    else:
+        raise HTTPException(400, "Content-Type must be multipart/form-data or application/json")
+
+    provided = sum(x is not None for x in [file_bytes, image_url, image_base64])
+    if provided != 1:
+        raise HTTPException(400, f"Provide exactly one of: {f}, {u}, {b}")
+
+    if file_bytes is not None:
+        return file_bytes
+    if image_url is not None:
+        return await fetch_url(image_url)
+    return decode_base64(image_base64)  # type: ignore[arg-type]
+
+
 def open_and_validate(image_bytes: bytes) -> Any:
     """Open image bytes with Pillow, validate format by content sniffing.
 

@@ -57,6 +57,8 @@ def _migrate(conn: sqlite3.Connection) -> None:
     existing_cols = {r[1] for r in conn.execute("PRAGMA table_info(detections)")}
     if "embedding" not in existing_cols:
         conn.execute("ALTER TABLE detections ADD COLUMN embedding BLOB")
+    if "attributes" not in existing_cols:
+        conn.execute("ALTER TABLE detections ADD COLUMN attributes TEXT")
 
     existing_user_cols = {r[1] for r in conn.execute("PRAGMA table_info(users)")}
     if "is_approved" not in existing_user_cols:
@@ -509,7 +511,7 @@ def get_image_detections(
     with _connect() as conn:
         sql = """SELECT d.id, d.type, d.identity_id, d.confidence, d.embedding,
                         d.bbox_x, d.bbox_y, d.bbox_w, d.bbox_h,
-                        d.crop_path, d.review_status,
+                        d.crop_path, d.review_status, d.attributes,
                         i.label AS identity_label
                  FROM detections d
                  LEFT JOIN identities i ON d.identity_id = i.id
@@ -614,15 +616,16 @@ def insert_detection(
     crop_path: str,
     embedding: bytes | None = None,
     review_status: str = "pending",
+    attributes: str | None = None,
 ) -> int:
     with _connect() as conn:
         conn.execute(
             """INSERT INTO detections
                (user_id, identity_id, source_image_id, type, model_id, confidence,
-                bbox_x, bbox_y, bbox_w, bbox_h, crop_path, embedding, review_status)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                bbox_x, bbox_y, bbox_w, bbox_h, crop_path, embedding, review_status, attributes)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
             (user_id, identity_id, source_image_id, detection_type, model_id, confidence,
-             bbox_x, bbox_y, bbox_w, bbox_h, crop_path, embedding, review_status),
+             bbox_x, bbox_y, bbox_w, bbox_h, crop_path, embedding, review_status, attributes),
         )
         return conn.execute("SELECT last_insert_rowid()").fetchone()[0]
 

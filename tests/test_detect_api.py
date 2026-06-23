@@ -327,3 +327,162 @@ def test_detect_faces_replace_leaves_objects(client):
 
     assert _count_detections(user_id, source_id, "face") == 1
     assert _count_detections(user_id, source_id, "object") == 1  # untouched
+
+
+# ---------------------------------------------------------------------------
+# Facial attributes (age / gender / pose)
+# ---------------------------------------------------------------------------
+
+def test_detect_faces_includes_and_stores_attributes(client):
+    import json
+    user_id, key = _create_user_and_key()
+    _activate_face_model()
+    source_id = _insert_source_image(user_id)
+
+    mock_engine = MagicMock()
+    mock_engine.detect.return_value = [
+        FaceDetection(bbox=(10, 20, 100, 100), confidence=0.95, embedding=MagicMock(),
+                      age=30, gender="M", pose=(1.0, 2.0, 3.0)),
+    ]
+    with patch("app.api.detect.acquire_image", return_value=b"bytes"), \
+         patch("app.api.detect.open_and_validate", return_value=_mock_image()), \
+         patch("app.api.detect.to_rgb_array", return_value=MagicMock()), \
+         patch("app.api.detect._save_source_image", return_value=("src.jpg", source_id)), \
+         patch("app.api.detect._save_crop", return_value="crop.jpg"), \
+         patch.object(registry, "get_face_engine", return_value=mock_engine):
+        r = client.post("/api/detect/faces", files={"file": FAKE_FILE},
+                        headers={"X-API-Key": key})
+
+    assert r.status_code == 200
+    face = r.json()["faces"][0]
+    assert face["age"] == 30
+    assert face["gender"] == "M"
+    assert face["pose"] == [1.0, 2.0, 3.0]
+
+    det = store.get_detection(face["detection_id"], user_id)
+    stored = json.loads(det["attributes"])
+    assert stored == {"age": 30, "gender": "M", "pose": [1.0, 2.0, 3.0]}
+
+
+def test_detect_faces_attributes_default_null(client):
+    import json
+    user_id, key = _create_user_and_key()
+    _activate_face_model()
+    source_id = _insert_source_image(user_id)
+
+    mock_engine = MagicMock()
+    mock_engine.detect.return_value = [
+        FaceDetection(bbox=(10, 20, 100, 100), confidence=0.95, embedding=MagicMock()),
+    ]
+    with patch("app.api.detect.acquire_image", return_value=b"bytes"), \
+         patch("app.api.detect.open_and_validate", return_value=_mock_image()), \
+         patch("app.api.detect.to_rgb_array", return_value=MagicMock()), \
+         patch("app.api.detect._save_source_image", return_value=("src.jpg", source_id)), \
+         patch("app.api.detect._save_crop", return_value="crop.jpg"), \
+         patch.object(registry, "get_face_engine", return_value=mock_engine):
+        r = client.post("/api/detect/faces", files={"file": FAKE_FILE},
+                        headers={"X-API-Key": key})
+
+    face = r.json()["faces"][0]
+    assert face["age"] is None and face["gender"] is None and face["pose"] is None
+    det = store.get_detection(face["detection_id"], user_id)
+    assert json.loads(det["attributes"]) == {"age": None, "gender": None, "pose": None}
+
+
+# ---------------------------------------------------------------------------
+# 1:1 verify
+# ---------------------------------------------------------------------------
+
+def test_verify_happy_path(client):
+    _, key = _create_user_and_key()
+    _activate_face_model()
+
+    mock_engine = MagicMock()
+    mock_engine.detect.return_value = [
+        FaceDetection(bbox=(5, 6, 50, 50), confidence=0.9, embedding=MagicMock(),
+                      age=25, gender="F", pose=(0.0, 10.0, 0.0)),
+    ]
+    with patch("app.api.detect.acquire_image_slot", return_value=b"bytes"), \
+         patch("app.api.detect.open_and_validate", return_value=_mock_image()), \
+         patch("app.api.detect.to_rgb_array", return_value=MagicMock()), \
+         patch.object(registry, "get_face_engine", return_value=mock_engine):
+        r = client.post("/api/verify",
+                        files={"file1": FAKE_FILE, "file2": FAKE_FILE},
+                        headers={"X-API-Key": key})
+
+    assert r.status_code == 200
+    data = r.json()
+    assert "similarity" in data and "match" in data and "threshold" in data
+    assert data["face1"]["bbox"] == {"x": 5, "y": 6, "w": 50, "h": 50}
+    assert data["face1"]["gender"] == "F"
+
+
+def test_verify_no_face_returns_400(client):
+    _, key = _create_user_and_key()
+    _activate_face_model()
+    mock_engine = MagicMock()
+    mock_engine.detect.return_value = []  # no faces
+    with patch("app.api.detect.acquire_image_slot", return_value=b"bytes"), \
+         patch("app.api.detect.open_and_validate", return_value=_mock_image()), \
+         patch("app.api.detect.to_rgb_array", return_value=MagicMock()), \
+         patch.object(registry, "get_face_engine", return_value=mock_engine):
+        r = client.post("/api/verify",
+                        files={"file1": FAKE_FILE, "file2": FAKE_FILE},
+                        headers={"X-API-Key": key})
+    assert r.status_code == 400
+
+
+def test_verify_no_model_returns_503(client):
+    _, key = _create_user_and_key()
+    with patch("app.api.detect.acquire_image_slot", return_value=b"bytes"):
+        r = client.post("/api/verify",
+                        files={"file1": FAKE_FILE, "file2": FAKE_FILE},
+                        headers={"X-API-Key": key})
+    assert r.status_code == 503
+
+
+# ---------------------------------------------------------------------------
+# 1:N identify (read-only)
+# ---------------------------------------------------------------------------
+
+def test_identify_happy_path_no_enrolled(client):
+    _, key = _create_user_and_key()
+    _activate_face_model()
+    mock_engine = MagicMock()
+    mock_engine.detect.return_value = [
+        FaceDetection(bbox=(1, 2, 30, 30), confidence=0.88, embedding=MagicMock(),
+                      age=40, gender="M", pose=None),
+    ]
+    with patch("app.api.detect.acquire_image", return_value=b"bytes"), \
+         patch("app.api.detect.open_and_validate", return_value=_mock_image()), \
+         patch("app.api.detect.to_rgb_array", return_value=MagicMock()), \
+         patch.object(registry, "get_face_engine", return_value=mock_engine):
+        r = client.post("/api/identify", files={"file": FAKE_FILE},
+                        headers={"X-API-Key": key})
+
+    assert r.status_code == 200
+    data = r.json()
+    assert len(data["faces"]) == 1
+    f = data["faces"][0]
+    assert f["bbox"] == {"x": 1, "y": 2, "w": 30, "h": 30}
+    assert f["identity_id"] is None          # nothing enrolled
+    assert f["suggestions"] == []
+    assert f["age"] == 40 and f["gender"] == "M"
+
+
+def test_identify_does_not_store(client):
+    user_id, key = _create_user_and_key()
+    _activate_face_model()
+    mock_engine = MagicMock()
+    mock_engine.detect.return_value = [
+        FaceDetection(bbox=(1, 2, 30, 30), confidence=0.88, embedding=MagicMock()),
+    ]
+    with patch("app.api.detect.acquire_image", return_value=b"bytes"), \
+         patch("app.api.detect.open_and_validate", return_value=_mock_image()), \
+         patch("app.api.detect.to_rgb_array", return_value=MagicMock()), \
+         patch.object(registry, "get_face_engine", return_value=mock_engine):
+        client.post("/api/identify", files={"file": FAKE_FILE}, headers={"X-API-Key": key})
+
+    with store._connect() as conn:
+        n = conn.execute("SELECT COUNT(*) FROM detections WHERE user_id = ?", (user_id,)).fetchone()[0]
+    assert n == 0  # read-only — nothing written
