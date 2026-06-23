@@ -37,7 +37,7 @@
       drop = document.createElement('ul');
       Object.assign(drop.style, {
         position: 'absolute', listStyle: 'none', margin: '0', padding: '0',
-        background: '#fff', color: '#1a1a1a', border: '1px solid #ccc',
+        background: 'var(--surface)', color: 'var(--text)', border: '1px solid var(--border)',
         borderRadius: 'var(--radius)', zIndex: '400',
         maxHeight: '180px', overflowY: 'auto',
         boxShadow: '0 4px 12px rgba(0,0,0,.15)',
@@ -50,7 +50,7 @@
         const li = document.createElement('li');
         li.textContent = label;
         Object.assign(li.style, { padding: '7px 12px', cursor: 'pointer', fontSize: '13px' });
-        li.addEventListener('mouseenter', () => { li.style.background = '#f5f5f5'; });
+        li.addEventListener('mouseenter', () => { li.style.background = 'var(--hover)'; });
         li.addEventListener('mouseleave', () => { li.style.background = ''; });
         li.addEventListener('mousedown', e => {
           e.preventDefault();
@@ -106,7 +106,7 @@
 
     const box = document.createElement('div');
     Object.assign(box.style, {
-      background: '#fff', color: '#1a1a1a', borderRadius: 'var(--radius)',
+      background: 'var(--surface)', color: 'var(--text)', borderRadius: 'var(--radius)',
       padding: '24px', maxWidth: '400px', width: '90vw',
       boxShadow: '0 8px 32px rgba(0,0,0,.2)',
     });
@@ -163,7 +163,7 @@
 
     const box = document.createElement('div');
     Object.assign(box.style, {
-      background: '#fff', color: '#1a1a1a', borderRadius: 'var(--radius)',
+      background: 'var(--surface)', color: 'var(--text)', borderRadius: 'var(--radius)',
       padding: '24px', maxWidth: '400px', width: '90vw',
       boxShadow: '0 8px 32px rgba(0,0,0,.2)',
     });
@@ -214,7 +214,7 @@
       position: 'fixed',
       top: '50%', left: '50%',
       transform: 'translate(-50%, -50%)',
-      background: '#fff', color: '#1a1a1a', border: '1px solid #ccc',
+      background: 'var(--surface)', color: 'var(--text)', border: '1px solid var(--border)',
       borderRadius: 'var(--radius)', padding: '16px',
       zIndex: '500', boxShadow: '0 8px 32px rgba(0,0,0,.2)',
       width: '300px', maxWidth: '90vw',

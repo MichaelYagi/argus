@@ -144,7 +144,7 @@
   ul.style.cssText = [
     'display:none', 'position:fixed', 'z-index:99999',
     'list-style:none', 'margin:0', 'padding:0',
-    'background:#fff', 'border:1px solid #ccc',
+    'background:var(--surface)', 'border:1px solid var(--border)',
     'border-radius:6px', 'box-shadow:0 6px 20px rgba(0,0,0,.18)',
     'overflow-y:auto', 'overflow-x:hidden',
   ].join(';');
@@ -211,7 +211,7 @@
     ul.innerHTML = matches.map((m, i) =>
       `<li data-i="${i}"
            style="padding:8px 14px;cursor:pointer;font-size:13px;font-family:inherit;
-                  border-bottom:1px solid #e8e8e8;background:#fff;color:#1a1a1a;
+                  border-bottom:1px solid var(--border);background:var(--surface);color:var(--text);
                   white-space:nowrap;overflow:hidden;text-overflow:ellipsis">
         ${m.replace(new RegExp('(' + esc(ql) + ')', 'gi'), '<strong style="color:#3a8ef6">$1</strong>')}
        </li>`

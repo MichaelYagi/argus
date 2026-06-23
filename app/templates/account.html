@@ -15,7 +15,7 @@
   </p>
   <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
     <code id="key-display"
-          style="background:#f5f5f5;color:#1a1a1a;padding:8px 12px;border-radius:4px;font-size:13px;
+          style="background:var(--hover);color:var(--text);padding:8px 12px;border-radius:4px;font-size:13px;
                  word-break:break-all;flex:1">{{ new_key }}</code>
     <button class="btn btn-ghost" onclick="copyKey()">Copy</button>
   </div>
@@ -223,12 +223,12 @@
 </div>
 
 <!-- Danger zone -->
-<div class="card" style="margin-top:16px;border:1px solid #e53e3e;background:#fff5f5">
+<div class="card" style="margin-top:16px;border:1px solid #e53e3e">
   <h2 style="color:#c53030;margin-bottom:4px">Danger zone</h2>
   <div style="display:flex;align-items:center;gap:16px;flex-wrap:wrap">
     <div style="flex:1;min-width:200px">
-      <strong style="font-size:13px;color:#1a1a1a">Delete all identity data</strong>
-      <p style="font-size:12px;margin:4px 0 0;color:#666">
+      <strong style="font-size:13px;color:var(--text)">Delete all identity data</strong>
+      <p style="font-size:12px;margin:4px 0 0;color:var(--muted)">
         Permanently removes all of your enrolled people, detected objects, detections,
         face embeddings, and stored images. Your account, API keys, settings, and
         model configuration are not affected. Cannot be undone.
@@ -243,16 +243,16 @@
   </div>
   {% if not is_admin %}
   <div style="display:flex;align-items:center;gap:16px;flex-wrap:wrap;margin-top:14px;
-              padding-top:14px;border-top:1px solid #f3c2c2">
+              padding-top:14px;border-top:1px solid var(--border)">
     <div style="flex:1;min-width:200px">
-      <strong style="font-size:13px;color:#1a1a1a">Delete account</strong>
-      <p style="font-size:12px;margin:4px 0 0;color:#666">
+      <strong style="font-size:13px;color:var(--text)">Delete account</strong>
+      <p style="font-size:12px;margin:4px 0 0;color:var(--muted)">
         Permanently deletes your account and all of your data, then signs you out.
         Cannot be undone.
       </p>
     </div>
     <button id="delete-account-btn"
-            style="background:#fff;color:#c53030;border:1px solid #e53e3e;border-radius:var(--radius);
+            style="background:var(--surface);color:#c53030;border:1px solid #e53e3e;border-radius:var(--radius);
                    padding:8px 16px;font-size:13px;font-weight:500;cursor:pointer;
                    white-space:nowrap;flex-shrink:0">
       Delete account
