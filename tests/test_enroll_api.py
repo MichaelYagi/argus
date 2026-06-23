@@ -280,3 +280,43 @@ def test_delete_source_image_cleans_references(client):
     r = client.delete(f"/api/images/{src_id}", headers=h)
     assert r.status_code == 200
     assert client.get(f"/api/identities/{identity_id}", headers=h).json()["embedding_count"] == 0
+
+
+def test_reassign_removes_old_identity_reference(client):
+    """Moving a face from A to B must drop A's reference for that crop (no orphan)."""
+    user_id, h = _setup(client)
+    a = store.create_identity(user_id, "face", "Alice")
+    b = store.create_identity(user_id, "face", "Bob")
+    det_id = _insert_face_detection(user_id, a, "crop1.jpg")
+    client.post(f"/api/detections/{det_id}/enroll", headers=h)
+    assert client.get(f"/api/identities/{a}", headers=h).json()["embedding_count"] == 1
+
+    r = client.post(f"/api/review/{det_id}/reassign", json={"identity_id": b}, headers=h)
+    assert r.status_code == 200
+    # A loses its reference; B is unaffected here (enroll path needs an active model).
+    assert client.get(f"/api/identities/{a}", headers=h).json()["embedding_count"] == 0
+
+
+def test_reject_removes_old_identity_reference(client):
+    user_id, h = _setup(client)
+    a = store.create_identity(user_id, "face", "Alice")
+    det_id = _insert_face_detection(user_id, a, "crop1.jpg")
+    client.post(f"/api/detections/{det_id}/enroll", headers=h)
+    assert client.get(f"/api/identities/{a}", headers=h).json()["embedding_count"] == 1
+
+    r = client.post(f"/api/review/{det_id}/reject", headers=h)
+    assert r.status_code == 200
+    assert client.get(f"/api/identities/{a}", headers=h).json()["embedding_count"] == 0
+
+
+def test_relabel_removes_old_identity_reference(client):
+    user_id, h = _setup(client)
+    a = store.create_identity(user_id, "face", "Alice")
+    b = store.create_identity(user_id, "face", "Bob")
+    det_id = _insert_face_detection(user_id, a, "crop1.jpg")
+    client.post(f"/api/detections/{det_id}/enroll", headers=h)
+    assert client.get(f"/api/identities/{a}", headers=h).json()["embedding_count"] == 1
+
+    r = client.put(f"/api/detections/{det_id}/label", json={"identity_id": b}, headers=h)
+    assert r.status_code == 200
+    assert client.get(f"/api/identities/{a}", headers=h).json()["embedding_count"] == 0

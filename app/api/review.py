@@ -90,6 +90,9 @@ async def confirm(detection_id: int, user_id: int = Depends(require_auth)):
 async def reject(detection_id: int, user_id: int = Depends(require_auth)):
     if not store.reject_detection(detection_id, user_id):
         raise HTTPException(404, "Detection not found")
+    # Rejecting clears the identity and drops its reference — refresh the index.
+    from app.core import face_index as _fi
+    _fi.rebuild_user(user_id)
     return {"detection_id": detection_id, "review_status": "rejected"}
 
 
@@ -151,6 +154,9 @@ async def bulk_review(items: list[_BulkItem], user_id: int = Depends(require_aut
         else:
             results.append({"detection_id": item.detection_id, "status": "error",
                              "detail": f"Unknown action '{item.action}'"})
+    # Rejects (and any reference changes above) may have altered the set — refresh once.
+    from app.core import face_index as _fi
+    _fi.rebuild_user(user_id)
     return results
 
 

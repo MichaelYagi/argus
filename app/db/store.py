@@ -882,6 +882,38 @@ def get_review_queue(
         return rows
 
 
+def _detach_old_reference(conn, detection_id: int, user_id: int,
+                          new_identity_id: int | None) -> int | None:
+    """When a detection's identity is about to change or clear, drop the previous
+    identity's reference for this crop — it no longer owns the crop, so keeping the
+    embedding would leave an orphan that still pollutes that person's matching.
+    Returns the old identity_id if a reference was removed (so the caller can recompute
+    its representative), else None. Must be called BEFORE the identity UPDATE.
+    """
+    row = conn.execute(
+        "SELECT identity_id, crop_path FROM detections WHERE id = ? AND user_id = ?",
+        (detection_id, user_id),
+    ).fetchone()
+    if not row:
+        return None
+    old = row["identity_id"]
+    if old is None or old == new_identity_id:
+        return None
+    conn.execute(
+        "DELETE FROM face_embeddings WHERE identity_id = ? AND source_image_path = ?",
+        (old, row["crop_path"]),
+    )
+    return old if conn.execute("SELECT changes()").fetchone()[0] > 0 else None
+
+
+def _recompute_representative(identity_id: int | None) -> None:
+    if identity_id is None:
+        return
+    model_row = get_active_model("face")
+    if model_row:
+        compute_and_store_representative(identity_id, model_row["id"])
+
+
 def confirm_detection(detection_id: int, user_id: int) -> bool:
     with _connect() as conn:
         conn.execute(
@@ -894,22 +926,28 @@ def confirm_detection(detection_id: int, user_id: int) -> bool:
 
 def reject_detection(detection_id: int, user_id: int) -> bool:
     with _connect() as conn:
+        old_id = _detach_old_reference(conn, detection_id, user_id, None)
         conn.execute(
             """UPDATE detections SET review_status = 'rejected', identity_id = NULL,
                reviewed_at = datetime('now') WHERE id = ? AND user_id = ?""",
             (detection_id, user_id),
         )
-        return conn.execute("SELECT changes()").fetchone()[0] > 0
+        changed = conn.execute("SELECT changes()").fetchone()[0] > 0
+    _recompute_representative(old_id)
+    return changed
 
 
 def reassign_detection(detection_id: int, user_id: int, identity_id: int) -> bool:
     with _connect() as conn:
+        old_id = _detach_old_reference(conn, detection_id, user_id, identity_id)
         conn.execute(
             """UPDATE detections SET review_status = 'reassigned', identity_id = ?,
                reviewed_at = datetime('now') WHERE id = ? AND user_id = ?""",
             (identity_id, detection_id, user_id),
         )
-        return conn.execute("SELECT changes()").fetchone()[0] > 0
+        changed = conn.execute("SELECT changes()").fetchone()[0] > 0
+    _recompute_representative(old_id)
+    return changed
 
 
 def delete_detection(detection_id: int, user_id: int) -> bool:
@@ -946,14 +984,18 @@ def delete_detection(detection_id: int, user_id: int) -> bool:
 
 
 def label_detection(detection_id: int, user_id: int, identity_id: int) -> bool:
-    """Casual correction: set identity and mark confirmed."""
+    """Casual correction: set identity and mark confirmed. Drops the previous
+    identity's reference for this crop so it doesn't orphan when the label changes."""
     with _connect() as conn:
+        old_id = _detach_old_reference(conn, detection_id, user_id, identity_id)
         conn.execute(
             """UPDATE detections SET identity_id = ?, review_status = 'confirmed',
                reviewed_at = datetime('now') WHERE id = ? AND user_id = ?""",
             (identity_id, detection_id, user_id),
         )
-        return conn.execute("SELECT changes()").fetchone()[0] > 0
+        changed = conn.execute("SELECT changes()").fetchone()[0] > 0
+    _recompute_representative(old_id)
+    return changed
 
 
 # ---------------------------------------------------------------------------
