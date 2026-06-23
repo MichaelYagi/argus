@@ -184,6 +184,7 @@ async def identity_gallery(
     return _paginate(rows, page_size, lambda r: {
         "detection_id": r["id"],
         "source_image_id": r["source_image_id"],
+        "source_image_url": f"/media/sources/{r['source_image_path']}" if r["source_image_path"] else None,
         "crop_url": f"/media/crops/{r['crop_path']}",
         "confidence": r["confidence"],
         "similarity": sim_fn(r["embedding"]),

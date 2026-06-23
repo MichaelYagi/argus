@@ -176,26 +176,6 @@
     makeAutocomplete(raInput);
   }
 
-  window.openSourceModal = function openSourceModal(url) {
-    if (!url) return;
-    document.querySelectorAll('.src-modal').forEach(m => m.remove());
-    const overlay = document.createElement('div');
-    overlay.className = 'src-modal';
-    const img = document.createElement('img');
-    img.src = url;
-    img.alt = '';
-    const closeBtn = document.createElement('button');
-    closeBtn.className = 'src-modal-close';
-    closeBtn.textContent = '×';
-    overlay.appendChild(img);
-    overlay.appendChild(closeBtn);
-    document.body.appendChild(overlay);
-    const close = () => overlay.remove();
-    closeBtn.addEventListener('click', close);
-    overlay.addEventListener('click', e => { if (e.target === overlay) close(); });
-    const onKey = e => { if (e.key === 'Escape') { close(); document.removeEventListener('keydown', onKey); } };
-    document.addEventListener('keydown', onKey);
-  }
 
   function removeCard(id) {
     document.getElementById('rc-' + id)?.remove();

@@ -470,10 +470,12 @@ def get_identity_gallery(
         # LEFT JOIN face_embeddings (enrolled references are keyed by crop_path) so each
         # crop carries whether it's currently part of the reference set.
         sql = """SELECT d.id, d.crop_path, d.confidence, d.detected_at, d.review_status,
-                        d.source_image_id, d.embedding, fe.id AS embedding_id
+                        d.source_image_id, d.embedding, fe.id AS embedding_id,
+                        si.file_path AS source_image_path
                  FROM detections d
                  LEFT JOIN face_embeddings fe
                         ON fe.identity_id = d.identity_id AND fe.source_image_path = d.crop_path
+                 LEFT JOIN source_images si ON si.id = d.source_image_id
                  WHERE d.identity_id = ? AND d.user_id = ?"""
         params: list = [identity_id, user_id]
         if cursor:

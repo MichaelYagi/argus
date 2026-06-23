@@ -158,6 +158,13 @@
         img.src = item.crop_url;
         img.loading = 'lazy';
         img.alt = '';
+        if (item.source_image_url) {
+          img.style.cursor = 'zoom-in';
+          img.addEventListener('click', e => {
+            e.stopPropagation();
+            openSourceModal(item.source_image_url);
+          });
+        }
         el.appendChild(img);
 
         // Match-similarity badge (bottom-left, hover only): how strongly this crop
