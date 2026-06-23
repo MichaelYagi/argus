@@ -34,7 +34,7 @@ def client(tmp_path):
 
 def _setup(client) -> dict:
     from app.core.security import hash_password
-    user_id = store.create_user("alice", hash_password("pass12345"))
+    user_id = store.create_user("alice", hash_password("pass12345"), is_admin=True)
     key = generate_api_key()
     store.create_api_key(user_id, hash_api_key(key), "test")
     return {"X-API-Key": key}

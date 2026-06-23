@@ -61,6 +61,7 @@ def _base(request: Request, active: str = "") -> dict | None:
     return {
         "username": request.session.get("username", ""),
         "user_id": user_id,
+        "is_admin": bool(user and _col(user, "is_admin", "")),
         "active": active,
         "user_tz": _col(user, "timezone", "UTC"),
         "user_locale": _col(user, "locale", "en-US"),
@@ -119,6 +120,8 @@ async def models_page(request: Request):
     ctx = _base(request, "models")
     if not ctx:
         return RedirectResponse("/login")
+    if not ctx["is_admin"]:
+        return RedirectResponse("/")
     ctx["models"] = [dict(r) for r in store.list_models()]
     return _r(request, "models.html", ctx)
 
@@ -137,6 +140,8 @@ async def settings_page(request: Request):
     ctx = _base(request, "settings")
     if not ctx:
         return RedirectResponse("/login")
+    if not ctx["is_admin"]:
+        return RedirectResponse("/")
     rows = store.get_all_settings()
     grouped: dict[str, list] = {}
     for r in rows:

@@ -7,7 +7,7 @@ from fastapi.responses import RedirectResponse
 from fastapi.templating import Jinja2Templates
 
 from app import __version__
-from app.core.auth import get_session_user
+from app.core.auth import get_session_user, is_admin
 
 router = APIRouter()
 templates = Jinja2Templates(directory="app/templates")
@@ -22,6 +22,7 @@ async def detect_page(request: Request):
         return RedirectResponse("/login")
     return templates.TemplateResponse(request, "bulk.html", {
         "username": request.session.get("username", ""),
+        "is_admin": is_admin(user_id),
         "active": "detect",
         "version": __version__,
     })

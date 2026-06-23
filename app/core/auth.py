@@ -5,7 +5,7 @@ from __future__ import annotations
 import os
 from typing import Optional
 
-from fastapi import HTTPException, Request, Security
+from fastapi import Depends, HTTPException, Request, Security
 from fastapi.security import APIKeyHeader
 
 from app.core.security import hash_api_key, verify_remember_token
@@ -36,6 +36,22 @@ async def require_auth(
         return user_id
 
     raise HTTPException(401, "Provide an X-API-Key header or log in.")
+
+
+async def require_admin(user_id: int = Depends(require_auth)) -> int:
+    """Like require_auth, but also requires the user to be an admin. Used to gate
+    instance-global resources (settings, models) that affect every account."""
+    if not is_admin(user_id):
+        raise HTTPException(403, "Admin only")
+    return user_id
+
+
+def is_admin(user_id: int | None) -> bool:
+    """True if the user exists and is an admin (the first registered account)."""
+    if not user_id:
+        return False
+    user = store.get_user_by_id(user_id)
+    return bool(user and user["is_admin"])
 
 
 def get_session_user(request: Request) -> int | None:

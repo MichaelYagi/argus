@@ -26,7 +26,7 @@ def client(tmp_path):
 
 def _setup(client) -> dict:
     from app.core.security import hash_password
-    user_id = store.create_user("alice", hash_password("pass12345"))
+    user_id = store.create_user("alice", hash_password("pass12345"), is_admin=True)
     key = generate_api_key()
     store.create_api_key(user_id, hash_api_key(key), "test")
     return {"X-API-Key": key}
@@ -206,3 +206,28 @@ def test_match_strategy_rejects_invalid(client):
     h = _setup(client)
     r = client.put("/api/settings/face.match_strategy", json={"value": "fuzzy"}, headers=h)
     assert r.status_code == 400
+
+
+# ---------------------------------------------------------------------------
+# Admin-only gating
+# ---------------------------------------------------------------------------
+
+def _nonadmin(client) -> dict:
+    from app.core.security import hash_password
+    uid = store.create_user("bob", hash_password("pass12345"), is_admin=False)
+    key = generate_api_key()
+    store.create_api_key(uid, hash_api_key(key), "bob")
+    return {"X-API-Key": key}
+
+
+def test_settings_list_forbidden_for_nonadmin(client):
+    _setup(client)  # alice is admin (first user)
+    h = _nonadmin(client)
+    assert client.get("/api/settings", headers=h).status_code == 403
+
+
+def test_settings_update_forbidden_for_nonadmin(client):
+    _setup(client)
+    h = _nonadmin(client)
+    r = client.put("/api/settings/face.match_threshold", json={"value": 0.7}, headers=h)
+    assert r.status_code == 403

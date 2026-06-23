@@ -8,7 +8,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
 
 from app.core import settings_cache
-from app.core.auth import require_auth
+from app.core.auth import require_admin
 from app.db import store
 
 router = APIRouter()
@@ -22,7 +22,7 @@ _VALID_CATEGORIES = {"face", "object", "system"}
 # ---------------------------------------------------------------------------
 
 @router.get("/api/settings")
-async def list_settings(user_id: int = Depends(require_auth)):
+async def list_settings(user_id: int = Depends(require_admin)):
     """All settings grouped by category. Values are type-coerced."""
     rows = store.get_all_settings()
     grouped: dict[str, list] = {}
@@ -32,7 +32,7 @@ async def list_settings(user_id: int = Depends(require_auth)):
 
 
 @router.get("/api/settings/{key:path}")
-async def get_setting(key: str, user_id: int = Depends(require_auth)):
+async def get_setting(key: str, user_id: int = Depends(require_admin)):
     row = store.get_setting(key)
     if not row:
         raise HTTPException(404, f"Setting '{key}' not found")
@@ -40,7 +40,7 @@ async def get_setting(key: str, user_id: int = Depends(require_auth)):
 
 
 @router.put("/api/settings/{key:path}")
-async def update_setting(key: str, body: _UpdateBody, user_id: int = Depends(require_auth)):
+async def update_setting(key: str, body: _UpdateBody, user_id: int = Depends(require_admin)):
     row = store.get_setting(key)
     if not row:
         raise HTTPException(404, f"Setting '{key}' not found")
@@ -65,7 +65,7 @@ async def update_setting(key: str, body: _UpdateBody, user_id: int = Depends(req
 async def reset_settings(
     key: Optional[str] = Query(None),
     category: Optional[str] = Query(None),
-    user_id: int = Depends(require_auth),
+    user_id: int = Depends(require_admin),
 ):
     """Reset one key (?key=…) or an entire category (?category=…) to defaults."""
     if key and category:

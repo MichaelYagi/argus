@@ -8,7 +8,7 @@ from typing import Any, Optional
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query
 
-from app.core.auth import require_auth
+from app.core.auth import require_admin
 from app.core.engine_registry import registry
 from app.core.paths import models_dir
 from app.db import store
@@ -31,7 +31,7 @@ _progress: dict[int, dict] = {}
 @router.get("/api/models")
 async def list_models(
     type: Optional[str] = Query(None),
-    user_id: int = Depends(require_auth),
+    user_id: int = Depends(require_admin),
 ):
     if type and type not in ("face", "object"):
         raise HTTPException(400, "type must be 'face' or 'object'")
@@ -39,7 +39,7 @@ async def list_models(
 
 
 @router.get("/api/models/{model_id}")
-async def get_model(model_id: int, user_id: int = Depends(require_auth)):
+async def get_model(model_id: int, user_id: int = Depends(require_admin)):
     row = store.get_model(model_id)
     if not row:
         raise HTTPException(404, "Model not found")
@@ -50,7 +50,7 @@ async def get_model(model_id: int, user_id: int = Depends(require_auth)):
 async def download_model(
     model_id: int,
     background: BackgroundTasks,
-    user_id: int = Depends(require_auth),
+    user_id: int = Depends(require_admin),
 ):
     row = store.get_model(model_id)
     if not row:
@@ -66,7 +66,7 @@ async def download_model(
 
 
 @router.get("/api/models/{model_id}/download/status")
-async def download_status(model_id: int, user_id: int = Depends(require_auth)):
+async def download_status(model_id: int, user_id: int = Depends(require_admin)):
     row = store.get_model(model_id)
     if not row:
         raise HTTPException(404, "Model not found")
@@ -77,7 +77,7 @@ async def download_status(model_id: int, user_id: int = Depends(require_auth)):
 
 
 @router.put("/api/models/{model_id}/activate")
-async def activate_model(model_id: int, user_id: int = Depends(require_auth)):
+async def activate_model(model_id: int, user_id: int = Depends(require_admin)):
     """Hot-swap the active engine. Synchronous — loads from disk if not cached."""
     row = store.get_model(model_id)
     if not row:
@@ -104,7 +104,7 @@ async def activate_model(model_id: int, user_id: int = Depends(require_auth)):
 
 
 @router.delete("/api/models/{model_id}", status_code=204)
-async def delete_model(model_id: int, user_id: int = Depends(require_auth)):
+async def delete_model(model_id: int, user_id: int = Depends(require_admin)):
     row = store.get_model(model_id)
     if not row:
         raise HTTPException(404, "Model not found")

@@ -10,7 +10,7 @@ from fastapi.templating import Jinja2Templates
 
 from app import __version__
 from app.core import settings_cache
-from app.core.auth import get_session_user
+from app.core.auth import get_session_user, is_admin
 from app.db import store
 
 router = APIRouter()
@@ -55,6 +55,7 @@ async def tag_page(source_image_id: int, request: Request):
 
     return templates.TemplateResponse(request, "tag.html", {
         "username": request.session.get("username", ""),
+        "is_admin": is_admin(user_id),
         "version": __version__,
         "image_url": f"/media/sources/{src['file_path']}",
         "nat_w": src["width"],
