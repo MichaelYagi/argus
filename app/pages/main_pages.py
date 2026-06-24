@@ -151,6 +151,14 @@ async def review_page(request: Request):
     return _r(request, "review.html", ctx)
 
 
+@router.get("/test")
+async def test_page(request: Request):
+    ctx = _base(request, "test")
+    if not ctx:
+        return RedirectResponse("/login")
+    return _r(request, "test.html", ctx)
+
+
 @router.get("/models")
 async def models_page(request: Request):
     ctx = _base(request, "models", show_env_switcher=False)

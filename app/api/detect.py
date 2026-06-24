@@ -263,6 +263,66 @@ async def identify(
     return {"threshold": threshold, "faces": results}
 
 
+@router.post("/api/test")
+async def test_detect(
+    request: Request,
+    user_id: int = Depends(require_auth),
+    environment_id: int = Depends(require_env_id),
+):
+    """Stateless detection — is there a person / object in this image?
+
+    One image (file/image_url/image_base64). Pure detection: runs the face and
+    object engines and returns bboxes + counts. Stores nothing, enrolls nothing,
+    matches nothing. ``?type=faces|objects|all`` (default all) selects which
+    engines run; an engine that isn't loaded is simply skipped (its list is
+    empty and ``available`` is false), so the call never 503s on a missing model.
+    """
+    type_param = (request.query_params.get("type") or "all").strip().lower()
+    if type_param not in ("faces", "objects", "all"):
+        raise HTTPException(400, "type must be faces, objects, or all")
+
+    raw = await acquire_image(request)
+    img = open_and_validate(raw)
+    img_array = to_rgb_array(img)
+
+    faces: list[dict] = []
+    objects: list[dict] = []
+    face_available = False
+    object_available = False
+
+    if type_param in ("faces", "all"):
+        face_engine = registry.get_face_engine()
+        if face_engine is not None:
+            face_available = True
+            for det in face_engine.detect(img_array):
+                faces.append({
+                    "bbox": {"x": det.bbox[0], "y": det.bbox[1],
+                             "w": det.bbox[2], "h": det.bbox[3]},
+                    "confidence": round(float(det.confidence), 4),
+                    **_face_attrs(det),
+                })
+
+    if type_param in ("objects", "all"):
+        object_engine = registry.get_object_engine()
+        if object_engine is not None:
+            object_available = True
+            for det in object_engine.detect(img_array):
+                objects.append({
+                    "bbox": {"x": det.bbox[0], "y": det.bbox[1],
+                             "w": det.bbox[2], "h": det.bbox[3]},
+                    "confidence": round(float(det.confidence), 4),
+                    "class_name": det.class_name,
+                    "class_id": det.class_id,
+                })
+
+    return {
+        "faces": faces,
+        "objects": objects,
+        "counts": {"faces": len(faces), "objects": len(objects)},
+        "available": {"faces": face_available, "objects": object_available},
+    }
+
+
 # ---------------------------------------------------------------------------
 # Async job runner
 # ---------------------------------------------------------------------------

@@ -122,6 +122,7 @@ setInterval(_updateReviewBadge, 30000);
              padding:1px 6px;font-size:10px;font-weight:700;margin-left:3px;
              vertical-align:middle;line-height:16px"></span>
   </a>
+  <a href="/test"     class="nav-desktop {% if active == 'test'      %}active{% endif %}">Test</a>
   {% if is_admin %}
   <a href="/models"   class="nav-desktop {% if active == 'models'    %}active{% endif %}">Models</a>
   <a href="/settings" class="nav-desktop {% if active == 'settings'  %}active{% endif %}">Settings</a>
@@ -247,6 +248,7 @@ setInterval(_updateReviewBadge, 30000);
   <a href="/enroll"   class="{% if active == 'enroll'    %}active{% endif %}">Enroll</a>
   <a href="/detect"   class="{% if active == 'detect'    %}active{% endif %}">Detect</a>
   <a href="/review"   class="{% if active == 'review'    %}active{% endif %}">Review</a>
+  <a href="/test"     class="{% if active == 'test'      %}active{% endif %}">Test</a>
   {% if is_admin %}
   <a href="/models"   class="{% if active == 'models'    %}active{% endif %}">Models</a>
   <a href="/settings" class="{% if active == 'settings'  %}active{% endif %}">Settings</a>

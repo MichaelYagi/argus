@@ -486,3 +486,104 @@ def test_identify_does_not_store(client):
     with store._connect() as conn:
         n = conn.execute("SELECT COUNT(*) FROM detections WHERE user_id = ?", (user_id,)).fetchone()[0]
     assert n == 0  # read-only — nothing written
+
+
+# ---------------------------------------------------------------------------
+# Stateless test endpoint — POST /api/test
+# ---------------------------------------------------------------------------
+
+def test_test_endpoint_happy_path(client):
+    _, key = _create_user_and_key()
+    _activate_face_model()
+    _activate_object_model()
+
+    face_engine = MagicMock()
+    face_engine.detect.return_value = [
+        FaceDetection(bbox=(10, 20, 100, 100), confidence=0.95, embedding=MagicMock(),
+                      age=30, gender="F"),
+    ]
+    obj_engine = MagicMock()
+    obj_engine.detect.return_value = [
+        ObjectDetection(bbox=(0, 0, 50, 80), confidence=0.9, class_name="person", class_id=0),
+        ObjectDetection(bbox=(5, 5, 40, 40), confidence=0.7, class_name="dog", class_id=16),
+    ]
+
+    with patch("app.api.detect.acquire_image", return_value=b"bytes"), \
+         patch("app.api.detect.open_and_validate", return_value=_mock_image()), \
+         patch("app.api.detect.to_rgb_array", return_value=MagicMock()), \
+         patch.object(registry, "get_face_engine", return_value=face_engine), \
+         patch.object(registry, "get_object_engine", return_value=obj_engine):
+        r = client.post("/api/test", files={"file": FAKE_FILE}, headers={"X-API-Key": key})
+
+    assert r.status_code == 200
+    data = r.json()
+    assert data["counts"] == {"faces": 1, "objects": 2}
+    assert data["available"] == {"faces": True, "objects": True}
+    assert data["faces"][0]["age"] == 30
+    assert {o["class_name"] for o in data["objects"]} == {"person", "dog"}
+
+
+def test_test_endpoint_does_not_store(client):
+    user_id, key = _create_user_and_key()
+    _activate_face_model()
+    _activate_object_model()
+    face_engine = MagicMock()
+    face_engine.detect.return_value = [
+        FaceDetection(bbox=(1, 2, 30, 30), confidence=0.8, embedding=MagicMock()),
+    ]
+    obj_engine = MagicMock()
+    obj_engine.detect.return_value = [
+        ObjectDetection(bbox=(0, 0, 9, 9), confidence=0.6, class_name="car", class_id=2),
+    ]
+    with patch("app.api.detect.acquire_image", return_value=b"bytes"), \
+         patch("app.api.detect.open_and_validate", return_value=_mock_image()), \
+         patch("app.api.detect.to_rgb_array", return_value=MagicMock()), \
+         patch.object(registry, "get_face_engine", return_value=face_engine), \
+         patch.object(registry, "get_object_engine", return_value=obj_engine):
+        client.post("/api/test", files={"file": FAKE_FILE}, headers={"X-API-Key": key})
+
+    with store._connect() as conn:
+        dets = conn.execute("SELECT COUNT(*) FROM detections WHERE user_id = ?", (user_id,)).fetchone()[0]
+        srcs = conn.execute("SELECT COUNT(*) FROM source_images WHERE user_id = ?", (user_id,)).fetchone()[0]
+        idents = conn.execute("SELECT COUNT(*) FROM identities WHERE user_id = ?", (user_id,)).fetchone()[0]
+    assert dets == 0 and srcs == 0 and idents == 0  # stateless
+
+
+def test_test_endpoint_requires_api_key(client):
+    r = client.post("/api/test", files={"file": FAKE_FILE})
+    assert r.status_code in (401, 403)
+
+
+def test_test_endpoint_type_filter(client):
+    _, key = _create_user_and_key()
+    _activate_face_model()
+    _activate_object_model()
+    face_engine = MagicMock()
+    face_engine.detect.return_value = [
+        FaceDetection(bbox=(1, 2, 30, 30), confidence=0.8, embedding=MagicMock()),
+    ]
+    obj_engine = MagicMock()
+    obj_engine.detect.return_value = [
+        ObjectDetection(bbox=(0, 0, 9, 9), confidence=0.6, class_name="car", class_id=2),
+    ]
+    with patch("app.api.detect.acquire_image", return_value=b"bytes"), \
+         patch("app.api.detect.open_and_validate", return_value=_mock_image()), \
+         patch("app.api.detect.to_rgb_array", return_value=MagicMock()), \
+         patch.object(registry, "get_face_engine", return_value=face_engine), \
+         patch.object(registry, "get_object_engine", return_value=obj_engine):
+        r = client.post("/api/test?type=objects", files={"file": FAKE_FILE},
+                        headers={"X-API-Key": key})
+
+    assert r.status_code == 200
+    data = r.json()
+    assert data["counts"]["objects"] == 1
+    assert data["faces"] == []
+    face_engine.detect.assert_not_called()  # type=objects skips the face engine
+
+
+def test_test_endpoint_invalid_type(client):
+    _, key = _create_user_and_key()
+    with patch("app.api.detect.acquire_image", return_value=b"bytes"):
+        r = client.post("/api/test?type=bogus", files={"file": FAKE_FILE},
+                        headers={"X-API-Key": key})
+    assert r.status_code == 400

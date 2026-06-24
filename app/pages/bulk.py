@@ -13,7 +13,6 @@ templates = Jinja2Templates(directory="app/templates")
 
 
 @router.get("/detect")
-@router.get("/test")   # legacy redirect
 @router.get("/bulk")   # legacy redirect
 async def detect_page(request: Request):
     ctx = _base(request, "detect")

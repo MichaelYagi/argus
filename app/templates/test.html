@@ -2,36 +2,257 @@
 {% block title %}Test — Argus{% endblock %}
 
 {% block content %}
-<h1 style="margin-bottom:20px">Test detection</h1>
-<div class="card" style="max-width:580px">
-  <form id="detect-form">
-    <div class="form-group" style="display:flex;align-items:center;gap:12px">
-      <label class="lbl" style="margin:0;white-space:nowrap">Detect</label>
-      <select id="detect-mode" style="width:auto">
-        <option value="faces">Faces</option>
-        <option value="objects">Objects</option>
-        <option value="all">Faces + Objects</option>
-      </select>
-    </div>
-    <div class="form-group">
-      <div class="drop-zone" id="drop-zone">
-        <p>Drop an image here or click to browse</p>
-        <input type="file" id="file-input" accept="image/*" hidden>
-      </div>
-      <div id="preview" hidden style="margin-top:8px">
-        <img id="preview-img" style="max-width:100%;border-radius:4px;display:block">
-      </div>
-    </div>
-    <div class="form-group">
-      <label class="lbl">Or image URL</label>
-      <input type="url" id="url-input" placeholder="http://…">
-    </div>
-    <button type="submit" class="btn btn-primary">Detect</button>
-  </form>
+<h1 style="margin-bottom:6px">Test detection</h1>
+<p class="muted" style="margin-bottom:20px;font-size:13px">
+  Check whether an image contains people or objects. Nothing is stored, enrolled, or matched.
+</p>
+
+<div class="card" style="max-width:680px">
+  <div style="display:flex;align-items:center;gap:12px;margin-bottom:16px">
+    <label class="lbl" style="margin:0;white-space:nowrap">Test for</label>
+    <select id="test-mode" style="width:auto">
+      <option value="all" selected>People + Objects</option>
+      <option value="faces">People</option>
+      <option value="objects">Objects</option>
+    </select>
+  </div>
+
+  <div class="drop-zone" id="drop-zone">
+    <p>Drop an image here or click to browse</p>
+    <p class="muted" style="font-size:12px">One image — JPEG, PNG, WEBP, HEIC and more</p>
+    <input type="file" id="file-input" accept="image/*" hidden>
+  </div>
+
+  <div style="margin-top:12px">
+    <label class="lbl">Or paste an image URL</label>
+    <input type="text" id="url-input" placeholder="https://..." style="font-size:13px">
+  </div>
+
+  <div style="margin-top:12px">
+    <label class="lbl">Or paste a base64 image</label>
+    <textarea id="b64-input" rows="2"
+              placeholder="data:image/jpeg;base64,... or raw base64 string"
+              style="font-size:12px;resize:vertical;font-family:monospace"></textarea>
+  </div>
+
+  <div style="display:flex;align-items:center;gap:12px;margin-top:14px">
+    <button class="btn btn-primary" id="test-btn">Test</button>
+    <button class="btn btn-ghost" id="clear-btn" type="button">Clear</button>
+    <span id="test-status" class="muted" style="font-size:13px"></span>
+  </div>
 </div>
-<div id="result-area" style="margin-top:24px"></div>
+
+<div id="results" style="max-width:680px;margin-top:16px"></div>
 {% endblock %}
 
 {% block scripts %}
-<script src="/static/js/test.js"></script>
+<script>
+(function() {
+  const dropZone  = document.getElementById('drop-zone');
+  const fileInput = document.getElementById('file-input');
+  const urlInput  = document.getElementById('url-input');
+  const b64Input  = document.getElementById('b64-input');
+  const modeSel   = document.getElementById('test-mode');
+  const testBtn   = document.getElementById('test-btn');
+  const clearBtn  = document.getElementById('clear-btn');
+  const statusEl  = document.getElementById('test-status');
+  const results   = document.getElementById('results');
+
+  let pickedFile = null;
+
+  function esc(s) {
+    return String(s).replace(/[&<>"']/g, c => (
+      {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]
+    ));
+  }
+
+  function setStatus(msg) { statusEl.textContent = msg || ''; }
+
+  function showFileName() {
+    dropZone.querySelector('p').textContent =
+      pickedFile ? pickedFile.name : 'Drop an image here or click to browse';
+  }
+
+  dropZone.addEventListener('click', () => fileInput.click());
+  dropZone.addEventListener('dragover', e => { e.preventDefault(); dropZone.classList.add('over'); });
+  dropZone.addEventListener('dragleave', () => dropZone.classList.remove('over'));
+  dropZone.addEventListener('drop', e => {
+    e.preventDefault();
+    dropZone.classList.remove('over');
+    if (e.dataTransfer.files.length) {
+      pickedFile = e.dataTransfer.files[0];
+      urlInput.value = ''; b64Input.value = '';
+      showFileName();
+    }
+  });
+  fileInput.addEventListener('change', () => {
+    if (fileInput.files.length) {
+      pickedFile = fileInput.files[0];
+      urlInput.value = ''; b64Input.value = '';
+      showFileName();
+    }
+  });
+
+  clearBtn.addEventListener('click', () => {
+    pickedFile = null;
+    fileInput.value = ''; urlInput.value = ''; b64Input.value = '';
+    showFileName();
+    results.innerHTML = '';
+    current = null;
+    setStatus('');
+  });
+
+  testBtn.addEventListener('click', async () => {
+    const url = urlInput.value.trim();
+    const b64 = b64Input.value.trim();
+    const provided = (pickedFile ? 1 : 0) + (url ? 1 : 0) + (b64 ? 1 : 0);
+    if (provided === 0) { setStatus('Provide an image, URL, or base64.'); return; }
+    if (provided > 1)  { setStatus('Provide only one of image, URL, or base64.'); return; }
+
+    testBtn.disabled = true;
+    setStatus('Testing...');
+    results.innerHTML = '';
+
+    const opts = { method: 'POST' };
+    let displaySrc;
+    if (pickedFile) {
+      const fd = new FormData();
+      fd.append('file', pickedFile);
+      opts.body = fd;
+      displaySrc = URL.createObjectURL(pickedFile);
+    } else {
+      opts.headers = { 'Content-Type': 'application/json' };
+      opts.body = JSON.stringify(url ? { image_url: url } : { image_base64: b64 });
+      displaySrc = url
+        ? url
+        : (b64.startsWith('data:') ? b64 : 'data:image/jpeg;base64,' + b64);
+    }
+
+    try {
+      const resp = await fetch('/api/test?type=' + encodeURIComponent(modeSel.value), opts);
+      const data = await resp.json();
+      if (!resp.ok) {
+        results.innerHTML = `<div class="card" style="border-left:3px solid #e53e3e">${esc(data.detail || 'Test failed')}</div>`;
+        return;
+      }
+      render(data, displaySrc);
+    } catch (err) {
+      results.innerHTML = `<div class="card" style="border-left:3px solid #e53e3e">${esc(err.message)}</div>`;
+    } finally {
+      setStatus('');
+      testBtn.disabled = false;
+    }
+  });
+
+  const FACE_COLOR = '#3a8ef6';
+  const OBJ_COLOR  = '#10b981';
+
+  let current = null;  // { img, data } for the latest result — used on resize
+  window.addEventListener('resize', () => {
+    if (current && current.img.naturalWidth) drawOverlays(current.img, current.data);
+  });
+
+  function render(data, displaySrc) {
+    const nFaces = data.counts.faces;
+    const nObjs  = data.counts.objects;
+    const mode   = modeSel.value;
+
+    const parts = [];
+    if (mode !== 'objects') {
+      parts.push(data.available.faces
+        ? `<strong>${nFaces}</strong> ${nFaces === 1 ? 'person' : 'people'}`
+        : `<span class="muted">no face model active</span>`);
+    }
+    if (mode !== 'faces') {
+      parts.push(data.available.objects
+        ? `<strong>${nObjs}</strong> object${nObjs === 1 ? '' : 's'}`
+        : `<span class="muted">no object model active</span>`);
+    }
+
+    let html = `<div class="card">
+      <div style="font-size:15px;margin-bottom:10px">Found ${parts.join(' &middot; ')}</div>`;
+
+    if (nObjs) {
+      const counts = {};
+      data.objects.forEach(o => { counts[o.class_name] = (counts[o.class_name] || 0) + 1; });
+      html += `<div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px">`;
+      Object.keys(counts).sort().forEach(name => {
+        html += `<span class="badge badge-object">${esc(name)}${counts[name] > 1 ? ' &times;' + counts[name] : ''}</span>`;
+      });
+      html += `</div>`;
+    }
+
+    if (displaySrc) {
+      html += `<div id="img-wrap" style="position:relative;display:inline-block;max-width:100%;line-height:0">
+        <img id="test-img" src="${esc(displaySrc)}" style="max-width:100%;height:auto;border-radius:4px;display:block">
+      </div>`;
+    }
+
+    if (data.faces.length) {
+      html += `<table style="width:100%;font-size:12px;border-collapse:collapse;margin-top:10px">
+        <thead><tr style="border-bottom:1px solid var(--border);text-align:left">
+          <th style="padding:4px 0">Face</th><th>Confidence</th><th>Age</th><th>Gender</th>
+        </tr></thead><tbody>`;
+      data.faces.forEach((f, i) => {
+        html += `<tr style="border-bottom:1px solid var(--border)">
+          <td style="padding:4px 0">#${i + 1}</td>
+          <td>${(f.confidence * 100).toFixed(0)}%</td>
+          <td>${f.age != null ? f.age : '-'}</td>
+          <td>${f.gender != null ? esc(f.gender) : '-'}</td>
+        </tr>`;
+      });
+      html += `</tbody></table>`;
+    }
+
+    html += `</div>`;
+    results.innerHTML = html;
+
+    if (displaySrc) {
+      const img = document.getElementById('test-img');
+      current = { img, data };
+      const draw = () => drawOverlays(img, data);
+      if (img.complete && img.naturalWidth) draw();
+      else img.addEventListener('load', draw);
+      img.addEventListener('error', () => {
+        const wrap = document.getElementById('img-wrap');
+        if (wrap) wrap.insertAdjacentHTML('beforeend',
+          `<div class="muted" style="font-size:12px;line-height:1.4;padding:6px 0">` +
+          `Couldn't load the image for preview (boxes hidden), but detection ran.</div>`);
+      });
+    } else {
+      current = null;
+    }
+  }
+
+  function box(b, color, label, idx) {
+    const wrap = document.getElementById('img-wrap');
+    const img  = document.getElementById('test-img');
+    const sx = img.clientWidth  / img.naturalWidth;
+    const sy = img.clientHeight / img.naturalHeight;
+    const d = document.createElement('div');
+    d.className = 'test-overlay';
+    d.style.cssText =
+      `position:absolute;border:2px solid ${color};border-radius:2px;` +
+      `left:${b.x * sx}px;top:${b.y * sy}px;width:${b.w * sx}px;height:${b.h * sy}px;` +
+      `box-sizing:border-box;pointer-events:none`;
+    const tag = document.createElement('span');
+    tag.textContent = label;
+    tag.style.cssText =
+      `position:absolute;left:-2px;top:-18px;background:${color};color:#fff;` +
+      `font-size:10px;line-height:14px;padding:0 4px;border-radius:2px;white-space:nowrap`;
+    d.appendChild(tag);
+    wrap.appendChild(d);
+  }
+
+  function drawOverlays(img, data) {
+    const wrap = document.getElementById('img-wrap');
+    if (!wrap || !img.naturalWidth) return;
+    wrap.querySelectorAll('.test-overlay').forEach(e => e.remove());
+    data.objects.forEach(o =>
+      box(o.bbox, OBJ_COLOR, `${o.class_name} ${(o.confidence * 100).toFixed(0)}%`));
+    data.faces.forEach((f, i) =>
+      box(f.bbox, FACE_COLOR, `Face #${i + 1}`));
+  }
+})();
+</script>
 {% endblock %}
