@@ -42,7 +42,7 @@ async def stats(
 async def identities_summary(
     type: Optional[str] = Query(None),
     cursor: Optional[str] = Query(None),
-    limit: int = Query(30, ge=1, le=100),
+    limit: int = Query(30, ge=1, le=1000),
     user_id: int = Depends(require_auth),
     environment_id: int = Depends(require_env_id),
 ):
