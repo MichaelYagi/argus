@@ -1217,6 +1217,9 @@ _SETTINGS_SEED: list[tuple] = [
     ("system.use_gpu",
      "true",  "bool",   "system",
      "Use GPU | Enable GPU inference when a CUDA device is available; disable to force CPU"),
+    ("system.auto_approve_users",
+     "true",  "bool",   "system",
+     "Auto-approve New Users | Approve new accounts immediately on sign-up; disable to require admin approval"),
 ]
 
 

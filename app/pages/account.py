@@ -207,7 +207,7 @@ async def approve_user(user_id: int, request: Request):
     if redir:
         return redir
     store.set_user_approved(user_id, True)
-    return RedirectResponse("/account", status_code=303)
+    return RedirectResponse("/settings", status_code=303)
 
 
 @router.post("/admin/revoke/{user_id}")
@@ -216,7 +216,7 @@ async def revoke_user(user_id: int, request: Request):
     if redir:
         return redir
     store.set_user_approved(user_id, False)
-    return RedirectResponse("/account", status_code=303)
+    return RedirectResponse("/settings", status_code=303)
 
 
 @router.post("/admin/user/{user_id}/delete")
@@ -228,4 +228,4 @@ async def admin_delete_user(user_id: int, request: Request):
         store.delete_user(user_id)
         from app.core import face_index as _fi
         _fi.rebuild_user(user_id)  # drop their entries from the in-memory index
-    return RedirectResponse("/account", status_code=303)
+    return RedirectResponse("/settings", status_code=303)

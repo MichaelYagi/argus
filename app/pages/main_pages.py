@@ -159,4 +159,5 @@ async def settings_page(request: Request):
     ctx["coco_classes"]    = COCO_CLASSES
     ctx["gpu_available"]   = gpu_available
     ctx["active_obj_world"] = active_obj_name and "world" in active_obj_name.lower()
+    ctx["managed_users"]   = [dict(u) for u in store.list_managed_users(ctx["user_id"])]
     return _r(request, "settings.html", ctx)

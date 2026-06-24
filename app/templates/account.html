@@ -147,50 +147,6 @@
 </div>
 
 {% if is_admin %}
-<!-- Admin: user management -->
-<div class="card" style="margin-bottom:16px">
-  <h2 style="margin-bottom:4px">Users</h2>
-  <p class="muted" style="font-size:12px;margin-bottom:12px">
-    Approve registrations, revoke or restore access, and delete accounts.
-    Deleting an account permanently removes all of that user's data.
-  </p>
-  {% if managed_users %}
-    {% for u in managed_users %}
-    <div style="display:flex;align-items:center;gap:12px;padding:10px 0;border-bottom:1px solid var(--border);flex-wrap:wrap">
-      <strong style="font-size:14px">{{ u.username }}</strong>
-      {% if u.is_approved %}
-      <span style="font-size:11px;font-weight:600;color:var(--success);border:1px solid var(--success);
-                   border-radius:10px;padding:1px 8px">Active</span>
-      {% else %}
-      <span style="font-size:11px;font-weight:600;color:var(--muted);border:1px solid var(--border);
-                   border-radius:10px;padding:1px 8px">No access</span>
-      {% endif %}
-      <span class="muted" style="font-size:12px">Registered <time class="fmt-date" datetime="{{ u.created_at }}">{{ u.created_at }}</time></span>
-      <span style="flex:1"></span>
-      {% if u.is_approved %}
-      <form method="post" action="/admin/revoke/{{ u.id }}" style="display:inline">
-        <button class="btn btn-ghost" style="padding:5px 12px;font-size:12px"
-                title="Block this user from signing in (keeps their data)">Revoke access</button>
-      </form>
-      {% else %}
-      <form method="post" action="/admin/approve/{{ u.id }}" style="display:inline">
-        <button class="btn btn-success" style="padding:5px 12px;font-size:12px">Approve</button>
-      </form>
-      {% endif %}
-      <button class="btn btn-danger" style="padding:5px 12px;font-size:12px"
-              onclick="showConfirm('Delete account &quot;{{ u.username }}&quot;? All of this user\'s identities, detections, references, and images will be permanently removed. This cannot be undone.',
-                () => document.getElementById('del-user-{{ u.id }}').submit(),
-                {confirmText:'Delete account', danger:true})">Delete</button>
-      <form id="del-user-{{ u.id }}" method="post" action="/admin/user/{{ u.id }}/delete" style="display:none"></form>
-    </div>
-    {% endfor %}
-  {% else %}
-    <p class="muted">No other users.</p>
-  {% endif %}
-</div>
-{% endif %}
-
-{% if is_admin %}
 <!-- System health (admin only) -->
 <div class="card" style="margin-bottom:16px">
   <h2 style="margin-bottom:14px">System health</h2>

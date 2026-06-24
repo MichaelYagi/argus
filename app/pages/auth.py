@@ -16,6 +16,7 @@ from app.core.security import (
     hash_password,
     verify_password,
 )
+from app.core import settings_cache
 from app.db import store
 
 router = APIRouter()
@@ -50,13 +51,14 @@ async def signup(
         return templates.TemplateResponse(request, "signup.html", {"error": err})
 
     is_first = store.count_users() == 0
+    auto_approve = is_first or settings_cache.cache.get_or("system.auto_approve_users", True)
     user_id = store.create_user(
         username, hash_password(password),
-        is_admin=is_first, is_approved=is_first,
+        is_admin=is_first, is_approved=auto_approve,
     )
 
-    if is_first:
-        # First user (admin) — log them in immediately and auto-generate their first key
+    if auto_approve:
+        # Log the new user in immediately and auto-generate their first key
         plaintext = generate_api_key()
         store.create_api_key(user_id, hash_api_key(plaintext), "Default key")
         request.session["user_id"] = user_id
@@ -64,7 +66,7 @@ async def signup(
         request.session["new_key"] = plaintext
         return RedirectResponse("/account", status_code=303)
 
-    # Subsequent users wait for admin approval
+    # Admin approval required
     return templates.TemplateResponse(request, "pending.html", {"request": request})
 
 
