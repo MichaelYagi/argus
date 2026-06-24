@@ -1,0 +1,101 @@
+{% extends "base.html" %}
+{% block title %}Environments — Argus{% endblock %}
+
+{% block content %}
+<div style="display:flex;align-items:center;gap:12px;margin-bottom:24px;flex-wrap:wrap">
+  <h1 style="margin:0">Environments</h1>
+</div>
+
+<p class="muted" style="font-size:13px;margin-bottom:20px">
+  Environments are isolated data namespaces within your account. Each API key is bound to one
+  environment — detections, identities, and galleries are completely separate between environments.
+</p>
+
+<!-- Existing environments -->
+<div class="card" style="margin-bottom:16px">
+  <h2 style="margin-bottom:12px">Your environments</h2>
+  {% for env in env_list %}
+  <div style="display:flex;align-items:center;gap:12px;padding:10px 0;
+              border-bottom:1px solid var(--border);flex-wrap:wrap"
+       id="env-row-{{ env.id }}">
+    <div style="flex:1;min-width:120px">
+      <strong style="font-size:14px" id="env-label-{{ env.id }}">{{ env.name }}</strong>
+      {% if env.id == environment_id %}
+      <span style="font-size:11px;font-weight:600;color:var(--accent);border:1px solid var(--accent);
+                   border-radius:10px;padding:1px 8px;margin-left:8px">active</span>
+      {% endif %}
+    </div>
+    <span class="muted" style="font-size:12px">
+      {{ env.identities }} {{ 'identity' if env.identities == 1 else 'identities' }},
+      {{ env.detections }} detection{{ 's' if env.detections != 1 }}
+    </span>
+    <div style="display:flex;gap:6px;align-items:center">
+      <button class="btn btn-ghost" style="padding:4px 10px;font-size:12px"
+              onclick="startRename({{ env.id }}, '{{ env.name | e }}')">Rename</button>
+      {% if env_list | length > 1 %}
+      <button class="btn btn-danger" style="padding:4px 10px;font-size:12px"
+              onclick="showConfirm(
+                'Delete environment &quot;{{ env.name | e }}&quot;? All {{ env.identities }} identities and {{ env.detections }} detections will be permanently removed.',
+                () => document.getElementById('del-env-{{ env.id }}').submit(),
+                {confirmText: 'Delete environment', danger: true}
+              )">Delete</button>
+      <form id="del-env-{{ env.id }}" method="post"
+            action="/environments/{{ env.id }}/delete" style="display:none"></form>
+      {% endif %}
+    </div>
+  </div>
+  {% endfor %}
+</div>
+
+<!-- Create new environment -->
+<div class="card" style="margin-bottom:16px">
+  <h2 style="margin-bottom:12px">Create environment</h2>
+  <form method="post" action="/environments/create"
+        style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+    <input type="text" name="name" placeholder="Environment name (e.g. production, staging)"
+           style="width:280px" maxlength="80" required>
+    <button type="submit" class="btn btn-primary">Create</button>
+  </form>
+</div>
+
+<!-- Rename modal (inline, no JS modal dependency) -->
+<div id="rename-overlay" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);
+     z-index:500;align-items:center;justify-content:center">
+  <div style="background:var(--surface);border-radius:10px;padding:24px;
+              min-width:320px;max-width:90vw;box-shadow:0 8px 32px rgba(0,0,0,.4)">
+    <h2 style="margin-bottom:16px;font-size:16px">Rename environment</h2>
+    <form id="rename-form" method="post" action="">
+      <div class="form-group">
+        <label class="lbl">New name</label>
+        <input type="text" name="name" id="rename-input" style="width:100%" maxlength="80" required>
+      </div>
+      <div style="display:flex;gap:8px;margin-top:16px">
+        <button type="submit" class="btn btn-primary">Save</button>
+        <button type="button" class="btn btn-ghost"
+                onclick="document.getElementById('rename-overlay').style.display='none'">Cancel</button>
+      </div>
+    </form>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+function startRename(envId, currentName) {
+  const overlay = document.getElementById('rename-overlay');
+  const form    = document.getElementById('rename-form');
+  const input   = document.getElementById('rename-input');
+  form.action   = '/environments/' + envId + '/rename';
+  input.value   = currentName;
+  overlay.style.display = 'flex';
+  input.focus();
+  input.select();
+}
+document.getElementById('rename-overlay').addEventListener('click', function(e) {
+  if (e.target === this) this.style.display = 'none';
+});
+document.addEventListener('keydown', function(e) {
+  if (e.key === 'Escape') document.getElementById('rename-overlay').style.display = 'none';
+});
+</script>
+{% endblock %}

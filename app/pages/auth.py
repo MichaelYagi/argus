@@ -58,11 +58,12 @@ async def signup(
     )
 
     if auto_approve:
-        # Log the new user in immediately and auto-generate their first key
+        env_id = store.get_default_environment_id(user_id)
         plaintext = generate_api_key()
-        store.create_api_key(user_id, hash_api_key(plaintext), "Default key")
+        store.create_api_key(user_id, hash_api_key(plaintext), "Default key", env_id)
         request.session["user_id"] = user_id
         request.session["username"] = username
+        request.session["environment_id"] = env_id
         request.session["new_key"] = plaintext
         return RedirectResponse("/account", status_code=303)
 
@@ -93,11 +94,14 @@ async def login(
 
     request.session["user_id"] = row["id"]
     request.session["username"] = row["username"]
+    env_id = store.get_default_environment_id(row["id"])
+    if env_id:
+        request.session["environment_id"] = env_id
 
     # Auto-generate first API key if the user has none yet; redirect to account so they see it
     if not store.list_api_keys(row["id"]):
         plaintext = generate_api_key()
-        store.create_api_key(row["id"], hash_api_key(plaintext), "Default key")
+        store.create_api_key(row["id"], hash_api_key(plaintext), "Default key", env_id)
         request.session["new_key"] = plaintext
         redirect_to = "/account"
     else:

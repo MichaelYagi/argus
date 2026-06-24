@@ -138,21 +138,22 @@ def test_users_cannot_see_each_others_identities(client):
 # ---------------------------------------------------------------------------
 
 def _insert_detection(user_id: int, identity_id: int, crop: str = "crop.jpg", offset: int = 0) -> int:
+    env_id = store.get_default_environment_id(user_id) or 0
     with store._connect() as conn:
         conn.execute(
-            """INSERT INTO source_images (user_id, file_path, width, height)
-               VALUES (?, ?, 640, 480)""",
-            (user_id, f"src_{offset}.jpg"),
+            """INSERT INTO source_images (user_id, environment_id, file_path, width, height)
+               VALUES (?, ?, ?, 640, 480)""",
+            (user_id, env_id, f"src_{offset}.jpg"),
         )
         src_id = conn.execute("SELECT last_insert_rowid()").fetchone()[0]
         conn.execute(
             """INSERT INTO detections
-               (user_id, identity_id, source_image_id, type, model_id, confidence,
+               (user_id, environment_id, identity_id, source_image_id, type, model_id, confidence,
                 bbox_x, bbox_y, bbox_w, bbox_h, crop_path,
                 detected_at)
-               VALUES (?, ?, ?, 'face', NULL, 0.9, 0, 0, 100, 100, ?,
+               VALUES (?, ?, ?, ?, 'face', NULL, 0.9, 0, 0, 100, 100, ?,
                 datetime('now', ? || ' seconds'))""",
-            (user_id, identity_id, src_id, crop, str(-offset)),
+            (user_id, env_id, identity_id, src_id, crop, str(-offset)),
         )
         return conn.execute("SELECT last_insert_rowid()").fetchone()[0]
 
@@ -205,19 +206,20 @@ def test_gallery_pagination(client):
 # ---------------------------------------------------------------------------
 
 def _insert_unknown(user_id: int, det_type: str = "face", offset: int = 0) -> None:
+    env_id = store.get_default_environment_id(user_id) or 0
     with store._connect() as conn:
         conn.execute(
-            "INSERT INTO source_images (user_id, file_path, width, height) VALUES (?, ?, 640, 480)",
-            (user_id, f"unknown_src_{offset}.jpg"),
+            "INSERT INTO source_images (user_id, environment_id, file_path, width, height) VALUES (?, ?, ?, 640, 480)",
+            (user_id, env_id, f"unknown_src_{offset}.jpg"),
         )
         src_id = conn.execute("SELECT last_insert_rowid()").fetchone()[0]
         conn.execute(
             """INSERT INTO detections
-               (user_id, identity_id, source_image_id, type, model_id, confidence,
+               (user_id, environment_id, identity_id, source_image_id, type, model_id, confidence,
                 bbox_x, bbox_y, bbox_w, bbox_h, crop_path, detected_at)
-               VALUES (?, NULL, ?, ?, NULL, 0.6, 0, 0, 100, 100, 'unk.jpg',
+               VALUES (?, ?, NULL, ?, ?, NULL, 0.6, 0, 0, 100, 100, 'unk.jpg',
                 datetime('now', ? || ' seconds'))""",
-            (user_id, src_id, det_type, str(-offset)),
+            (user_id, env_id, src_id, det_type, str(-offset)),
         )
 
 

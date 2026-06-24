@@ -175,14 +175,15 @@ def test_enroll_existing_not_found(client):
 # ---------------------------------------------------------------------------
 
 def _insert_face_detection(user_id: int, identity_id: int, crop: str) -> int:
+    env_id = store.get_default_environment_id(user_id) or 0
     src_id = store.get_or_create_source_image(user_id, f"src-{crop}", 640, 480)
     with store._connect() as conn:
         conn.execute(
             """INSERT INTO detections
-               (user_id, identity_id, source_image_id, type, model_id, confidence,
+               (user_id, environment_id, identity_id, source_image_id, type, model_id, confidence,
                 bbox_x, bbox_y, bbox_w, bbox_h, crop_path, embedding, review_status)
-               VALUES (?, ?, ?, 'face', NULL, 0.9, 0, 0, 80, 80, ?, ?, 'confirmed')""",
-            (user_id, identity_id, src_id, crop, b"\x00" * 2048),
+               VALUES (?, ?, ?, ?, 'face', NULL, 0.9, 0, 0, 80, 80, ?, ?, 'confirmed')""",
+            (user_id, env_id, identity_id, src_id, crop, b"\x00" * 2048),
         )
         return conn.execute("SELECT last_insert_rowid()").fetchone()[0]
 

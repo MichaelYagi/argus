@@ -34,18 +34,19 @@ def _setup(client) -> tuple[int, dict]:
 
 def _insert_detection(user_id: int, confidence: float = 0.5, identity_id: int | None = None,
                       det_type: str = "face") -> int:
+    env_id = store.get_default_environment_id(user_id) or 0
     with store._connect() as conn:
         conn.execute(
-            "INSERT INTO source_images (user_id, file_path, width, height) VALUES (?, ?, 640, 480)",
-            (user_id, f"src_{confidence}.jpg"),
+            "INSERT INTO source_images (user_id, environment_id, file_path, width, height) VALUES (?, ?, ?, 640, 480)",
+            (user_id, env_id, f"src_{confidence}.jpg"),
         )
         src_id = conn.execute("SELECT last_insert_rowid()").fetchone()[0]
         conn.execute(
             """INSERT INTO detections
-               (user_id, identity_id, source_image_id, type, model_id, confidence,
+               (user_id, environment_id, identity_id, source_image_id, type, model_id, confidence,
                 bbox_x, bbox_y, bbox_w, bbox_h, crop_path)
-               VALUES (?, ?, ?, ?, NULL, ?, 0, 0, 100, 100, 'crop.jpg')""",
-            (user_id, identity_id, src_id, det_type, confidence),
+               VALUES (?, ?, ?, ?, ?, NULL, ?, 0, 0, 100, 100, 'crop.jpg')""",
+            (user_id, env_id, identity_id, src_id, det_type, confidence),
         )
         return conn.execute("SELECT last_insert_rowid()").fetchone()[0]
 

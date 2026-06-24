@@ -56,6 +56,60 @@ def init_db() -> None:
 
 def _migrate(conn: sqlite3.Connection) -> None:
     """Additive migrations for columns not covered by CREATE TABLE IF NOT EXISTS."""
+    # Environments: create table (handled by schema.sql), add column to data tables,
+    # create default environment per user, backfill existing rows.
+    existing_env_tables = {r[0] for r in conn.execute(
+        "SELECT name FROM sqlite_master WHERE type='table' AND name='environments'"
+    ).fetchall()}
+    if not existing_env_tables:
+        # schema.sql executescript already ran — the table exists but may be empty
+        pass
+
+    for tbl, col in [
+        ("api_keys",       "environment_id"),
+        ("identities",     "environment_id"),
+        ("source_images",  "environment_id"),
+        ("detections",     "environment_id"),
+        ("face_embeddings","environment_id"),
+        ("jobs",           "environment_id"),
+    ]:
+        cols = {r[1] for r in conn.execute(f"PRAGMA table_info({tbl})")}
+        if col not in cols:
+            conn.execute(f"ALTER TABLE {tbl} ADD COLUMN {col} INTEGER NOT NULL DEFAULT 0")
+
+    # Create a "default" environment for every user that doesn't have one
+    user_ids = [r[0] for r in conn.execute("SELECT id FROM users").fetchall()]
+    for uid in user_ids:
+        conn.execute(
+            "INSERT OR IGNORE INTO environments (user_id, name) VALUES (?, 'default')",
+            (uid,),
+        )
+
+    # Backfill environment_id=0 rows to their user's default environment
+    for tbl, user_col in [
+        ("api_keys",       "user_id"),
+        ("identities",     "user_id"),
+        ("source_images",  "user_id"),
+        ("jobs",           "user_id"),
+    ]:
+        conn.execute(f"""
+            UPDATE {tbl} SET environment_id = (
+                SELECT id FROM environments WHERE user_id = {tbl}.{user_col} AND name = 'default'
+            ) WHERE environment_id = 0
+        """)
+
+    # detections and face_embeddings derive their environment from related rows
+    conn.execute("""
+        UPDATE detections SET environment_id = (
+            SELECT environment_id FROM source_images WHERE source_images.id = detections.source_image_id
+        ) WHERE environment_id = 0
+    """)
+    conn.execute("""
+        UPDATE face_embeddings SET environment_id = (
+            SELECT environment_id FROM identities WHERE identities.id = face_embeddings.identity_id
+        ) WHERE environment_id = 0
+    """)
+
     # Schema column additions
     existing_cols = {r[1] for r in conn.execute("PRAGMA table_info(detections)")}
     if "embedding" not in existing_cols:
@@ -100,6 +154,40 @@ def _migrate(conn: sqlite3.Connection) -> None:
 
 
 # ---------------------------------------------------------------------------
+# Environment resolution helper
+# ---------------------------------------------------------------------------
+
+def _resolve_env(conn: sqlite3.Connection, user_id: int, environment_id: int | None) -> int:
+    """Return a concrete environment_id for data scoping.
+
+    When the caller passes an explicit environment_id, it is used as-is. When None
+    (older single-environment call sites and tests), fall back to the user's default
+    environment, creating it lazily if necessary so every user always has one.
+    """
+    if environment_id is not None:
+        return int(environment_id)
+    row = conn.execute(
+        "SELECT id FROM environments WHERE user_id = ? AND name = 'default' LIMIT 1",
+        (user_id,),
+    ).fetchone()
+    if row:
+        return int(row[0])
+    row = conn.execute(
+        "SELECT id FROM environments WHERE user_id = ? ORDER BY id ASC LIMIT 1",
+        (user_id,),
+    ).fetchone()
+    if row:
+        return int(row[0])
+    try:
+        conn.execute(
+            "INSERT INTO environments (user_id, name) VALUES (?, 'default')", (user_id,)
+        )
+    except sqlite3.IntegrityError:
+        return 0  # user no longer exists; queries against env 0 return empty
+    return int(conn.execute("SELECT last_insert_rowid()").fetchone()[0])
+
+
+# ---------------------------------------------------------------------------
 # Users
 # ---------------------------------------------------------------------------
 
@@ -114,7 +202,13 @@ def create_user(username: str, password_hash: str, is_admin: bool = False, is_ap
             "INSERT INTO users (username, password_hash, is_admin, is_approved) VALUES (?, ?, ?, ?)",
             (username, password_hash, 1 if is_admin else 0, 1 if is_approved else 0),
         )
-        return conn.execute("SELECT last_insert_rowid()").fetchone()[0]
+        user_id = conn.execute("SELECT last_insert_rowid()").fetchone()[0]
+        # Every user always has a default environment so data scoping has a home.
+        conn.execute(
+            "INSERT OR IGNORE INTO environments (user_id, name) VALUES (?, 'default')",
+            (user_id,),
+        )
+        return user_id
 
 
 def update_user_preferences(user_id: int, timezone: str, locale: str) -> None:
@@ -180,20 +274,21 @@ def get_user_by_id(user_id: int) -> sqlite3.Row | None:
 # API keys
 # ---------------------------------------------------------------------------
 
-def create_api_key(user_id: int, key_hash: str, label: str) -> int:
+def create_api_key(user_id: int, key_hash: str, label: str, environment_id: int | None = None) -> int:
     with _connect() as conn:
+        env_id = _resolve_env(conn, user_id, environment_id)
         conn.execute(
-            "INSERT INTO api_keys (user_id, key_hash, label) VALUES (?, ?, ?)",
-            (user_id, key_hash, label),
+            "INSERT INTO api_keys (user_id, environment_id, key_hash, label) VALUES (?, ?, ?, ?)",
+            (user_id, env_id, key_hash, label),
         )
         return conn.execute("SELECT last_insert_rowid()").fetchone()[0]
 
 
 def get_api_key_user(key_hash: str) -> sqlite3.Row | None:
-    """Return {key_id, user_id, username} for an active key hash, or None."""
+    """Return {key_id, user_id, environment_id, username} for an active key, or None."""
     with _connect() as conn:
         return conn.execute(
-            """SELECT ak.id AS key_id, ak.user_id, u.username
+            """SELECT ak.id AS key_id, ak.user_id, ak.environment_id, u.username
                FROM api_keys ak JOIN users u ON ak.user_id = u.id
                WHERE ak.key_hash = ? AND ak.is_active = 1""",
             (key_hash,),
@@ -211,8 +306,11 @@ def touch_api_key(key_id: int) -> None:
 def list_api_keys(user_id: int) -> list[sqlite3.Row]:
     with _connect() as conn:
         return conn.execute(
-            """SELECT id, label, created_at, last_used_at, is_active
-               FROM api_keys WHERE user_id = ? ORDER BY created_at DESC""",
+            """SELECT ak.id, ak.label, ak.created_at, ak.last_used_at, ak.is_active,
+                      ak.environment_id, e.name AS environment_name
+               FROM api_keys ak
+               LEFT JOIN environments e ON e.id = ak.environment_id
+               WHERE ak.user_id = ? ORDER BY ak.created_at DESC""",
             (user_id,),
         ).fetchall()
 
@@ -290,10 +388,12 @@ def list_identities(
     q: str | None = None,
     cursor: str | None = None,
     limit: int | None = None,
+    environment_id: int | None = None,
 ) -> list[sqlite3.Row]:
     with _connect() as conn:
-        sql = "SELECT * FROM identities WHERE user_id = ?"
-        params: list = [user_id]
+        env_id = _resolve_env(conn, user_id, environment_id)
+        sql = "SELECT * FROM identities WHERE user_id = ? AND environment_id = ?"
+        params: list = [user_id, env_id]
         if identity_type:
             sql += " AND type = ?"
             params.append(identity_type)
@@ -310,25 +410,27 @@ def list_identities(
         return conn.execute(sql, params).fetchall()
 
 
-def create_identity(user_id: int, identity_type: str, label: str) -> int:
+def create_identity(user_id: int, identity_type: str, label: str, environment_id: int | None = None) -> int:
     with _connect() as conn:
+        env_id = _resolve_env(conn, user_id, environment_id)
         conn.execute(
-            "INSERT INTO identities (user_id, type, label) VALUES (?, ?, ?)",
-            (user_id, identity_type, label),
+            "INSERT INTO identities (user_id, environment_id, type, label) VALUES (?, ?, ?, ?)",
+            (user_id, env_id, identity_type, label),
         )
         return conn.execute("SELECT last_insert_rowid()").fetchone()[0]
 
 
-def delete_identity(identity_id: int, user_id: int) -> tuple[bool, list[str]]:
+def delete_identity(identity_id: int, user_id: int, environment_id: int | None = None) -> tuple[bool, list[str]]:
     """Delete an identity, its detections, and any source images that become orphaned.
 
     Returns (deleted, crop_filenames) so the caller can remove crop files from disk.
     face_embeddings are removed via FK ON DELETE CASCADE when the identity row is deleted.
     """
     with _connect() as conn:
+        env_id = _resolve_env(conn, user_id, environment_id)
         if not conn.execute(
-            "SELECT 1 FROM identities WHERE id = ? AND user_id = ?",
-            (identity_id, user_id),
+            "SELECT 1 FROM identities WHERE id = ? AND user_id = ? AND environment_id = ?",
+            (identity_id, user_id, env_id),
         ).fetchone():
             return False, []
 
@@ -366,35 +468,49 @@ def delete_identity(identity_id: int, user_id: int) -> tuple[bool, list[str]]:
         return True, crops
 
 
-def delete_all_identities(user_id: int) -> tuple[int, list[str]]:
-    """Delete all identities and related data for a user.
+def delete_all_identities(user_id: int, environment_id: int | None = None) -> tuple[int, list[str]]:
+    """Delete all identities and related data for a user in one environment.
 
     Returns (count, crop_filenames) so the caller can remove crop files from disk.
     """
     with _connect() as conn:
+        env_id = _resolve_env(conn, user_id, environment_id)
         count = conn.execute(
-            "SELECT COUNT(*) FROM identities WHERE user_id = ?", (user_id,)
+            "SELECT COUNT(*) FROM identities WHERE user_id = ? AND environment_id = ?",
+            (user_id, env_id),
         ).fetchone()[0]
         crops = [
             r["crop_path"]
             for r in conn.execute(
-                "SELECT crop_path FROM detections WHERE user_id = ?", (user_id,)
+                "SELECT crop_path FROM detections WHERE user_id = ? AND environment_id = ?",
+                (user_id, env_id),
             ).fetchall()
         ]
         conn.execute(
-            "DELETE FROM face_embeddings WHERE identity_id IN "
-            "(SELECT id FROM identities WHERE user_id = ?)", (user_id,)
+            "DELETE FROM face_embeddings WHERE environment_id = ? AND identity_id IN "
+            "(SELECT id FROM identities WHERE user_id = ? AND environment_id = ?)",
+            (env_id, user_id, env_id),
         )
-        conn.execute("DELETE FROM detections WHERE user_id = ?", (user_id,))
-        conn.execute("DELETE FROM source_images WHERE user_id = ?", (user_id,))
-        conn.execute("DELETE FROM identities WHERE user_id = ?", (user_id,))
+        conn.execute(
+            "DELETE FROM detections WHERE user_id = ? AND environment_id = ?",
+            (user_id, env_id),
+        )
+        conn.execute(
+            "DELETE FROM source_images WHERE user_id = ? AND environment_id = ?",
+            (user_id, env_id),
+        )
+        conn.execute(
+            "DELETE FROM identities WHERE user_id = ? AND environment_id = ?",
+            (user_id, env_id),
+        )
         return count, crops
 
 
-def count_identities(user_id: int, identity_type: str | None = None) -> int:
+def count_identities(user_id: int, identity_type: str | None = None, environment_id: int | None = None) -> int:
     with _connect() as conn:
-        sql    = "SELECT COUNT(*) FROM identities WHERE user_id = ?"
-        params: list = [user_id]
+        env_id = _resolve_env(conn, user_id, environment_id)
+        sql    = "SELECT COUNT(*) FROM identities WHERE user_id = ? AND environment_id = ?"
+        params: list = [user_id, env_id]
         if identity_type:
             sql += " AND type = ?"
             params.append(identity_type)
@@ -406,9 +522,11 @@ def list_identities_summary(
     identity_type: str | None = None,
     cursor: str | None = None,
     limit: int = 30,
+    environment_id: int | None = None,
 ) -> list[sqlite3.Row]:
     """Return identities with counts and thumbnail in a single query."""
     with _connect() as conn:
+        env_id = _resolve_env(conn, user_id, environment_id)
         sql = """SELECT i.*,
                         COUNT(DISTINCT d.id)  AS detection_count,
                         COUNT(DISTINCT fe.id) AS embedding_count,
@@ -422,8 +540,8 @@ def list_identities_summary(
                  FROM identities i
                  LEFT JOIN detections d      ON d.identity_id  = i.id
                  LEFT JOIN face_embeddings fe ON fe.identity_id = i.id
-                 WHERE i.user_id = ?"""
-        params: list = [user_id]
+                 WHERE i.user_id = ? AND i.environment_id = ?"""
+        params: list = [user_id, env_id]
         if identity_type:
             sql += " AND i.type = ?"
             params.append(identity_type)
@@ -435,8 +553,9 @@ def list_identities_summary(
         return conn.execute(sql, params).fetchall()
 
 
-def get_identity_with_counts(identity_id: int, user_id: int) -> sqlite3.Row | None:
+def get_identity_with_counts(identity_id: int, user_id: int, environment_id: int | None = None) -> sqlite3.Row | None:
     with _connect() as conn:
+        env_id = _resolve_env(conn, user_id, environment_id)
         return conn.execute(
             """SELECT i.*,
                       COUNT(DISTINCT d.id)  AS detection_count,
@@ -451,25 +570,28 @@ def get_identity_with_counts(identity_id: int, user_id: int) -> sqlite3.Row | No
                FROM identities i
                LEFT JOIN detections d  ON d.identity_id = i.id
                LEFT JOIN face_embeddings fe ON fe.identity_id = i.id
-               WHERE i.id = ? AND i.user_id = ?
+               WHERE i.id = ? AND i.user_id = ? AND i.environment_id = ?
                GROUP BY i.id""",
-            (identity_id, user_id),
+            (identity_id, user_id, env_id),
         ).fetchone()
 
 
-def set_identity_cover(identity_id: int, user_id: int, detection_id: int) -> bool:
+def set_identity_cover(identity_id: int, user_id: int, detection_id: int, environment_id: int | None = None) -> bool:
     with _connect() as conn:
+        env_id = _resolve_env(conn, user_id, environment_id)
         conn.execute(
-            "UPDATE identities SET cover_detection_id = ? WHERE id = ? AND user_id = ?",
-            (detection_id, identity_id, user_id),
+            "UPDATE identities SET cover_detection_id = ? WHERE id = ? AND user_id = ? AND environment_id = ?",
+            (detection_id, identity_id, user_id, env_id),
         )
         return conn.execute("SELECT changes()").fetchone()[0] > 0
 
 
 def get_identity_gallery(
-    identity_id: int, user_id: int, cursor: str | None = None, limit: int = 30
+    identity_id: int, user_id: int, cursor: str | None = None, limit: int = 30,
+    environment_id: int | None = None,
 ) -> list[sqlite3.Row]:
     with _connect() as conn:
+        env_id = _resolve_env(conn, user_id, environment_id)
         # LEFT JOIN face_embeddings (enrolled references are keyed by crop_path) so each
         # crop carries whether it's currently part of the reference set.
         sql = """SELECT d.id, d.crop_path, d.confidence, d.detected_at, d.review_status,
@@ -479,8 +601,8 @@ def get_identity_gallery(
                  LEFT JOIN face_embeddings fe
                         ON fe.identity_id = d.identity_id AND fe.source_image_path = d.crop_path
                  LEFT JOIN source_images si ON si.id = d.source_image_id
-                 WHERE d.identity_id = ? AND d.user_id = ?"""
-        params: list = [identity_id, user_id]
+                 WHERE d.identity_id = ? AND d.user_id = ? AND d.environment_id = ?"""
+        params: list = [identity_id, user_id, env_id]
         if cursor:
             sql += " AND d.detected_at < ?"
             params.append(cursor)
@@ -494,11 +616,13 @@ def get_unknown_detections(
     detection_type: str | None = None,
     cursor: str | None = None,
     limit: int = 30,
+    environment_id: int | None = None,
 ) -> list[sqlite3.Row]:
     with _connect() as conn:
+        env_id = _resolve_env(conn, user_id, environment_id)
         sql = """SELECT id, type, crop_path, confidence, detected_at
-                 FROM detections WHERE user_id = ? AND identity_id IS NULL"""
-        params: list = [user_id]
+                 FROM detections WHERE user_id = ? AND environment_id = ? AND identity_id IS NULL"""
+        params: list = [user_id, env_id]
         if detection_type:
             sql += " AND type = ?"
             params.append(detection_type)
@@ -515,41 +639,52 @@ def insert_face_embedding(
     model_id: int | None,
     embedding_bytes: bytes,
     source_image_path: str | None = None,
+    environment_id: int | None = None,
 ) -> int:
     with _connect() as conn:
+        # Inherit the environment from the owning identity when not given explicitly,
+        # so face_embeddings rows are always scoped to the same environment.
+        env_id = environment_id
+        if env_id is None:
+            row = conn.execute(
+                "SELECT environment_id FROM identities WHERE id = ?", (identity_id,)
+            ).fetchone()
+            env_id = row[0] if row else 0
         conn.execute(
-            """INSERT INTO face_embeddings (identity_id, model_id, embedding, source_image_path)
-               VALUES (?, ?, ?, ?)""",
-            (identity_id, model_id, embedding_bytes, source_image_path),
+            """INSERT INTO face_embeddings (identity_id, environment_id, model_id, embedding, source_image_path)
+               VALUES (?, ?, ?, ?, ?)""",
+            (identity_id, env_id, model_id, embedding_bytes, source_image_path),
         )
         return conn.execute("SELECT last_insert_rowid()").fetchone()[0]
 
 
-def get_or_create_identity(user_id: int, identity_type: str, label: str) -> int:
+def get_or_create_identity(user_id: int, identity_type: str, label: str, environment_id: int | None = None) -> int:
     with _connect() as conn:
+        env_id = _resolve_env(conn, user_id, environment_id)
         # Case-insensitive lookup first — prevents duplicate identities when a caller
         # sends a different case than what's stored (e.g. "noah" vs "Noah").
         # Returns the oldest matching identity to stay deterministic if duplicates exist.
         existing = conn.execute(
             """SELECT id FROM identities
-               WHERE user_id = ? AND type = ? AND LOWER(label) = LOWER(?)
+               WHERE user_id = ? AND environment_id = ? AND type = ? AND LOWER(label) = LOWER(?)
                ORDER BY id ASC LIMIT 1""",
-            (user_id, identity_type, label),
+            (user_id, env_id, identity_type, label),
         ).fetchone()
         if existing:
             return existing[0]
         conn.execute(
-            "INSERT INTO identities (user_id, type, label) VALUES (?, ?, ?)",
-            (user_id, identity_type, label),
+            "INSERT INTO identities (user_id, environment_id, type, label) VALUES (?, ?, ?, ?)",
+            (user_id, env_id, identity_type, label),
         )
         return conn.execute("SELECT last_insert_rowid()").fetchone()[0]
 
 
-def get_identity(identity_id: int, user_id: int) -> sqlite3.Row | None:
+def get_identity(identity_id: int, user_id: int, environment_id: int | None = None) -> sqlite3.Row | None:
     with _connect() as conn:
+        env_id = _resolve_env(conn, user_id, environment_id)
         return conn.execute(
-            "SELECT * FROM identities WHERE id = ? AND user_id = ?",
-            (identity_id, user_id),
+            "SELECT * FROM identities WHERE id = ? AND user_id = ? AND environment_id = ?",
+            (identity_id, user_id, env_id),
         ).fetchone()
 
 
@@ -557,26 +692,29 @@ def get_identity(identity_id: int, user_id: int) -> sqlite3.Row | None:
 # Source images (per-user)
 # ---------------------------------------------------------------------------
 
-def get_source_image(source_image_id: int, user_id: int) -> sqlite3.Row | None:
+def get_source_image(source_image_id: int, user_id: int, environment_id: int | None = None) -> sqlite3.Row | None:
     with _connect() as conn:
+        env_id = _resolve_env(conn, user_id, environment_id)
         return conn.execute(
-            "SELECT * FROM source_images WHERE id = ? AND user_id = ?",
-            (source_image_id, user_id),
+            "SELECT * FROM source_images WHERE id = ? AND user_id = ? AND environment_id = ?",
+            (source_image_id, user_id, env_id),
         ).fetchone()
 
 
 def get_image_detections(
-    source_image_id: int, user_id: int, det_type: str | None = None
+    source_image_id: int, user_id: int, det_type: str | None = None,
+    environment_id: int | None = None,
 ) -> list[sqlite3.Row]:
     with _connect() as conn:
+        env_id = _resolve_env(conn, user_id, environment_id)
         sql = """SELECT d.id, d.type, d.identity_id, d.confidence, d.embedding,
                         d.bbox_x, d.bbox_y, d.bbox_w, d.bbox_h,
                         d.crop_path, d.review_status, d.attributes,
                         i.label AS identity_label
                  FROM detections d
                  LEFT JOIN identities i ON d.identity_id = i.id
-                 WHERE d.source_image_id = ? AND d.user_id = ?"""
-        params: list = [source_image_id, user_id]
+                 WHERE d.source_image_id = ? AND d.user_id = ? AND d.environment_id = ?"""
+        params: list = [source_image_id, user_id, env_id]
         if det_type:
             sql += " AND d.type = ?"
             params.append(det_type)
@@ -585,7 +723,8 @@ def get_image_detections(
 
 
 def clear_detections_for_source(
-    source_image_id: int, user_id: int, det_type: str | None = None
+    source_image_id: int, user_id: int, det_type: str | None = None,
+    environment_id: int | None = None,
 ) -> list[str]:
     """Delete detections for a source image (optionally just one type), keeping the
     source row. Returns removed crop filenames so the caller can delete the files.
@@ -593,6 +732,7 @@ def clear_detections_for_source(
     Used by detect's ``replace`` mode to make re-detecting the same image idempotent.
     """
     with _connect() as conn:
+        _resolve_env(conn, user_id, environment_id)
         sql = "SELECT crop_path FROM detections WHERE source_image_id = ? AND user_id = ?"
         params: list = [source_image_id, user_id]
         if det_type:
@@ -612,7 +752,7 @@ def clear_detections_for_source(
         return crops
 
 
-def delete_source_image(source_image_id: int, user_id: int) -> list[str] | None:
+def delete_source_image(source_image_id: int, user_id: int, environment_id: int | None = None) -> list[str] | None:
     """Delete a source image and cascade-delete all its detections (faces + objects).
 
     Returns the list of crop filenames that were removed (so the caller can delete
@@ -621,9 +761,10 @@ def delete_source_image(source_image_id: int, user_id: int) -> list[str] | None:
     shared with other users/rows.
     """
     with _connect() as conn:
+        env_id = _resolve_env(conn, user_id, environment_id)
         row = conn.execute(
-            "SELECT id FROM source_images WHERE id = ? AND user_id = ?",
-            (source_image_id, user_id),
+            "SELECT id FROM source_images WHERE id = ? AND user_id = ? AND environment_id = ?",
+            (source_image_id, user_id, env_id),
         ).fetchone()
         if not row:
             return None
@@ -645,15 +786,19 @@ def delete_source_image(source_image_id: int, user_id: int) -> list[str] | None:
         return crops
 
 
-def get_or_create_source_image(user_id: int, file_path: str, width: int, height: int) -> int:
+def get_or_create_source_image(
+    user_id: int, file_path: str, width: int, height: int, environment_id: int | None = None
+) -> int:
     with _connect() as conn:
+        env_id = _resolve_env(conn, user_id, environment_id)
         conn.execute(
-            "INSERT OR IGNORE INTO source_images (user_id, file_path, width, height) VALUES (?, ?, ?, ?)",
-            (user_id, file_path, width, height),
+            """INSERT OR IGNORE INTO source_images
+               (user_id, environment_id, file_path, width, height) VALUES (?, ?, ?, ?, ?)""",
+            (user_id, env_id, file_path, width, height),
         )
         return conn.execute(
-            "SELECT id FROM source_images WHERE user_id = ? AND file_path = ?",
-            (user_id, file_path),
+            "SELECT id FROM source_images WHERE user_id = ? AND environment_id = ? AND file_path = ?",
+            (user_id, env_id, file_path),
         ).fetchone()[0]
 
 
@@ -677,24 +822,33 @@ def insert_detection(
     embedding: bytes | None = None,
     review_status: str = "pending",
     attributes: str | None = None,
+    environment_id: int | None = None,
 ) -> int:
     with _connect() as conn:
+        # Inherit the environment from the source image when not given explicitly.
+        env_id = environment_id
+        if env_id is None:
+            row = conn.execute(
+                "SELECT environment_id FROM source_images WHERE id = ?", (source_image_id,)
+            ).fetchone()
+            env_id = row[0] if row else _resolve_env(conn, user_id, None)
         conn.execute(
             """INSERT INTO detections
-               (user_id, identity_id, source_image_id, type, model_id, confidence,
+               (user_id, environment_id, identity_id, source_image_id, type, model_id, confidence,
                 bbox_x, bbox_y, bbox_w, bbox_h, crop_path, embedding, review_status, attributes)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
-            (user_id, identity_id, source_image_id, detection_type, model_id, confidence,
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+            (user_id, env_id, identity_id, source_image_id, detection_type, model_id, confidence,
              bbox_x, bbox_y, bbox_w, bbox_h, crop_path, embedding, review_status, attributes),
         )
         return conn.execute("SELECT last_insert_rowid()").fetchone()[0]
 
 
-def get_detection(detection_id: int, user_id: int) -> sqlite3.Row | None:
+def get_detection(detection_id: int, user_id: int, environment_id: int | None = None) -> sqlite3.Row | None:
     with _connect() as conn:
+        env_id = _resolve_env(conn, user_id, environment_id)
         return conn.execute(
-            "SELECT * FROM detections WHERE id = ? AND user_id = ?",
-            (detection_id, user_id),
+            "SELECT * FROM detections WHERE id = ? AND user_id = ? AND environment_id = ?",
+            (detection_id, user_id, env_id),
         ).fetchone()
 
 
@@ -753,51 +907,56 @@ def best_cosine(emb: bytes | None, refs: list[bytes]) -> float | None:
         return None
 
 
-def get_reference_embeddings(model_id: int, user_id: int) -> list[sqlite3.Row]:
+def get_reference_embeddings(model_id: int, user_id: int, environment_id: int | None = None) -> list[sqlite3.Row]:
     """All individual reference embeddings (identity_id, embedding) for a user/model.
     Used to build the 'best match' index (one vector per reference, not per identity).
     """
     with _connect() as conn:
+        env_id = _resolve_env(conn, user_id, environment_id)
         return conn.execute(
             """SELECT fe.identity_id, fe.embedding
                FROM face_embeddings fe
                JOIN identities i ON i.id = fe.identity_id
-               WHERE fe.model_id = ? AND i.user_id = ?""",
-            (model_id, user_id),
+               WHERE fe.model_id = ? AND i.user_id = ? AND i.environment_id = ?""",
+            (model_id, user_id, env_id),
         ).fetchall()
 
 
-def get_identity_reference_blobs(identity_id: int, user_id: int) -> list[bytes]:
+def get_identity_reference_blobs(identity_id: int, user_id: int, environment_id: int | None = None) -> list[bytes]:
     """All reference embedding blobs for one identity (for max-over-references display)."""
     with _connect() as conn:
+        env_id = _resolve_env(conn, user_id, environment_id)
         rows = conn.execute(
             """SELECT fe.embedding
                FROM face_embeddings fe
                JOIN identities i ON i.id = fe.identity_id
-               WHERE fe.identity_id = ? AND i.user_id = ? AND fe.embedding IS NOT NULL""",
-            (identity_id, user_id),
+               WHERE fe.identity_id = ? AND i.user_id = ? AND i.environment_id = ?
+                 AND fe.embedding IS NOT NULL""",
+            (identity_id, user_id, env_id),
         ).fetchall()
         return [bytes(r["embedding"]) for r in rows]
 
 
-def get_oldest_detection_id(identity_id: int, user_id: int) -> int | None:
+def get_oldest_detection_id(identity_id: int, user_id: int, environment_id: int | None = None) -> int | None:
     """The first (oldest) detection for an identity — the stable default cover."""
     with _connect() as conn:
+        env_id = _resolve_env(conn, user_id, environment_id)
         row = conn.execute(
             """SELECT id FROM detections
-               WHERE identity_id = ? AND user_id = ?
+               WHERE identity_id = ? AND user_id = ? AND environment_id = ?
                ORDER BY detected_at ASC, id ASC LIMIT 1""",
-            (identity_id, user_id),
+            (identity_id, user_id, env_id),
         ).fetchone()
         return row["id"] if row else None
 
 
-def get_representative_embedding(identity_id: int, user_id: int) -> bytes | None:
+def get_representative_embedding(identity_id: int, user_id: int, environment_id: int | None = None) -> bytes | None:
     """Return the stored representative embedding for an identity, or None."""
     with _connect() as conn:
+        env_id = _resolve_env(conn, user_id, environment_id)
         row = conn.execute(
-            "SELECT representative_embedding FROM identities WHERE id = ? AND user_id = ?",
-            (identity_id, user_id),
+            "SELECT representative_embedding FROM identities WHERE id = ? AND user_id = ? AND environment_id = ?",
+            (identity_id, user_id, env_id),
         ).fetchone()
         return bytes(row["representative_embedding"]) if row and row["representative_embedding"] else None
 
@@ -836,14 +995,15 @@ def _reconcile_orphan_references(conn, user_id: int | None = None) -> int:
     return removed
 
 
-def remove_reference_by_detection(detection_id: int, user_id: int) -> bool:
+def remove_reference_by_detection(detection_id: int, user_id: int, environment_id: int | None = None) -> bool:
     """Remove the reference embedding enrolled from this detection's crop and recompute
     the identity's representative. Returns True if a reference was removed.
     """
     with _connect() as conn:
+        env_id = _resolve_env(conn, user_id, environment_id)
         det = conn.execute(
-            "SELECT identity_id, crop_path FROM detections WHERE id = ? AND user_id = ?",
-            (detection_id, user_id),
+            "SELECT identity_id, crop_path FROM detections WHERE id = ? AND user_id = ? AND environment_id = ?",
+            (detection_id, user_id, env_id),
         ).fetchone()
         if not det or det["identity_id"] is None:
             return False
@@ -882,47 +1042,52 @@ def compute_and_store_representative(identity_id: int, model_id: int) -> None:
         )
 
 
-def get_representative_embeddings(model_id: int, user_id: int) -> list[sqlite3.Row]:
+def get_representative_embeddings(model_id: int, user_id: int, environment_id: int | None = None) -> list[sqlite3.Row]:
     """Return identities with a representative embedding for this model."""
     with _connect() as conn:
+        env_id = _resolve_env(conn, user_id, environment_id)
         return conn.execute(
             """SELECT i.id AS identity_id, i.representative_embedding
                FROM identities i
-               WHERE i.user_id = ? AND i.representative_embedding IS NOT NULL
+               WHERE i.user_id = ? AND i.environment_id = ? AND i.representative_embedding IS NOT NULL
                  AND EXISTS (
                    SELECT 1 FROM face_embeddings fe
                    WHERE fe.identity_id = i.id AND fe.model_id = ?
                  )""",
-            (user_id, model_id),
+            (user_id, env_id, model_id),
         ).fetchall()
 
 
-def get_face_embeddings_for_model(model_id: int, user_id: int) -> list[sqlite3.Row]:
+def get_face_embeddings_for_model(model_id: int, user_id: int, environment_id: int | None = None) -> list[sqlite3.Row]:
     """Return embeddings for the active model scoped to this user's identities."""
     with _connect() as conn:
+        env_id = _resolve_env(conn, user_id, environment_id)
         return conn.execute(
             """SELECT fe.identity_id, fe.embedding, i.label
                FROM face_embeddings fe
                JOIN identities i ON fe.identity_id = i.id
-               WHERE fe.model_id = ? AND i.user_id = ?""",
-            (model_id, user_id),
+               WHERE fe.model_id = ? AND i.user_id = ? AND i.environment_id = ?""",
+            (model_id, user_id, env_id),
         ).fetchall()
 
 
-def count_source_images(user_id: int) -> int:
+def count_source_images(user_id: int, environment_id: int | None = None) -> int:
     with _connect() as conn:
+        env_id = _resolve_env(conn, user_id, environment_id)
         return conn.execute(
-            "SELECT COUNT(*) FROM source_images WHERE user_id = ?",
-            (user_id,),
+            "SELECT COUNT(*) FROM source_images WHERE user_id = ? AND environment_id = ?",
+            (user_id, env_id),
         ).fetchone()[0]
 
 
-def count_pending_review(user_id: int) -> int:
+def count_pending_review(user_id: int, environment_id: int | None = None) -> int:
     with _connect() as conn:
+        env_id = _resolve_env(conn, user_id, environment_id)
         return conn.execute(
             """SELECT COUNT(*) FROM detections
-               WHERE user_id = ? AND review_status = 'pending' AND type = 'face'""",
-            (user_id,),
+               WHERE user_id = ? AND environment_id = ?
+                 AND review_status = 'pending' AND type = 'face'""",
+            (user_id, env_id),
         ).fetchone()[0]
 
 
@@ -930,9 +1095,11 @@ def get_review_queue(
     user_id: int,
     cursor: str | None = None,
     limit: int = 20,
+    environment_id: int | None = None,
 ) -> list[sqlite3.Row]:
     """Pending face detections, lowest confidence first. Cursor = 'confidence_id'."""
     with _connect() as conn:
+        env_id = _resolve_env(conn, user_id, environment_id)
         if cursor:
             try:
                 c_conf, c_id = cursor.rsplit("_", 1)
@@ -948,10 +1115,11 @@ def get_review_queue(
                    FROM detections d
                    LEFT JOIN identities i ON d.identity_id = i.id
                    LEFT JOIN source_images si ON si.id = d.source_image_id
-                   WHERE d.user_id = ? AND d.review_status = 'pending' AND d.type = 'face'
+                   WHERE d.user_id = ? AND d.environment_id = ?
+                     AND d.review_status = 'pending' AND d.type = 'face'
                      AND (d.confidence > ? OR (d.confidence = ? AND d.id > ?))
                    ORDER BY d.confidence ASC, d.id ASC LIMIT ?""",
-                (user_id, conf_val, conf_val, id_val, limit + 1),
+                (user_id, env_id, conf_val, conf_val, id_val, limit + 1),
             ).fetchall()
         else:
             rows = conn.execute(
@@ -962,9 +1130,10 @@ def get_review_queue(
                    FROM detections d
                    LEFT JOIN identities i ON d.identity_id = i.id
                    LEFT JOIN source_images si ON si.id = d.source_image_id
-                   WHERE d.user_id = ? AND d.review_status = 'pending' AND d.type = 'face'
+                   WHERE d.user_id = ? AND d.environment_id = ?
+                     AND d.review_status = 'pending' AND d.type = 'face'
                    ORDER BY d.confidence ASC, d.id ASC LIMIT ?""",
-                (user_id, limit + 1),
+                (user_id, env_id, limit + 1),
             ).fetchall()
         return rows
 
@@ -1001,52 +1170,56 @@ def _recompute_representative(identity_id: int | None) -> None:
         compute_and_store_representative(identity_id, model_row["id"])
 
 
-def confirm_detection(detection_id: int, user_id: int) -> bool:
+def confirm_detection(detection_id: int, user_id: int, environment_id: int | None = None) -> bool:
     with _connect() as conn:
+        env_id = _resolve_env(conn, user_id, environment_id)
         conn.execute(
             """UPDATE detections SET review_status = 'confirmed', reviewed_at = datetime('now')
-               WHERE id = ? AND user_id = ?""",
-            (detection_id, user_id),
+               WHERE id = ? AND user_id = ? AND environment_id = ?""",
+            (detection_id, user_id, env_id),
         )
         return conn.execute("SELECT changes()").fetchone()[0] > 0
 
 
-def reject_detection(detection_id: int, user_id: int) -> bool:
+def reject_detection(detection_id: int, user_id: int, environment_id: int | None = None) -> bool:
     with _connect() as conn:
+        env_id = _resolve_env(conn, user_id, environment_id)
         old_id = _detach_old_reference(conn, detection_id, user_id, None)
         conn.execute(
             """UPDATE detections SET review_status = 'rejected', identity_id = NULL,
-               reviewed_at = datetime('now') WHERE id = ? AND user_id = ?""",
-            (detection_id, user_id),
+               reviewed_at = datetime('now') WHERE id = ? AND user_id = ? AND environment_id = ?""",
+            (detection_id, user_id, env_id),
         )
         changed = conn.execute("SELECT changes()").fetchone()[0] > 0
     _recompute_representative(old_id)
     return changed
 
 
-def reassign_detection(detection_id: int, user_id: int, identity_id: int) -> bool:
+def reassign_detection(detection_id: int, user_id: int, identity_id: int, environment_id: int | None = None) -> bool:
     with _connect() as conn:
+        env_id = _resolve_env(conn, user_id, environment_id)
         old_id = _detach_old_reference(conn, detection_id, user_id, identity_id)
         conn.execute(
             """UPDATE detections SET review_status = 'reassigned', identity_id = ?,
-               reviewed_at = datetime('now') WHERE id = ? AND user_id = ?""",
-            (identity_id, detection_id, user_id),
+               reviewed_at = datetime('now') WHERE id = ? AND user_id = ? AND environment_id = ?""",
+            (identity_id, detection_id, user_id, env_id),
         )
         changed = conn.execute("SELECT changes()").fetchone()[0] > 0
     _recompute_representative(old_id)
     return changed
 
 
-def delete_detection(detection_id: int, user_id: int) -> bool:
+def delete_detection(detection_id: int, user_id: int, environment_id: int | None = None) -> bool:
     """Delete a detection. Also removes any reference embedding enrolled from its crop
     (keeping the reference count consistent) and recomputes the representative. The
     cover photo is cleared automatically via the cover_detection_id ON DELETE SET NULL FK.
     """
     ref_identity = None
     with _connect() as conn:
+        env_id = _resolve_env(conn, user_id, environment_id)
         row = conn.execute(
-            "SELECT identity_id, crop_path FROM detections WHERE id = ? AND user_id = ?",
-            (detection_id, user_id),
+            "SELECT identity_id, crop_path FROM detections WHERE id = ? AND user_id = ? AND environment_id = ?",
+            (detection_id, user_id, env_id),
         ).fetchone()
         if not row:
             return False
@@ -1058,8 +1231,8 @@ def delete_detection(detection_id: int, user_id: int) -> bool:
             if conn.execute("SELECT changes()").fetchone()[0] > 0:
                 ref_identity = row["identity_id"]
         conn.execute(
-            "DELETE FROM detections WHERE id = ? AND user_id = ?",
-            (detection_id, user_id),
+            "DELETE FROM detections WHERE id = ? AND user_id = ? AND environment_id = ?",
+            (detection_id, user_id, env_id),
         )
         deleted = conn.execute("SELECT changes()").fetchone()[0] > 0
 
@@ -1070,15 +1243,16 @@ def delete_detection(detection_id: int, user_id: int) -> bool:
     return deleted
 
 
-def label_detection(detection_id: int, user_id: int, identity_id: int) -> bool:
+def label_detection(detection_id: int, user_id: int, identity_id: int, environment_id: int | None = None) -> bool:
     """Casual correction: set identity and mark confirmed. Drops the previous
     identity's reference for this crop so it doesn't orphan when the label changes."""
     with _connect() as conn:
+        env_id = _resolve_env(conn, user_id, environment_id)
         old_id = _detach_old_reference(conn, detection_id, user_id, identity_id)
         conn.execute(
             """UPDATE detections SET identity_id = ?, review_status = 'confirmed',
-               reviewed_at = datetime('now') WHERE id = ? AND user_id = ?""",
-            (identity_id, detection_id, user_id),
+               reviewed_at = datetime('now') WHERE id = ? AND user_id = ? AND environment_id = ?""",
+            (identity_id, detection_id, user_id, env_id),
         )
         changed = conn.execute("SELECT changes()").fetchone()[0] > 0
     _recompute_representative(old_id)
@@ -1235,13 +1409,14 @@ def get_settings_defaults() -> dict[str, str]:
 # Jobs
 # ---------------------------------------------------------------------------
 
-def create_job(user_id: int, job_type: str) -> str:
+def create_job(user_id: int, job_type: str, environment_id: int | None = None) -> str:
     import uuid as _uuid
     job_id = _uuid.uuid4().hex
     with _connect() as conn:
+        env_id = _resolve_env(conn, user_id, environment_id)
         conn.execute(
-            "INSERT INTO jobs (id, user_id, type) VALUES (?, ?, ?)",
-            (job_id, user_id, job_type),
+            "INSERT INTO jobs (id, user_id, environment_id, type) VALUES (?, ?, ?, ?)",
+            (job_id, user_id, env_id, job_type),
         )
     return job_id
 
@@ -1256,29 +1431,137 @@ def update_job(job_id: str, status: str, result: object = None) -> None:
         )
 
 
-def get_job(job_id: str, user_id: int) -> sqlite3.Row | None:
+def get_job(job_id: str, user_id: int, environment_id: int | None = None) -> sqlite3.Row | None:
     with _connect() as conn:
+        env_id = _resolve_env(conn, user_id, environment_id)
         return conn.execute(
-            "SELECT * FROM jobs WHERE id = ? AND user_id = ?",
-            (job_id, user_id),
+            "SELECT * FROM jobs WHERE id = ? AND user_id = ? AND environment_id = ?",
+            (job_id, user_id, env_id),
         ).fetchone()
 
 
-def list_jobs(user_id: int, limit: int = 50) -> list[sqlite3.Row]:
+def list_jobs(user_id: int, limit: int = 50, environment_id: int | None = None) -> list[sqlite3.Row]:
     with _connect() as conn:
+        env_id = _resolve_env(conn, user_id, environment_id)
         return conn.execute(
-            "SELECT * FROM jobs WHERE user_id = ? ORDER BY created_at DESC LIMIT ?",
-            (user_id, limit),
+            "SELECT * FROM jobs WHERE user_id = ? AND environment_id = ? ORDER BY created_at DESC LIMIT ?",
+            (user_id, env_id, limit),
         ).fetchall()
 
 
-def delete_job(job_id: str, user_id: int) -> bool:
+def delete_job(job_id: str, user_id: int, environment_id: int | None = None) -> bool:
     with _connect() as conn:
+        env_id = _resolve_env(conn, user_id, environment_id)
         cur = conn.execute(
-            "DELETE FROM jobs WHERE id = ? AND user_id = ?",
-            (job_id, user_id),
+            "DELETE FROM jobs WHERE id = ? AND user_id = ? AND environment_id = ?",
+            (job_id, user_id, env_id),
         )
         return cur.rowcount > 0
+
+
+# ---------------------------------------------------------------------------
+# Environments
+# ---------------------------------------------------------------------------
+
+def create_environment(user_id: int, name: str) -> int:
+    with _connect() as conn:
+        conn.execute(
+            "INSERT INTO environments (user_id, name) VALUES (?, ?)",
+            (user_id, name),
+        )
+        return conn.execute("SELECT last_insert_rowid()").fetchone()[0]
+
+
+def list_environments(user_id: int) -> list[sqlite3.Row]:
+    with _connect() as conn:
+        return conn.execute(
+            "SELECT * FROM environments WHERE user_id = ? ORDER BY name ASC",
+            (user_id,),
+        ).fetchall()
+
+
+def get_environment(env_id: int, user_id: int) -> sqlite3.Row | None:
+    with _connect() as conn:
+        return conn.execute(
+            "SELECT * FROM environments WHERE id = ? AND user_id = ?",
+            (env_id, user_id),
+        ).fetchone()
+
+
+def get_default_environment_id(user_id: int) -> int | None:
+    with _connect() as conn:
+        row = conn.execute(
+            "SELECT id FROM environments WHERE user_id = ? AND name = 'default' LIMIT 1",
+            (user_id,),
+        ).fetchone()
+        if row:
+            return row[0]
+        # Fall back to first environment
+        row = conn.execute(
+            "SELECT id FROM environments WHERE user_id = ? ORDER BY id ASC LIMIT 1",
+            (user_id,),
+        ).fetchone()
+        return row[0] if row else None
+
+
+def rename_environment(env_id: int, user_id: int, name: str) -> bool:
+    with _connect() as conn:
+        cur = conn.execute(
+            "UPDATE environments SET name = ? WHERE id = ? AND user_id = ?",
+            (name, env_id, user_id),
+        )
+        return cur.rowcount > 0
+
+
+def delete_environment(env_id: int, user_id: int) -> tuple[bool, list[str]]:
+    """Delete environment and all its data. Returns (deleted, crop_paths)."""
+    with _connect() as conn:
+        if not conn.execute(
+            "SELECT 1 FROM environments WHERE id = ? AND user_id = ?",
+            (env_id, user_id),
+        ).fetchone():
+            return False, []
+        crops = [r["crop_path"] for r in conn.execute(
+            "SELECT crop_path FROM detections WHERE environment_id = ? AND user_id = ?",
+            (env_id, user_id),
+        ).fetchall()]
+        conn.execute(
+            "DELETE FROM face_embeddings WHERE environment_id = ?", (env_id,)
+        )
+        conn.execute(
+            "DELETE FROM detections WHERE environment_id = ? AND user_id = ?",
+            (env_id, user_id),
+        )
+        conn.execute(
+            "DELETE FROM source_images WHERE environment_id = ? AND user_id = ?",
+            (env_id, user_id),
+        )
+        conn.execute(
+            "DELETE FROM identities WHERE environment_id = ? AND user_id = ?",
+            (env_id, user_id),
+        )
+        conn.execute(
+            "DELETE FROM jobs WHERE environment_id = ? AND user_id = ?",
+            (env_id, user_id),
+        )
+        conn.execute(
+            "DELETE FROM environments WHERE id = ? AND user_id = ?",
+            (env_id, user_id),
+        )
+        return True, crops
+
+
+def get_environment_stats(env_id: int, user_id: int) -> dict:
+    with _connect() as conn:
+        identities = conn.execute(
+            "SELECT COUNT(*) FROM identities WHERE environment_id = ? AND user_id = ?",
+            (env_id, user_id),
+        ).fetchone()[0]
+        detections = conn.execute(
+            "SELECT COUNT(*) FROM detections WHERE environment_id = ? AND user_id = ?",
+            (env_id, user_id),
+        ).fetchone()[0]
+        return {"identities": identities, "detections": detections}
 
 
 def _seed_models(conn: sqlite3.Connection) -> None:

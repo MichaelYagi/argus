@@ -73,6 +73,16 @@ document.addEventListener('DOMContentLoaded', function() {
   });
   document.addEventListener('click', closeMenu);
   menu.addEventListener('click', e => e.stopPropagation());
+
+  const envBtn  = document.getElementById('env-btn');
+  const envMenu = document.getElementById('env-menu');
+  if (envBtn && envMenu) {
+    envBtn.addEventListener('click', e => {
+      e.stopPropagation();
+      envMenu.style.display = envMenu.style.display === 'none' ? 'block' : 'none';
+    });
+    envMenu.addEventListener('click', e => e.stopPropagation());
+  }
 });
 </script>
 <script src="/static/js/autocomplete.js"></script>
@@ -118,6 +128,41 @@ setInterval(_updateReviewBadge, 30000);
   {% endif %}
   <a href="/docs"     class="nav-desktop {% if active == 'docs'      %}active{% endif %}">API docs</a>
   <span class="nav-spacer nav-desktop"></span>
+
+  {% if environments is defined and environments %}
+  <div class="nav-desktop" style="position:relative;margin-right:6px">
+    <button id="env-btn"
+            style="background:none;border:1px solid var(--border);border-radius:5px;
+                   padding:3px 8px;cursor:pointer;font-size:11px;color:var(--text);
+                   white-space:nowrap;font-family:inherit">
+      {{ environment_name | default('default') }}
+    </button>
+    <div id="env-menu"
+         style="display:none;position:absolute;right:0;top:calc(100% + 4px);
+                background:var(--surface);border:1px solid var(--border);border-radius:8px;
+                box-shadow:0 4px 20px rgba(0,0,0,.4);padding:6px;z-index:300;min-width:150px">
+      {% for env in environments %}
+      <form method="post" action="/switch-environment/{{ env.id }}">
+        <button type="submit"
+                style="display:block;width:100%;text-align:left;padding:6px 10px;
+                       border:none;cursor:pointer;border-radius:4px;font-size:12px;
+                       color:var(--text);font-family:inherit;
+                       background:{% if env.id == environment_id %}var(--hover){% else %}none{% endif %};
+                       font-weight:{% if env.id == environment_id %}600{% else %}400{% endif %}">
+          {{ env.name }}
+        </button>
+      </form>
+      {% endfor %}
+      <div style="border-top:1px solid var(--border);margin:4px 0;padding-top:4px">
+        <a href="/environments"
+           style="display:block;padding:5px 10px;font-size:11px;color:var(--muted);text-decoration:none">
+          Manage environments
+        </a>
+      </div>
+    </div>
+  </div>
+  {% endif %}
+
   <a href="/account"  class="nav-desktop" style="color:var(--nav-text);font-size:12px">{{ username }}</a>
 
   <!-- Theme picker -->
@@ -202,6 +247,26 @@ setInterval(_updateReviewBadge, 30000);
   <a href="/settings" class="{% if active == 'settings'  %}active{% endif %}">Settings</a>
   {% endif %}
   <a href="/docs"     class="{% if active == 'docs'      %}active{% endif %}">API docs</a>
+  {% if environments is defined and environments %}
+  <div style="padding:6px 12px;border-top:1px solid var(--border);margin-top:4px">
+    <span style="font-size:11px;color:var(--muted)">Environment</span>
+    {% for env in environments %}
+    <form method="post" action="/switch-environment/{{ env.id }}" style="margin-top:2px">
+      <button type="submit"
+              style="display:block;width:100%;text-align:left;padding:5px 8px;border:none;
+                     cursor:pointer;border-radius:4px;font-size:12px;color:var(--text);
+                     background:{% if env.id == environment_id %}var(--hover){% else %}none{% endif %};
+                     font-weight:{% if env.id == environment_id %}600{% else %}400{% endif %};
+                     font-family:inherit">
+        {{ env.name }}
+      </button>
+    </form>
+    {% endfor %}
+    <a href="/environments" style="display:block;padding:5px 8px;font-size:11px;color:var(--muted)">
+      Manage environments
+    </a>
+  </div>
+  {% endif %}
   {% if username %}
   <a href="/account">{{ username }}</a>
   <form method="post" action="/logout">

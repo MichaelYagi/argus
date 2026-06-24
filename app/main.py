@@ -14,6 +14,7 @@ from app import __version__
 from app.api import (
     detect,
     enroll,
+    environments,
     export_import,
     health,
     identities,
@@ -86,6 +87,7 @@ app.mount("/static", StaticFiles(directory="app/static"), name="static")
 app.include_router(health.router)
 app.include_router(detect.router)
 app.include_router(jobs.router)
+app.include_router(environments.router)
 app.include_router(media.router)
 app.include_router(keys.router)
 app.include_router(identities.router)

@@ -9,7 +9,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
 
 from app.core import settings_cache
-from app.core.auth import require_auth
+from app.core.auth import require_auth, require_env_id
 from app.db import store
 
 router = APIRouter()
@@ -25,13 +25,16 @@ class _CreateBody(BaseModel):
 # ---------------------------------------------------------------------------
 
 @router.get("/api/stats")
-async def stats(user_id: int = Depends(require_auth)):
+async def stats(
+    user_id: int = Depends(require_auth),
+    environment_id: int = Depends(require_env_id),
+):
     """Aggregate counts for the dashboard — single round-trip."""
     return {
-        "people":         store.count_identities(user_id, identity_type="face"),
-        "objects":        store.count_identities(user_id, identity_type="object"),
-        "images":         store.count_source_images(user_id),
-        "pending_review": store.count_pending_review(user_id),
+        "people":         store.count_identities(user_id, identity_type="face", environment_id=environment_id),
+        "objects":        store.count_identities(user_id, identity_type="object", environment_id=environment_id),
+        "images":         store.count_source_images(user_id, environment_id),
+        "pending_review": store.count_pending_review(user_id, environment_id),
     }
 
 
@@ -41,14 +44,17 @@ async def identities_summary(
     cursor: Optional[str] = Query(None),
     limit: int = Query(30, ge=1, le=100),
     user_id: int = Depends(require_auth),
+    environment_id: int = Depends(require_env_id),
 ):
     """Identities with counts + thumbnail in one query — for paginated dashboard grid."""
     if type and type not in ("face", "object"):
         raise HTTPException(400, "type must be 'face' or 'object'")
-    rows     = store.list_identities_summary(user_id, identity_type=type, cursor=cursor, limit=limit)
+    rows     = store.list_identities_summary(
+        user_id, identity_type=type, cursor=cursor, limit=limit, environment_id=environment_id
+    )
     has_more = len(rows) > limit
     items    = rows[:limit]
-    total    = store.count_identities(user_id, identity_type=type)
+    total    = store.count_identities(user_id, identity_type=type, environment_id=environment_id)
     return {
         "items": [
             {
@@ -72,10 +78,13 @@ async def list_identities(
     cursor: Optional[str] = Query(None),
     limit: Optional[int] = Query(None, ge=1, le=200),
     user_id: int = Depends(require_auth),
+    environment_id: int = Depends(require_env_id),
 ):
     if type and type not in ("face", "object"):
         raise HTTPException(400, "type must be 'face' or 'object'")
-    rows = store.list_identities(user_id, identity_type=type, q=q, cursor=cursor, limit=limit)
+    rows = store.list_identities(
+        user_id, identity_type=type, q=q, cursor=cursor, limit=limit, environment_id=environment_id
+    )
 
     if limit is None:
         return [_fmt(r) for r in rows]
@@ -91,8 +100,12 @@ async def list_identities(
 
 
 @router.get("/api/identities/{identity_id}")
-async def get_identity(identity_id: int, user_id: int = Depends(require_auth)):
-    row = store.get_identity_with_counts(identity_id, user_id)
+async def get_identity(
+    identity_id: int,
+    user_id: int = Depends(require_auth),
+    environment_id: int = Depends(require_env_id),
+):
+    row = store.get_identity_with_counts(identity_id, user_id, environment_id)
     if not row:
         raise HTTPException(404, "Identity not found")
     result = _fmt(row)
@@ -104,14 +117,18 @@ async def get_identity(identity_id: int, user_id: int = Depends(require_auth)):
 
 
 @router.post("/api/identities", status_code=201)
-async def create_identity(body: _CreateBody, user_id: int = Depends(require_auth)):
+async def create_identity(
+    body: _CreateBody,
+    user_id: int = Depends(require_auth),
+    environment_id: int = Depends(require_env_id),
+):
     if body.type not in ("face", "object"):
         raise HTTPException(400, "type must be 'face' or 'object'")
     label = body.label.strip()
     if not label:
         raise HTTPException(400, "label is required")
     try:
-        identity_id = store.create_identity(user_id, body.type, label)
+        identity_id = store.create_identity(user_id, body.type, label, environment_id)
     except sqlite3.IntegrityError:
         raise HTTPException(409, f"Identity '{label}' ({body.type}) already exists")
     return {"id": identity_id, "type": body.type, "label": label}
@@ -122,16 +139,25 @@ class _CoverBody(BaseModel):
 
 
 @router.put("/api/identities/{identity_id}/cover", status_code=200)
-async def set_cover(identity_id: int, body: _CoverBody, user_id: int = Depends(require_auth)):
-    if not store.set_identity_cover(identity_id, user_id, body.detection_id):
+async def set_cover(
+    identity_id: int,
+    body: _CoverBody,
+    user_id: int = Depends(require_auth),
+    environment_id: int = Depends(require_env_id),
+):
+    if not store.set_identity_cover(identity_id, user_id, body.detection_id, environment_id):
         raise HTTPException(404, "Identity not found")
     return {"identity_id": identity_id, "cover_detection_id": body.detection_id}
 
 
 @router.delete("/api/identities/{identity_id}", status_code=204)
-async def delete_identity(identity_id: int, user_id: int = Depends(require_auth)):
+async def delete_identity(
+    identity_id: int,
+    user_id: int = Depends(require_auth),
+    environment_id: int = Depends(require_env_id),
+):
     from app.core.paths import crops_dir
-    deleted, crops = store.delete_identity(identity_id, user_id)
+    deleted, crops = store.delete_identity(identity_id, user_id, environment_id)
     if not deleted:
         raise HTTPException(404, "Identity not found")
     for crop in crops:
@@ -140,20 +166,23 @@ async def delete_identity(identity_id: int, user_id: int = Depends(require_auth)
         except OSError:
             pass
     from app.core import face_index as _fi
-    _fi.rebuild_user(user_id)
+    _fi.rebuild_user(user_id, environment_id)
 
 
 @router.delete("/api/identities", status_code=200)
-async def delete_all_identities(user_id: int = Depends(require_auth)):
+async def delete_all_identities(
+    user_id: int = Depends(require_auth),
+    environment_id: int = Depends(require_env_id),
+):
     from app.core.paths import crops_dir
-    count, crops = store.delete_all_identities(user_id)
+    count, crops = store.delete_all_identities(user_id, environment_id)
     for crop in crops:
         try:
             (crops_dir() / crop).unlink(missing_ok=True)
         except OSError:
             pass
     from app.core import face_index as _fi
-    _fi.rebuild_user(user_id)
+    _fi.rebuild_user(user_id, environment_id)
     return {"deleted": count}
 
 
@@ -167,18 +196,21 @@ async def identity_gallery(
     cursor: Optional[str] = Query(None),
     limit: Optional[int] = Query(None),
     user_id: int = Depends(require_auth),
+    environment_id: int = Depends(require_env_id),
 ):
-    if not store.get_identity(identity_id, user_id):
+    if not store.get_identity(identity_id, user_id, environment_id):
         raise HTTPException(404, "Identity not found")
     page_size = limit or settings_cache.cache.get_or("system.gallery_page_size", 30)
-    rows = store.get_identity_gallery(identity_id, user_id, cursor=cursor, limit=page_size)
+    rows = store.get_identity_gallery(
+        identity_id, user_id, cursor=cursor, limit=page_size, environment_id=environment_id
+    )
 
     # Similarity shown per crop follows the active matching method.
     if settings_cache.cache.get_or("face.match_strategy", "best") != "average":
-        refs = store.get_identity_reference_blobs(identity_id, user_id)
+        refs = store.get_identity_reference_blobs(identity_id, user_id, environment_id)
         sim_fn = lambda emb: store.best_cosine(emb, refs)  # noqa: E731
     else:
-        rep = store.get_representative_embedding(identity_id, user_id)
+        rep = store.get_representative_embedding(identity_id, user_id, environment_id)
         sim_fn = lambda emb: store.cosine_similarity(emb, rep)  # noqa: E731
 
     return _paginate(rows, page_size, lambda r: {
@@ -200,11 +232,14 @@ async def unknown_detections(
     cursor: Optional[str] = Query(None),
     limit: Optional[int] = Query(None),
     user_id: int = Depends(require_auth),
+    environment_id: int = Depends(require_env_id),
 ):
     if type and type not in ("face", "object"):
         raise HTTPException(400, "type must be 'face' or 'object'")
     page_size = limit or settings_cache.cache.get_or("system.gallery_page_size", 30)
-    rows = store.get_unknown_detections(user_id, detection_type=type, cursor=cursor, limit=page_size)
+    rows = store.get_unknown_detections(
+        user_id, detection_type=type, cursor=cursor, limit=page_size, environment_id=environment_id
+    )
     return _paginate(rows, page_size, lambda r: {
         "detection_id": r["id"],
         "type": r["type"],

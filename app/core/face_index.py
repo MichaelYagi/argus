@@ -1,6 +1,6 @@
 """In-memory faiss index for fast face similarity search.
 
-One index per user, built over representative (averaged) embeddings.
+One index per (user, environment), built over representative (averaged) embeddings.
 Falls back to numpy cosine similarity if faiss is unavailable.
 """
 
@@ -36,8 +36,9 @@ def _try_import_faiss() -> Any | None:
         return None
 
 _lock = threading.Lock()
-_indices: dict[int, Any]       = {}  # user_id → faiss.IndexFlatIP (or numpy matrix)
-_id_maps: dict[int, list[int]] = {}  # user_id → [identity_id, ...]
+# Keys are (user_id, environment_id) so each environment has an isolated index.
+_indices: dict[tuple[int, int], Any]       = {}  # -> faiss.IndexFlatIP (or numpy matrix)
+_id_maps: dict[tuple[int, int], list[int]] = {}  # -> [identity_id, ...]
 _current_model_id: int | None  = None
 
 
@@ -52,8 +53,8 @@ def _strategy() -> str:
     return "average" if s == "average" else "best"
 
 
-def build_for_user(model_id: int, user_id: int) -> None:
-    """Build or rebuild the in-memory index for one user, per the match strategy.
+def build_for_user(model_id: int, user_id: int, environment_id: int) -> None:
+    """Build or rebuild the in-memory index for one (user, environment), per strategy.
 
     - average: one centroid (representative) vector per identity.
     - best:    one vector per reference embedding (id_map repeats the identity).
@@ -64,11 +65,12 @@ def build_for_user(model_id: int, user_id: int) -> None:
     from app.db import store
 
     strategy = _strategy()
+    key = (user_id, environment_id)
 
     if strategy == "best":
         rows = [
             (r["identity_id"], r["embedding"])
-            for r in store.get_reference_embeddings(model_id, user_id)
+            for r in store.get_reference_embeddings(model_id, user_id, environment_id)
         ]
     else:
         # Compute any missing representatives first
@@ -76,15 +78,15 @@ def build_for_user(model_id: int, user_id: int) -> None:
             stale = conn.execute(
                 """SELECT DISTINCT fe.identity_id FROM face_embeddings fe
                    JOIN identities i ON i.id = fe.identity_id
-                   WHERE fe.model_id = ? AND i.user_id = ?
+                   WHERE fe.model_id = ? AND i.user_id = ? AND i.environment_id = ?
                      AND i.representative_embedding IS NULL""",
-                (model_id, user_id),
+                (model_id, user_id, environment_id),
             ).fetchall()
         for row in stale:
             store.compute_and_store_representative(row["identity_id"], model_id)
         rows = [
             (r["identity_id"], r["representative_embedding"])
-            for r in store.get_representative_embeddings(model_id, user_id)
+            for r in store.get_representative_embeddings(model_id, user_id, environment_id)
         ]
 
     with _lock:
@@ -92,8 +94,8 @@ def build_for_user(model_id: int, user_id: int) -> None:
         _current_model_id = model_id
 
         if not rows:
-            _indices.pop(user_id, None)
-            _id_maps[user_id] = []
+            _indices.pop(key, None)
+            _id_maps[key] = []
             return
 
         faiss = _try_import_faiss()
@@ -110,42 +112,50 @@ def build_for_user(model_id: int, user_id: int) -> None:
             vectors.append(vec)
             id_map.append(identity_id)
 
-        _id_maps[user_id] = id_map
+        _id_maps[key] = id_map
 
         if not vectors:
-            _indices.pop(user_id, None)
+            _indices.pop(key, None)
             return
 
         if use_faiss:
             idx = faiss.IndexFlatIP(len(vectors[0]))
             idx.add(np.stack(vectors).astype(np.float32))
-            _indices[user_id] = idx
+            _indices[key] = idx
         else:
-            _indices[user_id] = np.stack(vectors).astype(np.float32)
+            _indices[key] = np.stack(vectors).astype(np.float32)
 
 
 def build_all(model_id: int) -> None:
-    """Rebuild index for every user that has face data for this model."""
+    """Rebuild index for every (user, environment) that has face data for this model."""
     if _try_import_faiss() is None:
         log.warning("faiss disabled or unavailable — using numpy similarity search")
 
     from app.db import store
     with store._connect() as conn:
-        user_ids = [r[0] for r in conn.execute(
-            """SELECT DISTINCT i.user_id FROM identities i
+        pairs = [(r[0], r[1]) for r in conn.execute(
+            """SELECT DISTINCT i.user_id, i.environment_id FROM identities i
                JOIN face_embeddings fe ON fe.identity_id = i.id
                WHERE fe.model_id = ?""",
             (model_id,),
         ).fetchall()]
-    for uid in user_ids:
-        build_for_user(model_id, uid)
-    log.info("Face index built for model_id=%s (%d users)", model_id, len(user_ids))
+    for uid, env_id in pairs:
+        build_for_user(model_id, uid, env_id)
+    log.info("Face index built for model_id=%s (%d environments)", model_id, len(pairs))
 
 
-def rebuild_user(user_id: int) -> None:
-    """Rebuild index for one user using the current active model."""
+def rebuild_user(user_id: int, environment_id: int) -> None:
+    """Rebuild index for one (user, environment) using the current active model."""
     if _current_model_id is not None:
-        build_for_user(_current_model_id, user_id)
+        build_for_user(_current_model_id, user_id, environment_id)
+
+
+def clear_environment(user_id: int, environment_id: int) -> None:
+    """Drop a (user, environment) index — used when an environment is deleted."""
+    key = (user_id, environment_id)
+    with _lock:
+        _indices.pop(key, None)
+        _id_maps.pop(key, None)
 
 
 # ---------------------------------------------------------------------------
@@ -155,15 +165,17 @@ def rebuild_user(user_id: int) -> None:
 def search(
     embedding: Any,
     user_id: int,
+    environment_id: int,
     threshold: float,
     k: int = 5,
 ) -> list[tuple[int, float]]:
     """Return up to k (identity_id, similarity) pairs above threshold, sorted descending."""
     import numpy as np
 
+    key = (user_id, environment_id)
     with _lock:
-        index  = _indices.get(user_id)
-        id_map = list(_id_maps.get(user_id, []))
+        index  = _indices.get(key)
+        id_map = list(_id_maps.get(key, []))
 
     if not id_map:
         return []

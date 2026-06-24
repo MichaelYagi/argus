@@ -8,11 +8,11 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
 
 from app.core import settings_cache
-from app.core.auth import require_auth
+from app.core.auth import require_auth, require_env_id
 from app.db import store
 
 
-def _auto_enroll(detection_id: int, user_id: int) -> None:
+def _auto_enroll(detection_id: int, user_id: int, environment_id: int) -> None:
     """Automatic path only: enroll if the face-detection quality score clears the
     threshold. Used when Argus auto-confirms a high-similarity suggestion with no
     human in the loop, so we avoid promoting low-quality crops unattended.
@@ -20,22 +20,22 @@ def _auto_enroll(detection_id: int, user_id: int) -> None:
     threshold = settings_cache.cache.get_or("face.auto_enroll_threshold", 0.92)
     if threshold <= 0:
         return
-    det = store.get_detection(detection_id, user_id)
+    det = store.get_detection(detection_id, user_id, environment_id)
     if not det or det["type"] != "face" or det["confidence"] < threshold:
         return
     from app.api.enroll import enroll_from_detection
-    enroll_from_detection(det, user_id)
+    enroll_from_detection(det, user_id, environment_id)
 
 
-def _enroll_confirmed(detection_id: int, user_id: int) -> None:
+def _enroll_confirmed(detection_id: int, user_id: int, environment_id: int) -> None:
     """Human asserted this identity (confirm / reassign / label) — enroll the
     embedding unconditionally so the reference set actually improves. This is
     ground truth, so it is NOT gated on the detection-quality threshold.
     """
-    det = store.get_detection(detection_id, user_id)
+    det = store.get_detection(detection_id, user_id, environment_id)
     if det and det["type"] == "face":
         from app.api.enroll import enroll_from_detection
-        enroll_from_detection(det, user_id)
+        enroll_from_detection(det, user_id, environment_id)
 
 router = APIRouter()
 
@@ -45,8 +45,11 @@ router = APIRouter()
 # ---------------------------------------------------------------------------
 
 @router.get("/api/review/count")
-async def review_count(user_id: int = Depends(require_auth)):
-    return {"count": store.count_pending_review(user_id)}
+async def review_count(
+    user_id: int = Depends(require_auth),
+    environment_id: int = Depends(require_env_id),
+):
+    return {"count": store.count_pending_review(user_id, environment_id)}
 
 
 @router.get("/api/review")
@@ -54,9 +57,10 @@ async def get_review_queue(
     cursor: Optional[str] = Query(None),
     limit: Optional[int] = Query(None),
     user_id: int = Depends(require_auth),
+    environment_id: int = Depends(require_env_id),
 ):
     page_size = limit or settings_cache.cache.get_or("system.gallery_page_size", 30)
-    rows = store.get_review_queue(user_id, cursor=cursor, limit=page_size)
+    rows = store.get_review_queue(user_id, cursor=cursor, limit=page_size, environment_id=environment_id)
     has_more = len(rows) > page_size
     items = rows[:page_size]
 
@@ -68,7 +72,7 @@ async def get_review_queue(
     )
 
     return {
-        "items": [x for x in (_fmt_review_item(r, model_id, user_id) for r in items) if x is not None],
+        "items": [x for x in (_fmt_review_item(r, model_id, user_id, environment_id) for r in items) if x is not None],
         "next_cursor": next_cursor,
         "has_more": has_more,
     }
@@ -79,20 +83,28 @@ async def get_review_queue(
 # ---------------------------------------------------------------------------
 
 @router.post("/api/review/{detection_id}/confirm", status_code=200)
-async def confirm(detection_id: int, user_id: int = Depends(require_auth)):
-    if not store.confirm_detection(detection_id, user_id):
+async def confirm(
+    detection_id: int,
+    user_id: int = Depends(require_auth),
+    environment_id: int = Depends(require_env_id),
+):
+    if not store.confirm_detection(detection_id, user_id, environment_id):
         raise HTTPException(404, "Detection not found")
-    _enroll_confirmed(detection_id, user_id)
+    _enroll_confirmed(detection_id, user_id, environment_id)
     return {"detection_id": detection_id, "review_status": "confirmed"}
 
 
 @router.post("/api/review/{detection_id}/reject", status_code=200)
-async def reject(detection_id: int, user_id: int = Depends(require_auth)):
-    if not store.reject_detection(detection_id, user_id):
+async def reject(
+    detection_id: int,
+    user_id: int = Depends(require_auth),
+    environment_id: int = Depends(require_env_id),
+):
+    if not store.reject_detection(detection_id, user_id, environment_id):
         raise HTTPException(404, "Detection not found")
     # Rejecting clears the identity and drops its reference — refresh the index.
     from app.core import face_index as _fi
-    _fi.rebuild_user(user_id)
+    _fi.rebuild_user(user_id, environment_id)
     return {"detection_id": detection_id, "review_status": "rejected"}
 
 
@@ -103,21 +115,23 @@ class _ReassignBody(BaseModel):
 
 @router.post("/api/review/{detection_id}/reassign", status_code=200)
 async def reassign(
-    detection_id: int, body: _ReassignBody, user_id: int = Depends(require_auth)
+    detection_id: int, body: _ReassignBody,
+    user_id: int = Depends(require_auth),
+    environment_id: int = Depends(require_env_id),
 ):
     if not body.identity_id and not body.label:
         raise HTTPException(400, "Provide identity_id or label")
 
     identity_id = body.identity_id
     if not identity_id:
-        identity_id = store.get_or_create_identity(user_id, "face", body.label.strip())  # type: ignore[union-attr]
+        identity_id = store.get_or_create_identity(user_id, "face", body.label.strip(), environment_id)  # type: ignore[union-attr]
 
-    det = store.get_detection(detection_id, user_id)
+    det = store.get_detection(detection_id, user_id, environment_id)
     if not det:
         raise HTTPException(404, "Detection not found")
 
-    store.reassign_detection(detection_id, user_id, identity_id)
-    _enroll_confirmed(detection_id, user_id)  # human named this face — enroll unconditionally
+    store.reassign_detection(detection_id, user_id, identity_id, environment_id)
+    _enroll_confirmed(detection_id, user_id, environment_id)  # human named this face — enroll unconditionally
     return {"detection_id": detection_id, "identity_id": identity_id, "review_status": "reassigned"}
 
 
@@ -129,26 +143,30 @@ class _BulkItem(BaseModel):
 
 
 @router.post("/api/review/bulk", status_code=200)
-async def bulk_review(items: list[_BulkItem], user_id: int = Depends(require_auth)):
+async def bulk_review(
+    items: list[_BulkItem],
+    user_id: int = Depends(require_auth),
+    environment_id: int = Depends(require_env_id),
+):
     results = []
     for item in items:
         if item.action == "confirm":
-            store.confirm_detection(item.detection_id, user_id)
-            _enroll_confirmed(item.detection_id, user_id)
+            store.confirm_detection(item.detection_id, user_id, environment_id)
+            _enroll_confirmed(item.detection_id, user_id, environment_id)
             results.append({"detection_id": item.detection_id, "status": "confirmed"})
         elif item.action == "reject":
-            store.reject_detection(item.detection_id, user_id)
+            store.reject_detection(item.detection_id, user_id, environment_id)
             results.append({"detection_id": item.detection_id, "status": "rejected"})
         elif item.action == "reassign":
             iid = item.identity_id
             if not iid and item.label:
-                iid = store.get_or_create_identity(user_id, "face", item.label.strip())
+                iid = store.get_or_create_identity(user_id, "face", item.label.strip(), environment_id)
             if not iid:
                 results.append({"detection_id": item.detection_id, "status": "error",
                                  "detail": "Provide identity_id or label"})
                 continue
-            store.reassign_detection(item.detection_id, user_id, iid)
-            _enroll_confirmed(item.detection_id, user_id)
+            store.reassign_detection(item.detection_id, user_id, iid, environment_id)
+            _enroll_confirmed(item.detection_id, user_id, environment_id)
             results.append({"detection_id": item.detection_id, "status": "reassigned",
                              "identity_id": iid})
         else:
@@ -156,7 +174,7 @@ async def bulk_review(items: list[_BulkItem], user_id: int = Depends(require_aut
                              "detail": f"Unknown action '{item.action}'"})
     # Rejects (and any reference changes above) may have altered the set — refresh once.
     from app.core import face_index as _fi
-    _fi.rebuild_user(user_id)
+    _fi.rebuild_user(user_id, environment_id)
     return results
 
 
@@ -165,12 +183,16 @@ async def bulk_review(items: list[_BulkItem], user_id: int = Depends(require_aut
 # ---------------------------------------------------------------------------
 
 @router.delete("/api/detections/{detection_id}", status_code=204)
-async def delete_detection(detection_id: int, user_id: int = Depends(require_auth)):
-    if not store.delete_detection(detection_id, user_id):
+async def delete_detection(
+    detection_id: int,
+    user_id: int = Depends(require_auth),
+    environment_id: int = Depends(require_env_id),
+):
+    if not store.delete_detection(detection_id, user_id, environment_id):
         raise HTTPException(404, "Detection not found")
     # The reference set may have shrunk — refresh the match index.
     from app.core import face_index as _fi
-    _fi.rebuild_user(user_id)
+    _fi.rebuild_user(user_id, environment_id)
 
 
 # ---------------------------------------------------------------------------
@@ -184,24 +206,26 @@ class _LabelBody(BaseModel):
 
 @router.put("/api/detections/{detection_id}/label", status_code=200)
 async def label_detection(
-    detection_id: int, body: _LabelBody, user_id: int = Depends(require_auth)
+    detection_id: int, body: _LabelBody,
+    user_id: int = Depends(require_auth),
+    environment_id: int = Depends(require_env_id),
 ):
     if not body.identity_id and not body.label:
         raise HTTPException(400, "Provide identity_id or label")
 
-    det = store.get_detection(detection_id, user_id)
+    det = store.get_detection(detection_id, user_id, environment_id)
     if not det:
         raise HTTPException(404, "Detection not found")
 
     identity_id = body.identity_id
     if not identity_id:
         identity_id = store.get_or_create_identity(
-            user_id, det["type"], body.label.strip()  # type: ignore[union-attr]
+            user_id, det["type"], body.label.strip(), environment_id  # type: ignore[union-attr]
         )
 
-    store.label_detection(detection_id, user_id, identity_id)
-    _enroll_confirmed(detection_id, user_id)
-    identity = store.get_identity(identity_id, user_id)
+    store.label_detection(detection_id, user_id, identity_id, environment_id)
+    _enroll_confirmed(detection_id, user_id, environment_id)
+    identity = store.get_identity(identity_id, user_id, environment_id)
     return {
         "detection_id": detection_id,
         "identity_id": identity_id,
@@ -214,10 +238,10 @@ async def label_detection(
 # Internal
 # ---------------------------------------------------------------------------
 
-def _fmt_review_item(row: Any, model_id: int | None, user_id: int) -> dict | None:
+def _fmt_review_item(row: Any, model_id: int | None, user_id: int, environment_id: int) -> dict | None:
     suggested: list[dict] = []
     if model_id and row["embedding"]:
-        suggested = _suggested_matches(bytes(row["embedding"]), model_id, user_id)
+        suggested = _suggested_matches(bytes(row["embedding"]), model_id, user_id, environment_id)
 
     # If no identity assigned but the top suggestion beats auto-confirm threshold,
     # confirm it now rather than showing "No match found" with an obvious match below.
@@ -226,8 +250,8 @@ def _fmt_review_item(row: Any, model_id: int | None, user_id: int) -> dict | Non
         auto_thr = settings_cache.cache.get_or("face.auto_confirm_threshold", 0.80)
         top = suggested[0]
         if auto_on and top["similarity"] >= auto_thr:
-            store.label_detection(row["id"], user_id, top["identity_id"])
-            _auto_enroll(row["id"], user_id)
+            store.label_detection(row["id"], user_id, top["identity_id"], environment_id)
+            _auto_enroll(row["id"], user_id, environment_id)
             return None  # remove from queue
 
     current = (
@@ -248,17 +272,17 @@ def _fmt_review_item(row: Any, model_id: int | None, user_id: int) -> dict | Non
 
 
 def _suggested_matches(
-    embedding_bytes: bytes, model_id: int, user_id: int, top_n: int = 5
+    embedding_bytes: bytes, model_id: int, user_id: int, environment_id: int, top_n: int = 5
 ) -> list[dict]:
     import numpy as np
 
     from app.core import face_index
 
     embedding = np.frombuffer(embedding_bytes, dtype=np.float32)
-    results   = face_index.search(embedding, user_id, threshold=0.0, k=top_n)
+    results   = face_index.search(embedding, user_id, environment_id, threshold=0.0, k=top_n)
     output    = []
     for identity_id, sim in results:
-        identity = store.get_identity(identity_id, user_id)
+        identity = store.get_identity(identity_id, user_id, environment_id)
         if identity:
             output.append({
                 "identity_id": identity_id,

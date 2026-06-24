@@ -8,7 +8,7 @@ from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
-from app.core.auth import require_auth
+from app.core.auth import require_auth, require_env_id
 from app.core.paths import crops_dir
 from app.db import store
 
@@ -31,12 +31,16 @@ def _parse_attributes(row) -> dict:
 
 
 @router.get("/api/images/{source_image_id}/faces")
-async def image_faces(source_image_id: int, user_id: int = Depends(require_auth)):
-    src = store.get_source_image(source_image_id, user_id)
+async def image_faces(
+    source_image_id: int,
+    user_id: int = Depends(require_auth),
+    environment_id: int = Depends(require_env_id),
+):
+    src = store.get_source_image(source_image_id, user_id, environment_id)
     if not src:
         raise HTTPException(404, "Source image not found")
 
-    rows = store.get_image_detections(source_image_id, user_id, det_type="face")
+    rows = store.get_image_detections(source_image_id, user_id, det_type="face", environment_id=environment_id)
     return {
         "source_image_id": source_image_id,
         "width": src["width"],
@@ -59,7 +63,11 @@ async def image_faces(source_image_id: int, user_id: int = Depends(require_auth)
 
 
 @router.delete("/api/images/{source_image_id}", status_code=200)
-async def delete_source_image(source_image_id: int, user_id: int = Depends(require_auth)):
+async def delete_source_image(
+    source_image_id: int,
+    user_id: int = Depends(require_auth),
+    environment_id: int = Depends(require_env_id),
+):
     """Delete a source image and cascade-delete all its detections (faces + objects).
 
     Use this before re-detecting a photo to avoid duplicate detections. References
@@ -79,7 +87,7 @@ async def delete_source_image(source_image_id: int, user_id: int = Depends(requi
 
     # References enrolled from the removed crops were dropped too — refresh the index.
     from app.core import face_index
-    face_index.rebuild_user(user_id)
+    face_index.rebuild_user(user_id, environment_id)
 
     return {"source_image_id": source_image_id, "detections_deleted": len(crops),
             "crops_removed": removed}

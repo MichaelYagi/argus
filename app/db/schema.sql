@@ -14,6 +14,7 @@ CREATE TABLE IF NOT EXISTS users (
 CREATE TABLE IF NOT EXISTS api_keys (
     id           INTEGER PRIMARY KEY AUTOINCREMENT,
     user_id      INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    environment_id INTEGER NOT NULL DEFAULT 0,
     key_hash     TEXT    NOT NULL UNIQUE,
     label        TEXT    NOT NULL DEFAULT '',
     created_at   TEXT    NOT NULL DEFAULT (datetime('now')),
@@ -27,12 +28,13 @@ CREATE INDEX IF NOT EXISTS idx_api_keys_hash ON api_keys(key_hash);
 CREATE TABLE IF NOT EXISTS identities (
     id                 INTEGER PRIMARY KEY AUTOINCREMENT,
     user_id            INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    environment_id     INTEGER NOT NULL DEFAULT 0,
     type               TEXT    NOT NULL CHECK(type IN ('face', 'object')),
     label              TEXT    NOT NULL,
     cover_detection_id      INTEGER REFERENCES detections(id) ON DELETE SET NULL,
     representative_embedding BLOB,   -- mean of all face_embeddings for the active model
     created_at         TEXT    NOT NULL DEFAULT (datetime('now')),
-    UNIQUE(user_id, type, label)
+    UNIQUE(user_id, environment_id, type, label)
 );
 
 -- source_images: per-user uploaded images; file_path is content-hash based
@@ -40,11 +42,12 @@ CREATE TABLE IF NOT EXISTS identities (
 CREATE TABLE IF NOT EXISTS source_images (
     id          INTEGER PRIMARY KEY AUTOINCREMENT,
     user_id     INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    environment_id INTEGER NOT NULL DEFAULT 0,
     file_path   TEXT    NOT NULL,
     width       INTEGER NOT NULL,
     height      INTEGER NOT NULL,
     uploaded_at TEXT    NOT NULL DEFAULT (datetime('now')),
-    UNIQUE(user_id, file_path)
+    UNIQUE(user_id, environment_id, file_path)
 );
 
 -- face_embeddings: reference embeddings per enrolled face identity, tagged by model.
@@ -52,6 +55,7 @@ CREATE TABLE IF NOT EXISTS source_images (
 CREATE TABLE IF NOT EXISTS face_embeddings (
     id                INTEGER PRIMARY KEY AUTOINCREMENT,
     identity_id       INTEGER NOT NULL REFERENCES identities(id) ON DELETE CASCADE,
+    environment_id    INTEGER NOT NULL DEFAULT 0,
     model_id          INTEGER          REFERENCES models(id),
     embedding         BLOB    NOT NULL,
     source_image_path TEXT,
@@ -67,6 +71,7 @@ CREATE INDEX IF NOT EXISTS idx_face_embeddings_model
 CREATE TABLE IF NOT EXISTS detections (
     id              INTEGER PRIMARY KEY AUTOINCREMENT,
     user_id         INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    environment_id  INTEGER NOT NULL DEFAULT 0,
     identity_id     INTEGER REFERENCES identities(id) ON DELETE SET NULL,
     source_image_id INTEGER NOT NULL REFERENCES source_images(id) ON DELETE CASCADE,
     type            TEXT    NOT NULL CHECK(type IN ('face', 'object')),
@@ -110,6 +115,7 @@ CREATE TABLE IF NOT EXISTS models (
 CREATE TABLE IF NOT EXISTS jobs (
     id          TEXT    PRIMARY KEY,
     user_id     INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    environment_id INTEGER NOT NULL DEFAULT 0,
     type        TEXT    NOT NULL,
     status      TEXT    NOT NULL DEFAULT 'pending'
                         CHECK(status IN ('pending', 'running', 'done', 'failed')),
@@ -119,6 +125,17 @@ CREATE TABLE IF NOT EXISTS jobs (
 );
 
 CREATE INDEX IF NOT EXISTS idx_jobs_user ON jobs(user_id, created_at DESC);
+
+-- environments: isolated data namespaces per user
+CREATE TABLE IF NOT EXISTS environments (
+    id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id    INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    name       TEXT    NOT NULL,
+    created_at TEXT    NOT NULL DEFAULT (datetime('now')),
+    UNIQUE(user_id, name)
+);
+
+CREATE INDEX IF NOT EXISTS idx_environments_user ON environments(user_id);
 
 -- settings: shared key-value config for thresholds and behaviour knobs
 CREATE TABLE IF NOT EXISTS settings (

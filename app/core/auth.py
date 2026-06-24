@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import sqlite3
 from typing import Optional
 
 from fastapi import Depends, HTTPException, Request, Security
@@ -14,40 +15,64 @@ from app.db import store
 _scheme = APIKeyHeader(name="X-API-Key", auto_error=False)
 
 
-async def require_auth(
+async def _resolve_api_key(
     request: Request,
     api_key: Optional[str] = Security(_scheme),
-) -> int:
-    """Validate X-API-Key from DB, or fall back to session. Returns user_id.
-
-    Used on all /api/* routes — accepts either a DB-issued API key or a valid
-    browser session, so the web UI can call its own API without a key header.
-    """
+) -> sqlite3.Row | None:
+    """Return the api_keys row for the given key, or None for session-auth requests."""
     if api_key:
         key_hash = hash_api_key(api_key)
         row = store.get_api_key_user(key_hash)
         if row:
             store.touch_api_key(row["key_id"])
-            return int(row["user_id"])
+            return row
         raise HTTPException(403, "Invalid API key")
+    return None
 
+
+async def require_auth(
+    request: Request,
+    key_row: sqlite3.Row | None = Depends(_resolve_api_key),
+) -> int:
+    """Returns user_id. Accepts API key or browser session."""
+    if key_row:
+        return int(key_row["user_id"])
     user_id = _user_from_session(request)
     if user_id:
         return user_id
+    raise HTTPException(401, "Provide an X-API-Key header or log in.")
 
+
+async def require_env_id(
+    request: Request,
+    key_row: sqlite3.Row | None = Depends(_resolve_api_key),
+) -> int:
+    """Returns environment_id. API key -> key's environment. Browser session -> session env."""
+    if key_row:
+        env_id = key_row["environment_id"]
+        if not env_id:
+            raise HTTPException(500, "API key has no environment assigned")
+        return int(env_id)
+    user_id = _user_from_session(request)
+    if user_id:
+        env_id = request.session.get("environment_id")
+        if not env_id:
+            # Lazy-resolve and cache the default environment in session
+            env_id = store.get_default_environment_id(user_id)
+            if not env_id:
+                raise HTTPException(500, "No default environment found")
+            request.session["environment_id"] = env_id
+        return int(env_id)
     raise HTTPException(401, "Provide an X-API-Key header or log in.")
 
 
 async def require_admin(user_id: int = Depends(require_auth)) -> int:
-    """Like require_auth, but also requires the user to be an admin. Used to gate
-    instance-global resources (settings, models) that affect every account."""
     if not is_admin(user_id):
         raise HTTPException(403, "Admin only")
     return user_id
 
 
 def is_admin(user_id: int | None) -> bool:
-    """True if the user exists and is an admin (the first registered account)."""
     if not user_id:
         return False
     user = store.get_user_by_id(user_id)
@@ -55,16 +80,10 @@ def is_admin(user_id: int | None) -> bool:
 
 
 def get_session_user(request: Request) -> int | None:
-    """Return user_id from session or remember-me cookie, or None.
-
-    Always ensures 'username' is in the session so every page using
-    base.html renders the nav account link correctly.
-    """
     uid = _user_from_session(request)
     if uid:
         _restore_username(request, uid)
         return uid
-
     token = request.cookies.get("argus_remember")
     if token:
         secret = os.environ.get("SECRET_KEY", "change-me")
@@ -73,12 +92,15 @@ def get_session_user(request: Request) -> int | None:
             request.session["user_id"] = uid
             _restore_username(request, uid)
             return uid
-
     return None
 
 
+def get_session_env(request: Request) -> int | None:
+    """Return environment_id from session, or None."""
+    return request.session.get("environment_id")
+
+
 def _restore_username(request: Request, uid: int) -> None:
-    """Set session username from DB if it is missing."""
     if not request.session.get("username"):
         user = store.get_user_by_id(uid)
         if user:

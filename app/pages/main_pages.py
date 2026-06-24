@@ -2,12 +2,12 @@
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Request
+from fastapi import APIRouter, Form, Request
 from fastapi.responses import RedirectResponse
 from fastapi.templating import Jinja2Templates
 
 from app import __version__
-from app.core.auth import get_session_user
+from app.core.auth import get_session_env, get_session_user
 from app.db import store
 
 router = APIRouter()
@@ -58,6 +58,13 @@ def _base(request: Request, active: str = "") -> dict | None:
     if not user_id:
         return None
     user = store.get_user_by_id(user_id)
+    env_id = get_session_env(request)
+    if not env_id:
+        env_id = store.get_default_environment_id(user_id)
+        if env_id:
+            request.session["environment_id"] = env_id
+    environments = store.list_environments(user_id)
+    env_name = next((e["name"] for e in environments if e["id"] == env_id), "default")
     return {
         "username": request.session.get("username", ""),
         "user_id": user_id,
@@ -66,6 +73,9 @@ def _base(request: Request, active: str = "") -> dict | None:
         "user_tz": _col(user, "timezone", "UTC"),
         "user_locale": _col(user, "locale", "en-US"),
         "version": __version__,
+        "environment_id": env_id,
+        "environment_name": env_name,
+        "environments": [dict(e) for e in environments],
     }
 
 
@@ -86,17 +96,41 @@ async def gallery(identity_id: int, request: Request):
     ctx = _base(request, "dashboard")
     if not ctx:
         return RedirectResponse("/login")
-    identity = store.get_identity_with_counts(identity_id, ctx["user_id"])
+    env_id = ctx["environment_id"]
+    identity = store.get_identity_with_counts(identity_id, ctx["user_id"], env_id)
     if not identity:
         return _r(request, "dashboard.html", {**ctx, "error": "Identity not found"}, status_code=404)
     ctx["identity"] = identity
-    # Effective cover: explicit choice, else the first/oldest photo (stable — doesn't
-    # jump to newer detections as more are matched).
     cover_id = identity["cover_detection_id"]
     if cover_id is None:
-        cover_id = store.get_oldest_detection_id(identity_id, ctx["user_id"])
+        cover_id = store.get_oldest_detection_id(identity_id, ctx["user_id"], env_id)
     ctx["effective_cover_id"] = cover_id
     return _r(request, "gallery.html", ctx)
+
+
+@router.post("/switch-environment/{env_id}")
+async def switch_environment(env_id: int, request: Request):
+    ctx = _base(request)
+    if not ctx:
+        return RedirectResponse("/login")
+    env = store.get_environment(env_id, ctx["user_id"])
+    if env:
+        request.session["environment_id"] = env_id
+    referer = request.headers.get("referer", "/")
+    return RedirectResponse(referer, status_code=303)
+
+
+@router.get("/environments")
+async def environments_page(request: Request):
+    ctx = _base(request, "environments")
+    if not ctx:
+        return RedirectResponse("/login")
+    envs = store.list_environments(ctx["user_id"])
+    ctx["env_list"] = [
+        {**dict(e), **store.get_environment_stats(e["id"], ctx["user_id"])}
+        for e in envs
+    ]
+    return _r(request, "environments.html", ctx)
 
 
 @router.get("/enroll")
@@ -161,3 +195,59 @@ async def settings_page(request: Request):
     ctx["active_obj_world"] = active_obj_name and "world" in active_obj_name.lower()
     ctx["managed_users"]   = [dict(u) for u in store.list_managed_users(ctx["user_id"])]
     return _r(request, "settings.html", ctx)
+
+
+# ---------------------------------------------------------------------------
+# Environment page actions (create / rename / delete)
+# ---------------------------------------------------------------------------
+
+@router.post("/environments/create")
+async def environment_create(request: Request, name: str = Form(...)):
+    ctx = _base(request)
+    if not ctx:
+        return RedirectResponse("/login")
+    name = name.strip()
+    if name:
+        try:
+            store.create_environment(ctx["user_id"], name)
+        except Exception:
+            pass
+    return RedirectResponse("/environments", status_code=303)
+
+
+@router.post("/environments/{env_id}/rename")
+async def environment_rename(env_id: int, request: Request, name: str = Form(...)):
+    ctx = _base(request)
+    if not ctx:
+        return RedirectResponse("/login")
+    name = name.strip()
+    if name:
+        try:
+            store.rename_environment(env_id, ctx["user_id"], name)
+        except Exception:
+            pass
+    return RedirectResponse("/environments", status_code=303)
+
+
+@router.post("/environments/{env_id}/delete")
+async def environment_delete(env_id: int, request: Request):
+    from app.core import face_index as _fi
+    from app.core.paths import crops_dir
+    ctx = _base(request)
+    if not ctx:
+        return RedirectResponse("/login")
+    envs = store.list_environments(ctx["user_id"])
+    if len(envs) > 1:
+        deleted, crops = store.delete_environment(env_id, ctx["user_id"])
+        if deleted:
+            for crop in crops:
+                try:
+                    (crops_dir() / crop).unlink(missing_ok=True)
+                except OSError:
+                    pass
+            _fi.clear_environment(ctx["user_id"], env_id)
+            if request.session.get("environment_id") == env_id:
+                remaining = store.list_environments(ctx["user_id"])
+                if remaining:
+                    request.session["environment_id"] = remaining[0]["id"]
+    return RedirectResponse("/environments", status_code=303)

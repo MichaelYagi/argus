@@ -54,6 +54,8 @@ def _render(request: Request, user, error: str = "", success: str = ""):
     new_key = request.session.pop("new_key", None)
     managed = store.list_managed_users(user["id"]) if user["is_admin"] else []
     keys = store.list_api_keys(user["id"])
+    environments = store.list_environments(user["id"])
+    current_env_id = request.session.get("environment_id")
     return templates.TemplateResponse(request, "account.html", {
         "username": user["username"],
         "is_admin": bool(user["is_admin"]),
@@ -67,6 +69,8 @@ def _render(request: Request, user, error: str = "", success: str = ""):
         "version": __version__,
         "timezones": TIMEZONES,
         "locales": LOCALES,
+        "environments": [dict(e) for e in environments],
+        "current_env_id": current_env_id,
     })
 
 
@@ -83,12 +87,17 @@ async def account_page(request: Request):
 # ---------------------------------------------------------------------------
 
 @router.post("/account/key/create")
-async def create_key(request: Request, label: str = Form(default="")):
+async def create_key(
+    request: Request,
+    label: str = Form(default=""),
+    environment_id: int = Form(default=0),
+):
     user, redir = _require(request)
     if redir:
         return redir
+    env_id = environment_id or request.session.get("environment_id") or None
     plaintext = generate_api_key()
-    store.create_api_key(user["id"], hash_api_key(plaintext), label.strip() or "Unnamed key")
+    store.create_api_key(user["id"], hash_api_key(plaintext), label.strip() or "Unnamed key", env_id)
     request.session["new_key"] = plaintext
     return RedirectResponse("/account", status_code=303)
 
@@ -225,7 +234,9 @@ async def admin_delete_user(user_id: int, request: Request):
     if redir:
         return redir
     if user_id != user["id"]:  # never delete yourself here
+        envs = store.list_environments(user_id)
         store.delete_user(user_id)
         from app.core import face_index as _fi
-        _fi.rebuild_user(user_id)  # drop their entries from the in-memory index
+        for env in envs:
+            _fi.clear_environment(user_id, env["id"])
     return RedirectResponse("/settings", status_code=303)

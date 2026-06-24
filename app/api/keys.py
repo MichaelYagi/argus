@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel
 
 from app.core.auth import require_auth
@@ -14,6 +14,7 @@ router = APIRouter()
 
 class _CreateKey(BaseModel):
     label: str = ""
+    environment_id: int | None = None
 
 
 @router.get("/api/keys")
@@ -23,6 +24,8 @@ async def list_keys(user_id: int = Depends(require_auth)):
         {
             "id": r["id"],
             "label": r["label"],
+            "environment_id": r["environment_id"],
+            "environment_name": r["environment_name"],
             "created_at": r["created_at"],
             "last_used_at": r["last_used_at"],
             "is_active": bool(r["is_active"]),
@@ -32,12 +35,20 @@ async def list_keys(user_id: int = Depends(require_auth)):
 
 
 @router.post("/api/keys", status_code=201)
-async def create_key(body: _CreateKey, user_id: int = Depends(require_auth)):
+async def create_key(
+    request: Request,
+    body: _CreateKey,
+    user_id: int = Depends(require_auth),
+):
+    env_id = body.environment_id or request.session.get("environment_id") or None
     plaintext = generate_api_key()
-    key_id = store.create_api_key(user_id, hash_api_key(plaintext), body.label)
+    key_id = store.create_api_key(user_id, hash_api_key(plaintext), body.label, env_id)
+    env = store.get_environment(env_id, user_id) if env_id else None
     return {
         "id": key_id,
         "label": body.label,
+        "environment_id": env_id,
+        "environment_name": env["name"] if env else None,
         "key": plaintext,  # shown once — not stored
     }
 

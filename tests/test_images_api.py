@@ -33,26 +33,29 @@ def _setup(client) -> tuple[int, dict]:
 
 
 def _insert_source(user_id: int, filename: str = "photo.jpg") -> int:
+    env_id = store.get_default_environment_id(user_id) or 0
     with store._connect() as conn:
         conn.execute(
-            "INSERT INTO source_images (user_id, file_path, width, height) VALUES (?, ?, 1920, 1080)",
-            (user_id, filename),
+            """INSERT INTO source_images (user_id, environment_id, file_path, width, height)
+               VALUES (?, ?, ?, 1920, 1080)""",
+            (user_id, env_id, filename),
         )
         return conn.execute("SELECT last_insert_rowid()").fetchone()[0]
 
 
 def _insert_face(user_id: int, src_id: int, label: str | None = None,
                  bbox: tuple = (10, 20, 100, 100), conf: float = 0.9) -> int:
+    env_id = store.get_default_environment_id(user_id) or 0
     identity_id = None
     if label:
         identity_id = store.get_or_create_identity(user_id, "face", label)
     with store._connect() as conn:
         conn.execute(
             """INSERT INTO detections
-               (user_id, identity_id, source_image_id, type, model_id, confidence,
+               (user_id, environment_id, identity_id, source_image_id, type, model_id, confidence,
                 bbox_x, bbox_y, bbox_w, bbox_h, crop_path)
-               VALUES (?, ?, ?, 'face', NULL, ?, ?, ?, ?, ?, 'crop.jpg')""",
-            (user_id, identity_id, src_id, conf, *bbox),
+               VALUES (?, ?, ?, ?, 'face', NULL, ?, ?, ?, ?, ?, 'crop.jpg')""",
+            (user_id, env_id, identity_id, src_id, conf, *bbox),
         )
         return conn.execute("SELECT last_insert_rowid()").fetchone()[0]
 
@@ -102,13 +105,14 @@ def test_image_faces_excludes_objects(client):
     user_id, h = _setup(client)
     src_id = _insert_source(user_id)
     _insert_face(user_id, src_id)  # face
+    env_id = store.get_default_environment_id(user_id) or 0
     with store._connect() as conn:  # object
         conn.execute(
             """INSERT INTO detections
-               (user_id, identity_id, source_image_id, type, model_id, confidence,
+               (user_id, environment_id, identity_id, source_image_id, type, model_id, confidence,
                 bbox_x, bbox_y, bbox_w, bbox_h, crop_path)
-               VALUES (?, NULL, ?, 'object', NULL, 0.8, 0, 0, 50, 50, 'obj.jpg')""",
-            (user_id, src_id),
+               VALUES (?, ?, NULL, ?, 'object', NULL, 0.8, 0, 0, 50, 50, 'obj.jpg')""",
+            (user_id, env_id, src_id),
         )
     r = client.get(f"/api/images/{src_id}/faces", headers=h)
     assert len(r.json()["faces"]) == 1
@@ -143,13 +147,14 @@ def test_delete_source_image_cascades_detections(client):
     user_id, h = _setup(client)
     src_id = _insert_source(user_id)
     _insert_face(user_id, src_id, label="Noah")
+    env_id = store.get_default_environment_id(user_id) or 0
     with store._connect() as conn:  # add an object detection too
         conn.execute(
             """INSERT INTO detections
-               (user_id, identity_id, source_image_id, type, model_id, confidence,
+               (user_id, environment_id, identity_id, source_image_id, type, model_id, confidence,
                 bbox_x, bbox_y, bbox_w, bbox_h, crop_path)
-               VALUES (?, NULL, ?, 'object', NULL, 0.8, 0, 0, 50, 50, 'obj.jpg')""",
-            (user_id, src_id),
+               VALUES (?, ?, NULL, ?, 'object', NULL, 0.8, 0, 0, 50, 50, 'obj.jpg')""",
+            (user_id, env_id, src_id),
         )
 
     r = client.delete(f"/api/images/{src_id}", headers=h)

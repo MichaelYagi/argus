@@ -10,7 +10,7 @@ from typing import Any
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request
 
 from app.core import settings_cache
-from app.core.auth import require_auth
+from app.core.auth import require_auth, require_env_id
 from app.core.engine_registry import registry
 from app.core.image_input import (
     acquire_image,
@@ -37,20 +37,22 @@ async def detect_faces(
     request: Request,
     background_tasks: BackgroundTasks,
     user_id: int = Depends(require_auth),
+    environment_id: int = Depends(require_env_id),
 ):
     run_async = _is_truthy(request.query_params.get("async", ""))
     raw = await acquire_image(request)
     label = await _extract_label(request)
     replace = await _extract_replace(request)
     if run_async:
-        job_id = store.create_job(user_id, "detect_faces")
-        background_tasks.add_task(_run_detection_job, job_id, user_id, raw, label, replace, "face")
+        job_id = store.create_job(user_id, "detect_faces", environment_id)
+        background_tasks.add_task(_run_detection_job, job_id, user_id, environment_id, raw, label, replace, "face")
         return {"job_id": job_id, "status": "pending"}
     img = open_and_validate(raw)
-    source_filename, source_id = _save_source_image(user_id, raw, img)
+    source_filename, source_id = _save_source_image(user_id, environment_id, raw, img)
     if replace:
-        _clear_detections(user_id, source_id, "face")
-    return {"source_image_id": source_id, "faces": _run_faces(user_id, img, source_id, label=label)}
+        _clear_detections(user_id, environment_id, source_id, "face")
+    return {"source_image_id": source_id,
+            "faces": _run_faces(user_id, environment_id, img, source_id, label=label)}
 
 
 @router.post("/api/detect/objects")
@@ -58,19 +60,21 @@ async def detect_objects(
     request: Request,
     background_tasks: BackgroundTasks,
     user_id: int = Depends(require_auth),
+    environment_id: int = Depends(require_env_id),
 ):
     run_async = _is_truthy(request.query_params.get("async", ""))
     raw = await acquire_image(request)
     replace = await _extract_replace(request)
     if run_async:
-        job_id = store.create_job(user_id, "detect_objects")
-        background_tasks.add_task(_run_detection_job, job_id, user_id, raw, None, replace, "object")
+        job_id = store.create_job(user_id, "detect_objects", environment_id)
+        background_tasks.add_task(_run_detection_job, job_id, user_id, environment_id, raw, None, replace, "object")
         return {"job_id": job_id, "status": "pending"}
     img = open_and_validate(raw)
-    source_filename, source_id = _save_source_image(user_id, raw, img)
+    source_filename, source_id = _save_source_image(user_id, environment_id, raw, img)
     if replace:
-        _clear_detections(user_id, source_id, "object")
-    return {"source_image_id": source_id, "objects": _run_objects(user_id, img, source_id)}
+        _clear_detections(user_id, environment_id, source_id, "object")
+    return {"source_image_id": source_id,
+            "objects": _run_objects(user_id, environment_id, img, source_id)}
 
 
 @router.post("/api/detect/all")
@@ -78,28 +82,33 @@ async def detect_all(
     request: Request,
     background_tasks: BackgroundTasks,
     user_id: int = Depends(require_auth),
+    environment_id: int = Depends(require_env_id),
 ):
     run_async = _is_truthy(request.query_params.get("async", ""))
     raw = await acquire_image(request)
     label = await _extract_label(request)
     replace = await _extract_replace(request)
     if run_async:
-        job_id = store.create_job(user_id, "detect_all")
-        background_tasks.add_task(_run_detection_job, job_id, user_id, raw, label, replace, "all")
+        job_id = store.create_job(user_id, "detect_all", environment_id)
+        background_tasks.add_task(_run_detection_job, job_id, user_id, environment_id, raw, label, replace, "all")
         return {"job_id": job_id, "status": "pending"}
     img = open_and_validate(raw)
-    source_filename, source_id = _save_source_image(user_id, raw, img)
+    source_filename, source_id = _save_source_image(user_id, environment_id, raw, img)
     if replace:
-        _clear_detections(user_id, source_id, None)  # both faces and objects
+        _clear_detections(user_id, environment_id, source_id, None)  # both faces and objects
     return {
         "source_image_id": source_id,
-        "faces": _run_faces(user_id, img, source_id, label=label),
-        "objects": _run_objects(user_id, img, source_id),
+        "faces": _run_faces(user_id, environment_id, img, source_id, label=label),
+        "objects": _run_objects(user_id, environment_id, img, source_id),
     }
 
 
 @router.post("/api/detect/bulk")
-async def detect_bulk(request: Request, user_id: int = Depends(require_auth)):
+async def detect_bulk(
+    request: Request,
+    user_id: int = Depends(require_auth),
+    environment_id: int = Depends(require_env_id),
+):
     """Batch detect across multiple images.
 
     Multipart: one or more ``file`` fields plus optional ``type`` field.
@@ -146,12 +155,12 @@ async def detect_bulk(request: Request, user_id: int = Depends(require_auth)):
             continue
         try:
             img = open_and_validate(raw)
-            _, src_id = _save_source_image(user_id, raw, img)
+            _, src_id = _save_source_image(user_id, environment_id, raw, img)
             base["source_image_id"] = src_id
             if detect_type in ("faces", "all"):
-                base["faces"] = _run_faces(user_id, img, src_id)
+                base["faces"] = _run_faces(user_id, environment_id, img, src_id)
             if detect_type in ("objects", "all"):
-                base["objects"] = _run_objects(user_id, img, src_id)
+                base["objects"] = _run_objects(user_id, environment_id, img, src_id)
         except HTTPException as exc:
             base["error"] = exc.detail
         except Exception as exc:
@@ -202,7 +211,11 @@ async def verify(request: Request, user_id: int = Depends(require_auth)):
 
 
 @router.post("/api/identify")
-async def identify(request: Request, user_id: int = Depends(require_auth)):
+async def identify(
+    request: Request,
+    user_id: int = Depends(require_auth),
+    environment_id: int = Depends(require_env_id),
+):
     """1:N identification — who is each face, among this user's enrolled people?
 
     One image (file/image_url/image_base64). Read-only: stores nothing. Returns the
@@ -225,10 +238,10 @@ async def identify(request: Request, user_id: int = Depends(require_auth)):
 
     results = []
     for det in faces:
-        ranked = face_index.search(det.embedding, user_id, threshold=0.0, k=top_n)
+        ranked = face_index.search(det.embedding, user_id, environment_id, threshold=0.0, k=top_n)
         suggestions = []
         for iid, s in ranked:
-            ident = store.get_identity(iid, user_id)
+            ident = store.get_identity(iid, user_id, environment_id)
             if ident:
                 suggestions.append({
                     "identity_id": iid,
@@ -257,6 +270,7 @@ async def identify(request: Request, user_id: int = Depends(require_auth)):
 def _run_detection_job(
     job_id: str,
     user_id: int,
+    environment_id: int,
     raw: bytes,
     label: str | None,
     replace: bool,
@@ -265,14 +279,14 @@ def _run_detection_job(
     try:
         store.update_job(job_id, "running")
         img = open_and_validate(raw)
-        _, source_id = _save_source_image(user_id, raw, img)
+        _, source_id = _save_source_image(user_id, environment_id, raw, img)
         if replace:
-            _clear_detections(user_id, source_id, None if det_type == "all" else det_type)
+            _clear_detections(user_id, environment_id, source_id, None if det_type == "all" else det_type)
         result: dict = {"source_image_id": source_id}
         if det_type in ("face", "all"):
-            result["faces"] = _run_faces(user_id, img, source_id, label=label)
+            result["faces"] = _run_faces(user_id, environment_id, img, source_id, label=label)
         if det_type in ("object", "all"):
-            result["objects"] = _run_objects(user_id, img, source_id)
+            result["objects"] = _run_objects(user_id, environment_id, img, source_id)
         store.update_job(job_id, "done", result)
     except HTTPException as exc:
         store.update_job(job_id, "failed", {"error": exc.detail})
@@ -326,11 +340,11 @@ async def _extract_replace(request: Request) -> bool:
     return False
 
 
-def _clear_detections(user_id: int, source_id: int, det_type: str | None) -> None:
+def _clear_detections(user_id: int, environment_id: int, source_id: int, det_type: str | None) -> None:
     """Remove prior detections (and their crop files) for a source image.
     References enrolled from those crops are dropped too (in the store call), so
     refresh the match index to drop them before re-detecting."""
-    crops = store.clear_detections_for_source(source_id, user_id, det_type)
+    crops = store.clear_detections_for_source(source_id, user_id, det_type, environment_id)
     for crop in crops:
         try:
             (crops_dir() / crop).unlink(missing_ok=True)
@@ -338,10 +352,10 @@ def _clear_detections(user_id: int, source_id: int, det_type: str | None) -> Non
             pass
     if det_type != "object":
         from app.core import face_index
-        face_index.rebuild_user(user_id)
+        face_index.rebuild_user(user_id, environment_id)
 
 
-def _run_faces(user_id: int, img: Any, source_id: int, label: str | None = None) -> list[dict]:
+def _run_faces(user_id: int, environment_id: int, img: Any, source_id: int, label: str | None = None) -> list[dict]:
     model_row = store.get_active_model("face")
     if model_row is None:
         raise HTTPException(503, "No active face model. Download and activate one via /api/models.")
@@ -361,13 +375,13 @@ def _run_faces(user_id: int, img: Any, source_id: int, label: str | None = None)
 
     results = []
     for det in detections:
-        identity_id, sim = _match_face(det.embedding, model_row["id"], user_id, threshold)
+        identity_id, sim = _match_face(det.embedding, model_row["id"], user_id, environment_id, threshold)
 
         if label:
             # Caller already knows who this is — assign directly and confirm.
             # The identity is asserted, not matched, so report full confidence
             # rather than the incidental score against the prior reference set.
-            identity_id = store.get_or_create_identity(user_id, "face", label)
+            identity_id = store.get_or_create_identity(user_id, "face", label, environment_id)
             sim = 1.0
             review_status = "confirmed"
         else:
@@ -383,6 +397,7 @@ def _run_faces(user_id: int, img: Any, source_id: int, label: str | None = None)
         crop_filename = _save_crop(img, det.bbox, padding)
         detection_id = store.insert_detection(
             user_id=user_id,
+            environment_id=environment_id,
             identity_id=identity_id,
             source_image_id=source_id,
             detection_type="face",
@@ -400,12 +415,12 @@ def _run_faces(user_id: int, img: Any, source_id: int, label: str | None = None)
 
         display_label = label
         if display_label is None and identity_id is not None:
-            row = store.get_identity(identity_id, user_id)
+            row = store.get_identity(identity_id, user_id, environment_id)
             display_label = row["label"] if row else None
 
         if label:
             from app.api.enroll import enroll_from_detection
-            enroll_from_detection(store.get_detection(detection_id, user_id), user_id)
+            enroll_from_detection(store.get_detection(detection_id, user_id, environment_id), user_id, environment_id)
 
         results.append({
             "detection_id": detection_id,
@@ -422,7 +437,7 @@ def _run_faces(user_id: int, img: Any, source_id: int, label: str | None = None)
     return results
 
 
-def _run_objects(user_id: int, img: Any, source_id: int) -> list[dict]:
+def _run_objects(user_id: int, environment_id: int, img: Any, source_id: int) -> list[dict]:
     model_row = store.get_active_model("object")
     if model_row is None:
         raise HTTPException(503, "No active object model. Download and activate one via /api/models.")
@@ -438,10 +453,11 @@ def _run_objects(user_id: int, img: Any, source_id: int) -> list[dict]:
 
     results = []
     for det in detections:
-        identity_id = store.get_or_create_identity(user_id, "object", det.class_name)
+        identity_id = store.get_or_create_identity(user_id, "object", det.class_name, environment_id)
         crop_filename = _save_crop(img, det.bbox, padding)
         detection_id = store.insert_detection(
             user_id=user_id,
+            environment_id=environment_id,
             identity_id=identity_id,
             source_image_id=source_id,
             detection_type="object",
@@ -472,7 +488,7 @@ def _run_objects(user_id: int, img: Any, source_id: int) -> list[dict]:
 # Private helpers
 # ---------------------------------------------------------------------------
 
-def _save_source_image(user_id: int, raw_bytes: bytes, img: Any) -> tuple[str, int]:
+def _save_source_image(user_id: int, environment_id: int, raw_bytes: bytes, img: Any) -> tuple[str, int]:
     content_hash = hashlib.sha256(raw_bytes).hexdigest()
     ext = _FMT_EXT.get(img.format or "JPEG", "jpg")
     filename = f"{content_hash}.{ext}"
@@ -480,7 +496,7 @@ def _save_source_image(user_id: int, raw_bytes: bytes, img: Any) -> tuple[str, i
     if not dest.exists():
         sources_dir().mkdir(parents=True, exist_ok=True)
         dest.write_bytes(raw_bytes)
-    source_id = store.get_or_create_source_image(user_id, filename, img.width, img.height)
+    source_id = store.get_or_create_source_image(user_id, filename, img.width, img.height, environment_id)
     return filename, source_id
 
 
@@ -591,12 +607,12 @@ def _embedding_to_bytes(embedding: Any) -> bytes | None:
 
 
 def _match_face(
-    embedding: Any, model_id: int, user_id: int, threshold: float
+    embedding: Any, model_id: int, user_id: int, environment_id: int, threshold: float
 ) -> tuple[int | None, float]:
     from app.core import face_index
-    results = face_index.search(embedding, user_id, threshold=threshold, k=1)
+    results = face_index.search(embedding, user_id, environment_id, threshold=threshold, k=1)
     if results:
         return results[0]
     # Below threshold — get best anyway for review queue context
-    best = face_index.search(embedding, user_id, threshold=0.0, k=1)
+    best = face_index.search(embedding, user_id, environment_id, threshold=0.0, k=1)
     return (None, best[0][1]) if best else (None, 0.0)

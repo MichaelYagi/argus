@@ -9,7 +9,7 @@ from typing import Any
 from fastapi import APIRouter, Depends, HTTPException, Request
 
 from app.core import settings_cache
-from app.core.auth import require_auth
+from app.core.auth import require_auth, require_env_id
 from app.core.engine_registry import registry
 from app.core.image_input import decode_base64, fetch_url, open_and_validate, to_rgb_array
 from app.core.paths import crops_dir, sources_dir
@@ -22,7 +22,7 @@ router = APIRouter()
 # Shared helper — enroll from an existing detection's stored embedding
 # ---------------------------------------------------------------------------
 
-def enroll_from_detection(det: Any, user_id: int) -> bool:
+def enroll_from_detection(det: Any, user_id: int, environment_id: int | None = None) -> bool:
     """Copy a detection's embedding into face_embeddings.
 
     Returns True if a new embedding was added, False if already present.
@@ -47,18 +47,33 @@ def enroll_from_detection(det: Any, user_id: int) -> bool:
         model_id=model_id,
         embedding_bytes=bytes(det["embedding"]),
         source_image_path=det["crop_path"],
+        environment_id=environment_id,
     )
     if model_id:
         store.compute_and_store_representative(det["identity_id"], model_id)
         from app.core import face_index as _fi
-        _fi.rebuild_user(user_id)
+        _fi.rebuild_user(user_id, _det_env(det, environment_id))
     return True
 
 
+def _det_env(det: Any, environment_id: int | None) -> int:
+    """Resolve the environment a detection belongs to for index rebuilds."""
+    if environment_id is not None:
+        return environment_id
+    try:
+        return int(det["environment_id"])
+    except (IndexError, KeyError, TypeError):
+        return 0
+
+
 @router.post("/api/detections/{detection_id}/enroll", status_code=201)
-async def enroll_detection(detection_id: int, user_id: int = Depends(require_auth)):
+async def enroll_detection(
+    detection_id: int,
+    user_id: int = Depends(require_auth),
+    environment_id: int = Depends(require_env_id),
+):
     """Promote a confirmed detection's embedding to the identity's reference set."""
-    det = store.get_detection(detection_id, user_id)
+    det = store.get_detection(detection_id, user_id, environment_id)
     if not det:
         raise HTTPException(404, "Detection not found")
     if det["type"] != "face":
@@ -68,42 +83,51 @@ async def enroll_detection(detection_id: int, user_id: int = Depends(require_aut
     if not det["embedding"]:
         raise HTTPException(409, "No embedding stored for this detection")
 
-    added = enroll_from_detection(det, user_id)
+    added = enroll_from_detection(det, user_id, environment_id)
     return {"detection_id": detection_id, "identity_id": det["identity_id"], "added": added, "enrolled": True}
 
 
 @router.delete("/api/detections/{detection_id}/enroll", status_code=200)
-async def unenroll_detection(detection_id: int, user_id: int = Depends(require_auth)):
+async def unenroll_detection(
+    detection_id: int,
+    user_id: int = Depends(require_auth),
+    environment_id: int = Depends(require_env_id),
+):
     """Remove this detection's crop from the identity's reference set (inverse of enroll)."""
-    det = store.get_detection(detection_id, user_id)
+    det = store.get_detection(detection_id, user_id, environment_id)
     if not det:
         raise HTTPException(404, "Detection not found")
-    removed = store.remove_reference_by_detection(detection_id, user_id)
+    removed = store.remove_reference_by_detection(detection_id, user_id, environment_id)
     if removed:
         from app.core import face_index as _fi
-        _fi.rebuild_user(user_id)
+        _fi.rebuild_user(user_id, environment_id)
     return {"detection_id": detection_id, "identity_id": det["identity_id"],
             "removed": removed, "enrolled": False}
 
 
 @router.delete("/api/face_embeddings/{embedding_id}", status_code=204)
-async def delete_embedding(embedding_id: int, user_id: int = Depends(require_auth)):
+async def delete_embedding(
+    embedding_id: int,
+    user_id: int = Depends(require_auth),
+    environment_id: int = Depends(require_env_id),
+):
     if not store.delete_face_embedding(embedding_id, user_id):
         raise HTTPException(404, "Embedding not found")
     model_row = store.get_active_model("face")
     if model_row:
         from app.core import face_index as _fi
-        _fi.rebuild_user(user_id)
+        _fi.rebuild_user(user_id, environment_id)
 
 
 @router.get("/api/face_embeddings")
 async def list_embeddings(
     identity_id: int,
     user_id: int = Depends(require_auth),
+    environment_id: int = Depends(require_env_id),
 ):
     """List reference embeddings for an identity (without the raw vectors)."""
     from app.db import store as _s
-    if not _s.get_identity(identity_id, user_id):
+    if not _s.get_identity(identity_id, user_id, environment_id):
         raise HTTPException(404, "Identity not found")
     with store._connect() as conn:
         rows = conn.execute(
@@ -122,24 +146,29 @@ _FMT_EXT = {"JPEG": "jpg", "PNG": "png", "WEBP": "webp", "BMP": "bmp",
 # ---------------------------------------------------------------------------
 
 @router.post("/api/faces/enroll", status_code=201)
-async def enroll_new(request: Request, user_id: int = Depends(require_auth)):
+async def enroll_new(
+    request: Request,
+    user_id: int = Depends(require_auth),
+    environment_id: int = Depends(require_env_id),
+):
     """Create a new face identity and store its first embedding in one call."""
     raw, name = await _parse_enroll_request(request)
     img = open_and_validate(raw)
     embedding, source_filename, face_det = _extract_embedding(raw, img)
 
     try:
-        identity_id = store.create_identity(user_id, "face", name)
+        identity_id = store.create_identity(user_id, "face", name, environment_id)
     except sqlite3.IntegrityError:
         raise HTTPException(409, f"Identity '{name}' already exists")
 
     model_row = store.get_active_model("face")
     model_id  = model_row["id"] if model_row else None
 
-    source_id  = store.get_or_create_source_image(user_id, source_filename, img.width, img.height)
+    source_id  = store.get_or_create_source_image(user_id, source_filename, img.width, img.height, environment_id)
     crop_path  = _save_crop(img, face_det.bbox)
     detection_id = store.insert_detection(
         user_id=user_id,
+        environment_id=environment_id,
         identity_id=identity_id,
         source_image_id=source_id,
         detection_type="face",
@@ -160,21 +189,25 @@ async def enroll_new(request: Request, user_id: int = Depends(require_auth)):
         model_id=model_id,
         embedding_bytes=_to_bytes(embedding),
         source_image_path=crop_path,
+        environment_id=environment_id,
     )
     if model_id:
         store.compute_and_store_representative(identity_id, model_id)
         from app.core import face_index as _fi
-        _fi.rebuild_user(user_id)
+        _fi.rebuild_user(user_id, environment_id)
     return {"identity_id": identity_id, "label": name, "embeddings": 1,
             "embedding_id": embedding_id, "detection_id": detection_id}
 
 
 @router.post("/api/identities/{identity_id}/enroll", status_code=201)
 async def enroll_existing(
-    identity_id: int, request: Request, user_id: int = Depends(require_auth)
+    identity_id: int,
+    request: Request,
+    user_id: int = Depends(require_auth),
+    environment_id: int = Depends(require_env_id),
 ):
     """Add a reference embedding to an existing face identity."""
-    if not store.get_identity(identity_id, user_id):
+    if not store.get_identity(identity_id, user_id, environment_id):
         raise HTTPException(404, "Identity not found")
 
     raw, _name = await _parse_enroll_request(request, name_required=False)
@@ -184,10 +217,11 @@ async def enroll_existing(
     model_row = store.get_active_model("face")
     model_id  = model_row["id"] if model_row else None
 
-    source_id  = store.get_or_create_source_image(user_id, source_filename, img.width, img.height)
+    source_id  = store.get_or_create_source_image(user_id, source_filename, img.width, img.height, environment_id)
     crop_path  = _save_crop(img, face_det.bbox)
     store.insert_detection(
         user_id=user_id,
+        environment_id=environment_id,
         identity_id=identity_id,
         source_image_id=source_id,
         detection_type="face",
@@ -205,12 +239,13 @@ async def enroll_existing(
         model_id=model_id,
         embedding_bytes=_to_bytes(embedding),
         source_image_path=crop_path,
+        environment_id=environment_id,
     )
     if model_id:
         store.compute_and_store_representative(identity_id, model_id)
         from app.core import face_index as _fi
-        _fi.rebuild_user(user_id)
-    identity = store.get_identity(identity_id, user_id)
+        _fi.rebuild_user(user_id, environment_id)
+    identity = store.get_identity(identity_id, user_id, environment_id)
     return {
         "embedding_id": embedding_id,
         "identity_id": identity_id,
