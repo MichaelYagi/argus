@@ -71,6 +71,7 @@ def _render(request: Request, user, error: str = "", success: str = ""):
         "locales": LOCALES,
         "environments": [dict(e) for e in environments],
         "current_env_id": current_env_id,
+        "show_env_switcher": False,
     })
 
 

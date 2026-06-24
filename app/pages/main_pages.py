@@ -52,7 +52,7 @@ def _col(row, key: str, default: str) -> str:
         return default
 
 
-def _base(request: Request, active: str = "") -> dict | None:
+def _base(request: Request, active: str = "", show_env_switcher: bool = True) -> dict | None:
     """Return base template context, or None if the user is not authenticated."""
     user_id = get_session_user(request)
     if not user_id:
@@ -76,6 +76,7 @@ def _base(request: Request, active: str = "") -> dict | None:
         "environment_id": env_id,
         "environment_name": env_name,
         "environments": [dict(e) for e in environments],
+        "show_env_switcher": show_env_switcher,
     }
 
 
@@ -152,7 +153,7 @@ async def review_page(request: Request):
 
 @router.get("/models")
 async def models_page(request: Request):
-    ctx = _base(request, "models")
+    ctx = _base(request, "models", show_env_switcher=False)
     if not ctx:
         return RedirectResponse("/login")
     if not ctx["is_admin"]:
@@ -172,7 +173,7 @@ async def api_docs(request: Request):
 
 @router.get("/settings")
 async def settings_page(request: Request):
-    ctx = _base(request, "settings")
+    ctx = _base(request, "settings", show_env_switcher=False)
     if not ctx:
         return RedirectResponse("/login")
     if not ctx["is_admin"]:
