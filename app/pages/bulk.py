@@ -6,8 +6,7 @@ from fastapi import APIRouter, Request
 from fastapi.responses import RedirectResponse
 from fastapi.templating import Jinja2Templates
 
-from app import __version__
-from app.core.auth import get_session_user, is_admin
+from app.pages.main_pages import _base
 
 router = APIRouter()
 templates = Jinja2Templates(directory="app/templates")
@@ -17,12 +16,7 @@ templates = Jinja2Templates(directory="app/templates")
 @router.get("/test")   # legacy redirect
 @router.get("/bulk")   # legacy redirect
 async def detect_page(request: Request):
-    user_id = get_session_user(request)
-    if not user_id:
+    ctx = _base(request, "detect")
+    if not ctx:
         return RedirectResponse("/login")
-    return templates.TemplateResponse(request, "bulk.html", {
-        "username": request.session.get("username", ""),
-        "is_admin": is_admin(user_id),
-        "active": "detect",
-        "version": __version__,
-    })
+    return templates.TemplateResponse(request, "bulk.html", ctx)
