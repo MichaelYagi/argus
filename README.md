@@ -285,6 +285,21 @@ curl -X POST \
 #    "available": {"faces": true, "objects": true}}
 ```
 
+Batch variant — `POST /api/test/batch` tests many images in one call, still storing nothing.
+Multipart: repeat `file` per image. JSON: `{"type": ..., "image_urls": [...], "image_base64": [...]}`.
+Per-image results; one bad image never fails the rest (max 100 per call).
+
+```bash
+curl -X POST \
+  -H "X-API-Key: argus_..." \
+  -F "type=all" -F "file=@a.jpg" -F "file=@b.jpg" \
+  http://localhost:8100/api/test/batch
+# → {"total": 2, "type": "all", "results": [
+#      {"index": 0, "filename": "a.jpg", "faces": [...], "objects": [...],
+#       "counts": {...}, "available": {...}},
+#      {"index": 1, "filename": "b.jpg", "error": "..."}]}
+```
+
 **Example — verify (1:1): "are these two faces the same person?"**
 
 Compares two images directly. Stores nothing.

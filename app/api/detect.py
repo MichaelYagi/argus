@@ -15,6 +15,7 @@ from app.core.engine_registry import registry
 from app.core.image_input import (
     acquire_image,
     acquire_image_slot,
+    decode_base64,
     fetch_url,
     open_and_validate,
     to_rgb_array,
@@ -290,6 +291,12 @@ async def test_detect(
 
     raw = await acquire_image(request)
     img = open_and_validate(raw)
+    return _stateless_detect(img, type_param)
+
+
+def _stateless_detect(img: Any, type_param: str) -> dict:
+    """Run the requested engines on one image and return bboxes + counts.
+    Stores nothing. Shared by /api/test and /api/test/batch."""
     img_array = to_rgb_array(img)
 
     faces: list[dict] = []
@@ -328,6 +335,80 @@ async def test_detect(
         "counts": {"faces": len(faces), "objects": len(objects)},
         "available": {"faces": face_available, "objects": object_available},
     }
+
+
+_TEST_BATCH_MAX = 100
+
+
+@router.post("/api/test/batch")
+async def test_detect_batch(
+    request: Request,
+    user_id: int = Depends(require_auth),
+    environment_id: int = Depends(require_env_id),
+):
+    """Stateless batch detection — multiple images in one call, stores nothing.
+
+    multipart/form-data: repeat `file` for each image (plus optional `type`).
+    application/json: ``{"type": "...", "image_urls": [...], "image_base64": [...]}``.
+    Per-image results — one bad image never fails the rest. Mirrors /api/detect/bulk
+    but read-only (no source images, detections, crops, or matching)."""
+    content_type = request.headers.get("content-type", "")
+    detect_type = "all"
+    jobs: list[tuple[str, bytes]] = []  # (label, raw_bytes); raw may be an __error__ sentinel
+
+    if "multipart/form-data" in content_type:
+        form = await request.form()
+        detect_type = str(form.get("type", "all"))
+        files = form.getlist("file")
+        if not files:
+            raise HTTPException(400, "No files provided")
+        for f in files:
+            jobs.append((getattr(f, "filename", "") or "upload", await f.read()))
+    elif "application/json" in content_type:
+        try:
+            body = await request.json()
+        except Exception:
+            raise HTTPException(400, "Invalid JSON body")
+        detect_type = body.get("type", "all")
+        urls = body.get("image_urls", []) or []
+        b64s = body.get("image_base64", []) or []
+        if not urls and not b64s:
+            raise HTTPException(400, "Provide image_urls and/or image_base64")
+        for url in urls:
+            try:
+                jobs.append((url, await fetch_url(url)))
+            except HTTPException as exc:
+                jobs.append((url, b"__error__:" + str(exc.detail).encode()))
+        for i, b in enumerate(b64s):
+            try:
+                jobs.append((f"base64[{i}]", decode_base64(b)))
+            except HTTPException as exc:
+                jobs.append((f"base64[{i}]", b"__error__:" + str(exc.detail).encode()))
+    else:
+        raise HTTPException(400, "Content-Type must be multipart/form-data or application/json")
+
+    if detect_type not in ("faces", "objects", "all"):
+        raise HTTPException(400, "type must be faces, objects, or all")
+    if len(jobs) > _TEST_BATCH_MAX:
+        raise HTTPException(400, f"Too many images (max {_TEST_BATCH_MAX})")
+
+    results = []
+    for i, (label, raw) in enumerate(jobs):
+        base: dict = {"index": i, "filename": label}
+        if raw.startswith(b"__error__:"):
+            base["error"] = raw[len(b"__error__:"):].decode()
+            results.append(base)
+            continue
+        try:
+            img = open_and_validate(raw)
+            base.update(_stateless_detect(img, detect_type))
+        except HTTPException as exc:
+            base["error"] = exc.detail
+        except Exception as exc:
+            base["error"] = str(exc)
+        results.append(base)
+
+    return {"total": len(results), "type": detect_type, "results": results}
 
 
 # ---------------------------------------------------------------------------

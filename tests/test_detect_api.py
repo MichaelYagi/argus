@@ -587,3 +587,74 @@ def test_test_endpoint_invalid_type(client):
         r = client.post("/api/test?type=bogus", files={"file": FAKE_FILE},
                         headers={"X-API-Key": key})
     assert r.status_code == 400
+
+
+# ---------------------------------------------------------------------------
+# Stateless batch test — POST /api/test/batch
+# ---------------------------------------------------------------------------
+
+def test_test_batch_multipart_files(client):
+    _, key = _create_user_and_key()
+    _activate_face_model()
+    _activate_object_model()
+
+    face_engine = MagicMock()
+    face_engine.detect.return_value = [
+        FaceDetection(bbox=(10, 20, 100, 100), confidence=0.95, embedding=MagicMock()),
+    ]
+    obj_engine = MagicMock()
+    obj_engine.detect.return_value = [
+        ObjectDetection(bbox=(0, 0, 50, 80), confidence=0.9, class_name="person", class_id=0),
+    ]
+
+    with patch("app.api.detect.open_and_validate", return_value=_mock_image()), \
+         patch("app.api.detect.to_rgb_array", return_value=MagicMock()), \
+         patch.object(registry, "get_face_engine", return_value=face_engine), \
+         patch.object(registry, "get_object_engine", return_value=obj_engine):
+        r = client.post(
+            "/api/test/batch",
+            files=[("file", ("a.jpg", b"x", "image/jpeg")),
+                   ("file", ("b.jpg", b"y", "image/jpeg"))],
+            data={"type": "all"},
+            headers={"X-API-Key": key},
+        )
+
+    assert r.status_code == 200
+    data = r.json()
+    assert data["total"] == 2
+    assert all(item["counts"]["faces"] == 1 for item in data["results"])
+    assert {item["filename"] for item in data["results"]} == {"a.jpg", "b.jpg"}
+
+
+def test_test_batch_does_not_store(client):
+    user_id, key = _create_user_and_key()
+    _activate_object_model()
+    obj_engine = MagicMock()
+    obj_engine.detect.return_value = [
+        ObjectDetection(bbox=(0, 0, 9, 9), confidence=0.6, class_name="car", class_id=2),
+    ]
+    with patch("app.api.detect.open_and_validate", return_value=_mock_image()), \
+         patch("app.api.detect.to_rgb_array", return_value=MagicMock()), \
+         patch.object(registry, "get_object_engine", return_value=obj_engine):
+        client.post(
+            "/api/test/batch?",
+            files=[("file", ("a.jpg", b"x", "image/jpeg"))],
+            data={"type": "objects"},
+            headers={"X-API-Key": key},
+        )
+    with store._connect() as conn:
+        n = conn.execute("SELECT COUNT(*) FROM detections WHERE user_id = ?", (user_id,)).fetchone()[0]
+        s = conn.execute("SELECT COUNT(*) FROM source_images WHERE user_id = ?", (user_id,)).fetchone()[0]
+    assert n == 0 and s == 0
+
+
+def test_test_batch_requires_input(client):
+    _, key = _create_user_and_key()
+    r = client.post("/api/test/batch", json={"type": "all", "image_urls": []},
+                    headers={"X-API-Key": key})
+    assert r.status_code == 400
+
+
+def test_test_batch_requires_api_key(client):
+    r = client.post("/api/test/batch", json={"image_urls": ["http://x/y.jpg"]})
+    assert r.status_code in (401, 403)
