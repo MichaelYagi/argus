@@ -340,6 +340,8 @@ input[type=range] { width: 150px; cursor: pointer; }
 .t-box:hover { border-color: #fff; }
 .t-box.labeled { border-color: #3c3; }
 .t-box.labeled:hover { border-color: #9f9; }
+.t-box.object { border-color: #39f; }
+.t-box.object:hover { border-color: #9cf; }
 .t-tip { position: absolute; bottom: 100%; left: 0; background: rgba(0,0,0,.75); color: #fff; font-size: 11px; padding: 2px 6px; white-space: nowrap; pointer-events: none; display: none; }
 .t-box:hover .t-tip { display: block; }
 

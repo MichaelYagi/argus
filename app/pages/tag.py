@@ -68,6 +68,15 @@ async def tag_page(source_image_id: int, request: Request):
             "age": age, "gender": gender, "pose": pose,
         })
 
+    objects = store.get_image_detections(source_image_id, user_id, det_type="object", environment_id=env_id)
+    object_data = [{
+        "id": r["id"],
+        "x": r["bbox_x"], "y": r["bbox_y"],
+        "w": r["bbox_w"], "h": r["bbox_h"],
+        "label": r["identity_label"] or "",
+        "confidence": r["confidence"],
+    } for r in objects]
+
     return templates.TemplateResponse(request, "tag.html", {
         "username": request.session.get("username", ""),
         "is_admin": is_admin(user_id),
@@ -76,4 +85,5 @@ async def tag_page(source_image_id: int, request: Request):
         "nat_w": src["width"],
         "nat_h": src["height"],
         "faces_json": json.dumps(face_data),
+        "objects_json": json.dumps(object_data),
     })

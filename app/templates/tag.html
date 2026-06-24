@@ -5,7 +5,7 @@
 <div class="page-header" style="margin-bottom:12px">
   <a id="back-link" href="/">&larr; Back</a>
   <span class="muted" style="font-size:13px;margin-left:8px">
-    Click a face box to assign or correct a label. Orange = unlabeled, green = labeled.
+    Click a box to assign or correct a label. Faces: orange = unlabeled, green = labeled. Objects: blue.
   </span>
   <span class="nav-spacer"></span>
   <span id="tag-status" class="muted" style="font-size:12px"></span>
@@ -19,6 +19,7 @@
 <script>
 const NAT_W = {{ nat_w }}, NAT_H = {{ nat_h }};
 const FACES = {{ faces_json | safe }};
+const OBJECTS = {{ objects_json | safe }};
 
 
 function renderBoxes() {
@@ -47,6 +48,45 @@ function renderBoxes() {
     div.addEventListener('click', () => labelBox(div, tip));
     wrap.appendChild(div);
   });
+
+  OBJECTS.forEach(o => {
+    const div = document.createElement('div');
+    div.className = 't-box object';
+    div.style.left   = Math.max(0, o.x * sx) + 'px';
+    div.style.top    = Math.max(0, o.y * sy) + 'px';
+    div.style.width  = (o.w * sx) + 'px';
+    div.style.height = (o.h * sy) + 'px';
+    div.dataset.id    = o.id;
+    div.dataset.label = o.label;
+
+    const tip = document.createElement('div');
+    tip.className = 't-tip';
+    tip.textContent = (o.label || 'object')
+      + (o.confidence != null ? ' (' + (o.confidence * 100).toFixed(0) + '%)' : '');
+    div.appendChild(tip);
+
+    div.addEventListener('click', () => labelObjectBox(div, tip));
+    wrap.appendChild(div);
+  });
+}
+
+function labelObjectBox(div, tip) {
+  showLabelPopup(div, async label => {
+    if (!label) return;  // objects have no review/clear flow — relabel only
+    const resp = await fetch('/api/detections/' + div.dataset.id + '/label', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ label }),
+    });
+    if (resp.ok) {
+      const d = await resp.json();
+      div.dataset.label = d.label;
+      tip.textContent = d.label;
+      setStatus('Labeled: ' + d.label);
+    } else {
+      setStatus('Error saving label.');
+    }
+  }, div.dataset.label ? `Rename "${div.dataset.label}"` : 'Assign label');
 }
 
 function labelBox(div, tip) {
