@@ -132,8 +132,8 @@ setInterval(_updateReviewBadge, 30000);
   {% if environments is defined and environments %}
   <div class="nav-desktop" style="position:relative;margin-right:6px">
     <button id="env-btn"
-            style="background:none;border:1px solid var(--border);border-radius:5px;
-                   padding:3px 8px;cursor:pointer;font-size:11px;color:var(--text);
+            style="background:none;border:1px solid rgba(255,255,255,.15);border-radius:5px;
+                   padding:3px 8px;cursor:pointer;font-size:11px;color:var(--nav-text);
                    white-space:nowrap;font-family:inherit">
       {{ environment_name | default('default') }}
     </button>
