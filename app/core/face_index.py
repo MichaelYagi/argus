@@ -73,17 +73,18 @@ def build_for_user(model_id: int, user_id: int, environment_id: int) -> None:
             for r in store.get_reference_embeddings(model_id, user_id, environment_id)
         ]
     else:
-        # Compute any missing representatives first
+        # Always recompute centroids for this model — the NULL-check optimisation
+        # misses stale representatives (computed for a different model or before
+        # the current embeddings existed), leaving the index empty or wrong.
         with store._connect() as conn:
-            stale = conn.execute(
+            identity_ids = [r[0] for r in conn.execute(
                 """SELECT DISTINCT fe.identity_id FROM face_embeddings fe
                    JOIN identities i ON i.id = fe.identity_id
-                   WHERE fe.model_id = ? AND i.user_id = ? AND i.environment_id = ?
-                     AND i.representative_embedding IS NULL""",
+                   WHERE fe.model_id = ? AND i.user_id = ? AND i.environment_id = ?""",
                 (model_id, user_id, environment_id),
-            ).fetchall()
-        for row in stale:
-            store.compute_and_store_representative(row["identity_id"], model_id)
+            ).fetchall()]
+        for iid in identity_ids:
+            store.compute_and_store_representative(iid, model_id)
         rows = [
             (r["identity_id"], r["representative_embedding"])
             for r in store.get_representative_embeddings(model_id, user_id, environment_id)
