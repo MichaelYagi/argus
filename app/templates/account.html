@@ -34,6 +34,7 @@
     <thead>
       <tr style="border-bottom:1px solid var(--border)">
         <th style="text-align:left;padding:6px 0">Label</th>
+        <th style="text-align:left;padding:6px 0">Key</th>
         <th style="text-align:left;padding:6px 0">Environment</th>
         <th style="text-align:left;padding:6px 0">Created</th>
         <th style="text-align:left;padding:6px 0">Last used</th>
@@ -43,9 +44,9 @@
     <tbody>
       {% for k in active_keys %}
       <tr style="border-bottom:1px solid var(--border)">
-        <td style="padding:8px 0">
-          <strong>{{ k.label or 'Unnamed' }}</strong>
-          {% if k.key_hint %}<code style="font-size:11px;color:var(--muted);margin-left:6px">...{{ k.key_hint }}</code>{% endif %}
+        <td style="padding:8px 0"><strong>{{ k.label or 'Unnamed' }}</strong></td>
+        <td style="padding:8px 0;font-size:12px">
+          {% if k.key_hint %}<code style="color:var(--muted)">argus_...{{ k.key_hint }}</code>{% else %}<span class="muted">—</span>{% endif %}
         </td>
         <td style="padding:8px 0;color:var(--muted);font-size:12px">{{ k.environment_name or 'default' }}</td>
         <td style="padding:8px 0;color:var(--muted)" title="Set once when the key was created — never changes"><time class="fmt-date" datetime="{{ k.created_at }}">{{ k.created_at }}</time></td>
@@ -78,8 +79,9 @@
       <tbody>
         {% for k in revoked_keys %}
         <tr style="border-bottom:1px solid var(--border)">
+          <td style="padding:6px 0;color:var(--muted)">{{ k.label or 'Unnamed' }}</td>
           <td style="padding:6px 0;color:var(--muted)">
-            {{ k.label or 'Unnamed' }}{% if k.key_hint %} <code style="font-size:11px">...{{ k.key_hint }}</code>{% endif %}
+            {% if k.key_hint %}<code style="font-size:11px">argus_...{{ k.key_hint }}</code>{% else %}<span>—</span>{% endif %}
           </td>
           <td style="padding:6px 0;color:var(--muted)"><time class="fmt-date" datetime="{{ k.created_at }}">{{ k.created_at }}</time></td>
           <td style="padding:6px 0;text-align:right">

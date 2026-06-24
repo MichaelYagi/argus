@@ -7,6 +7,7 @@ Self-hosted face and object recognition. Single Docker container, runs on your L
 - Labelling a person during detection auto-enrolls them as a reference — no separate enroll step needed
 - Object detection via standard YOLO (80 COCO classes) or YOLO-World (open vocabulary — detect anything)
 - Per-user accounts with admin approval flow and individually managed, named API keys
+- Environments — isolate recognition data into named workspaces (dev, prod, home, work…) within a single instance; API keys are scoped per environment
 - Review queue with ranked match suggestions, configurable auto-confirm threshold, and auto-enroll on confirm
 - Justified infinite-scroll galleries per identity with cover photo selection and bulk operations
 - Tag page — full source image with clickable face bbox overlays for labelling
@@ -171,7 +172,7 @@ All `/api/*` routes require an `X-API-Key` header **or** a valid browser session
 
 **Get an API key:**
 1. Sign in at `http://localhost:8100`
-2. Go to **Account** → type a label → **Create key** → copy the key (shown once)
+2. Go to **Account** → click **Create key**, choose an environment and type a label → copy the key (shown once — the last four characters are displayed afterwards as a hint so you can tell keys apart)
 
 **Interactive docs:** `http://localhost:8100/docs`
 
@@ -311,6 +312,23 @@ curl -X POST \
   -F "file=@argus_export.zip" \
   http://localhost:8100/api/import
 ```
+
+---
+
+## Environments
+
+Each user has one or more named environments. All recognition data — identities, detections, enrolled faces, source images — is isolated per environment. Switching environments is instant; data in other environments is never visible.
+
+**Use cases:**
+- Separate a test or staging dataset from production data
+- Run multiple independent recognition projects under one account
+- Scope an API key to one dataset so a client app can only read/write its own data
+
+**Managing environments:** go to **Account → Manage environments** (or navigate to `/environments`). You can create, rename, and delete environments there. Deleting an environment permanently removes all its data — crops, detections, identities, and embeddings.
+
+**Switching:** use the environment name button in the top nav bar. The active environment is stored per user and restored on next login.
+
+**API keys are environment-scoped.** Each key is bound to one environment at creation time. Requests authenticated by that key read and write only that environment's data, regardless of which environment the browser session has active. Choose the environment when creating a key on the **Account** page.
 
 ---
 

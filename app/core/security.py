@@ -40,8 +40,8 @@ def generate_api_key() -> str:
 
 
 def key_hint(plaintext: str) -> str:
-    """Return the last 4 chars of the key for display (e.g. '...a3f9')."""
-    return plaintext[-4:] if len(plaintext) >= 4 else plaintext
+    """Return the last 8 chars of the key for display (e.g. '...a3f9b2c1')."""
+    return plaintext[-8:] if len(plaintext) >= 8 else plaintext
 
 
 def hash_api_key(key: str) -> str:
