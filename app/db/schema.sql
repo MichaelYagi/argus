@@ -33,6 +33,7 @@ CREATE TABLE IF NOT EXISTS identities (
     label              TEXT    NOT NULL,
     cover_detection_id      INTEGER REFERENCES detections(id) ON DELETE SET NULL,
     representative_embedding BLOB,   -- mean of all face_embeddings for the active model
+    external_ref       TEXT,        -- opaque caller-owned correlation id; never interpreted by Argus
     created_at         TEXT    NOT NULL DEFAULT (datetime('now')),
     UNIQUE(user_id, environment_id, type, label)
 );
@@ -46,6 +47,7 @@ CREATE TABLE IF NOT EXISTS source_images (
     file_path   TEXT    NOT NULL,
     width       INTEGER NOT NULL,
     height      INTEGER NOT NULL,
+    external_ref TEXT,             -- opaque caller-owned correlation id; never interpreted by Argus
     uploaded_at TEXT    NOT NULL DEFAULT (datetime('now')),
     UNIQUE(user_id, environment_id, file_path)
 );
@@ -146,3 +148,19 @@ CREATE TABLE IF NOT EXISTS settings (
     description TEXT,
     updated_at  TEXT NOT NULL DEFAULT (datetime('now'))
 );
+
+-- changes: append-only feed of mutations so clients can sync deltas via
+-- GET /api/changes?since=<id>. The autoincrement id is the monotonic cursor.
+-- Generic recognition events — entity_type/action are domain terms, not client-specific.
+CREATE TABLE IF NOT EXISTS changes (
+    id             INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id        INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    environment_id INTEGER NOT NULL DEFAULT 0,
+    entity_type    TEXT    NOT NULL,   -- 'identity' | 'detection'
+    entity_id      INTEGER NOT NULL,
+    action         TEXT    NOT NULL,   -- 'created' | 'relabeled' | 'deleted'
+    external_ref   TEXT,
+    created_at     TEXT    NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE INDEX IF NOT EXISTS idx_changes_user_env ON changes(user_id, environment_id, id);

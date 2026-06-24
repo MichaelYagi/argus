@@ -152,19 +152,20 @@ async def enroll_new(
     environment_id: int = Depends(require_env_id),
 ):
     """Create a new face identity and store its first embedding in one call."""
-    raw, name = await _parse_enroll_request(request)
+    raw, name, external_ref = await _parse_enroll_request(request)
     img = open_and_validate(raw)
     embedding, source_filename, face_det = _extract_embedding(raw, img)
 
     try:
-        identity_id = store.create_identity(user_id, "face", name, environment_id)
+        identity_id = store.create_identity(user_id, "face", name, environment_id, external_ref)
     except sqlite3.IntegrityError:
         raise HTTPException(409, f"Identity '{name}' already exists")
 
     model_row = store.get_active_model("face")
     model_id  = model_row["id"] if model_row else None
 
-    source_id  = store.get_or_create_source_image(user_id, source_filename, img.width, img.height, environment_id)
+    source_id  = store.get_or_create_source_image(
+        user_id, source_filename, img.width, img.height, environment_id, external_ref)
     crop_path  = _save_crop(img, face_det.bbox)
     detection_id = store.insert_detection(
         user_id=user_id,
@@ -196,7 +197,8 @@ async def enroll_new(
         from app.core import face_index as _fi
         _fi.rebuild_user(user_id, environment_id)
     return {"identity_id": identity_id, "label": name, "embeddings": 1,
-            "embedding_id": embedding_id, "detection_id": detection_id}
+            "embedding_id": embedding_id, "detection_id": detection_id,
+            "external_ref": external_ref}
 
 
 @router.post("/api/identities/{identity_id}/enroll", status_code=201)
@@ -210,7 +212,7 @@ async def enroll_existing(
     if not store.get_identity(identity_id, user_id, environment_id):
         raise HTTPException(404, "Identity not found")
 
-    raw, _name = await _parse_enroll_request(request, name_required=False)
+    raw, _name, _ext = await _parse_enroll_request(request, name_required=False)
     img = open_and_validate(raw)
     embedding, source_filename, face_det = _extract_embedding(raw, img)
 
@@ -259,10 +261,11 @@ async def enroll_existing(
 
 async def _parse_enroll_request(
     request: Request, name_required: bool = True
-) -> tuple[bytes, str]:
-    """Extract image bytes and optional name from multipart form or JSON body."""
+) -> tuple[bytes, str, str | None]:
+    """Extract image bytes, optional name, and optional external_ref from the request."""
     content_type = request.headers.get("content-type", "")
     name = ""
+    external_ref: str | None = None
     file_bytes: bytes | None = None
     image_url: str | None = None
     image_base64: str | None = None
@@ -270,6 +273,7 @@ async def _parse_enroll_request(
     if "multipart/form-data" in content_type:
         form = await request.form()
         name = str(form.get("name") or form.get("label") or "").strip()
+        external_ref = (str(form.get("external_ref")).strip() or None) if form.get("external_ref") else None
         file_field = form.get("file")
         if file_field is not None and hasattr(file_field, "read"):
             file_bytes = await file_field.read() or None
@@ -283,6 +287,7 @@ async def _parse_enroll_request(
         except Exception:
             raise HTTPException(400, "Invalid JSON body")
         name = str(body.get("name") or body.get("label") or "").strip()
+        external_ref = (str(body.get("external_ref")).strip() or None) if body.get("external_ref") else None
         image_url = body.get("image_url")
         image_base64 = body.get("image_base64")
     else:
@@ -302,7 +307,7 @@ async def _parse_enroll_request(
     else:
         raw = decode_base64(image_base64)  # type: ignore[arg-type]
 
-    return raw, name
+    return raw, name, external_ref
 
 
 def _extract_embedding(raw: bytes, img: Any) -> tuple[Any, str | None, Any]:

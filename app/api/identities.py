@@ -18,6 +18,7 @@ router = APIRouter()
 class _CreateBody(BaseModel):
     label: str
     type: str
+    external_ref: str | None = None
 
 
 # ---------------------------------------------------------------------------
@@ -75,6 +76,7 @@ async def identities_summary(
 async def list_identities(
     type: Optional[str] = Query(None),
     q: Optional[str] = Query(None),
+    external_ref: Optional[str] = Query(None),
     cursor: Optional[str] = Query(None),
     limit: Optional[int] = Query(None, ge=1, le=200),
     user_id: int = Depends(require_auth),
@@ -83,7 +85,8 @@ async def list_identities(
     if type and type not in ("face", "object"):
         raise HTTPException(400, "type must be 'face' or 'object'")
     rows = store.list_identities(
-        user_id, identity_type=type, q=q, cursor=cursor, limit=limit, environment_id=environment_id
+        user_id, identity_type=type, q=q, cursor=cursor, limit=limit,
+        environment_id=environment_id, external_ref=external_ref,
     )
 
     if limit is None:
@@ -127,11 +130,12 @@ async def create_identity(
     label = body.label.strip()
     if not label:
         raise HTTPException(400, "label is required")
+    ext = (body.external_ref or "").strip() or None
     try:
-        identity_id = store.create_identity(user_id, body.type, label, environment_id)
+        identity_id = store.create_identity(user_id, body.type, label, environment_id, ext)
     except sqlite3.IntegrityError:
         raise HTTPException(409, f"Identity '{label}' ({body.type}) already exists")
-    return {"id": identity_id, "type": body.type, "label": label}
+    return {"id": identity_id, "type": body.type, "label": label, "external_ref": ext}
 
 
 class _RenameBody(BaseModel):
@@ -155,6 +159,23 @@ async def rename_identity(
     if not ok:
         raise HTTPException(404, "Identity not found")
     return {"id": identity_id, "label": label}
+
+
+class _ExternalRefBody(BaseModel):
+    external_ref: str | None = None
+
+
+@router.put("/api/identities/{identity_id}/external_ref", status_code=200)
+async def set_external_ref(
+    identity_id: int,
+    body: _ExternalRefBody,
+    user_id: int = Depends(require_auth),
+    environment_id: int = Depends(require_env_id),
+):
+    ext = (body.external_ref or "").strip() or None
+    if not store.set_identity_external_ref(identity_id, user_id, ext, environment_id):
+        raise HTTPException(404, "Identity not found")
+    return {"id": identity_id, "external_ref": ext}
 
 
 class _CoverBody(BaseModel):
@@ -249,6 +270,45 @@ async def identity_gallery(
     })
 
 
+class _DetectionQueryBody(BaseModel):
+    detection_ids: list[int]
+
+
+@router.post("/api/detections/query", status_code=200)
+async def query_detections(
+    body: _DetectionQueryBody,
+    user_id: int = Depends(require_auth),
+    environment_id: int = Depends(require_env_id),
+):
+    """Batch read: fetch current state of many detections in one call. For clients
+    reconciling stored records against Argus without N round-trips. Unknown/foreign
+    ids are simply absent from the result."""
+    if not body.detection_ids:
+        raise HTTPException(400, "detection_ids is required")
+    if len(body.detection_ids) > 500:
+        raise HTTPException(400, "Too many ids (max 500)")
+    rows = store.get_detections_by_ids(user_id, body.detection_ids, environment_id)
+    return {
+        "items": [
+            {
+                "detection_id": r["id"],
+                "type": r["type"],
+                "identity_id": r["identity_id"],
+                "label": r["identity_label"],
+                "identity_external_ref": r["identity_external_ref"],
+                "source_image_id": r["source_image_id"],
+                "source_external_ref": r["source_external_ref"],
+                "confidence": r["confidence"],
+                "review_status": r["review_status"],
+                "bbox": {"x": r["bbox_x"], "y": r["bbox_y"], "w": r["bbox_w"], "h": r["bbox_h"]},
+                "crop_url": f"/media/crops/{r['crop_path']}",
+                "detected_at": r["detected_at"],
+            }
+            for r in rows
+        ],
+    }
+
+
 @router.get("/api/detections/unknown")
 async def unknown_detections(
     type: Optional[str] = Query(None),
@@ -285,8 +345,17 @@ def _fmt(row) -> dict:
         "id": row["id"],
         "type": row["type"],
         "label": row["label"],
+        "external_ref": _safe(row, "external_ref"),
         "created_at": row["created_at"],
     }
+
+
+def _safe(row, key):
+    """Tolerant column access — newly-migrated columns may be absent on some rows."""
+    try:
+        return row[key]
+    except (IndexError, KeyError):
+        return None
 
 
 def _paginate(rows: list, limit: int, serialize) -> dict:

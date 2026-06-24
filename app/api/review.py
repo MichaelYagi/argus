@@ -234,6 +234,58 @@ async def label_detection(
     }
 
 
+_BATCH_MAX = 500
+
+
+class _BatchLabelItem(BaseModel):
+    detection_id: int
+    identity_id: Optional[int] = None
+    label: Optional[str] = None
+
+
+class _BatchLabelBody(BaseModel):
+    items: list[_BatchLabelItem]
+
+
+@router.post("/api/detections/label", status_code=200)
+async def label_detections_batch(
+    body: _BatchLabelBody,
+    user_id: int = Depends(require_auth),
+    environment_id: int = Depends(require_env_id),
+):
+    """Relabel many detections in one call. Per-item results — one bad item never
+    fails the others. Same contract as the single PUT label endpoint."""
+    if not body.items:
+        raise HTTPException(400, "items is required")
+    if len(body.items) > _BATCH_MAX:
+        raise HTTPException(400, f"Too many items (max {_BATCH_MAX})")
+
+    results = []
+    for item in body.items:
+        if not item.identity_id and not (item.label and item.label.strip()):
+            results.append({"detection_id": item.detection_id, "ok": False,
+                            "error": "Provide identity_id or label"})
+            continue
+        det = store.get_detection(item.detection_id, user_id, environment_id)
+        if not det:
+            results.append({"detection_id": item.detection_id, "ok": False, "error": "Detection not found"})
+            continue
+        identity_id = item.identity_id
+        if not identity_id:
+            identity_id = store.get_or_create_identity(
+                user_id, det["type"], item.label.strip(), environment_id  # type: ignore[union-attr]
+            )
+        store.label_detection(item.detection_id, user_id, identity_id, environment_id)
+        _enroll_confirmed(item.detection_id, user_id, environment_id)
+        identity = store.get_identity(identity_id, user_id, environment_id)
+        results.append({
+            "detection_id": item.detection_id, "ok": True,
+            "identity_id": identity_id,
+            "label": identity["label"] if identity else None,
+        })
+    return {"results": results}
+
+
 # ---------------------------------------------------------------------------
 # Internal
 # ---------------------------------------------------------------------------

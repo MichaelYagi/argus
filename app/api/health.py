@@ -32,3 +32,52 @@ async def health():
         "face_model":   face_row["name"]   if face_row   and registry.get_face_engine()   else None,
         "object_model": object_row["name"] if object_row and registry.get_object_engine() else None,
     }
+
+
+# Formats Argus can decode (Pillow-detected on input; never trusts extension).
+_SUPPORTED_FORMATS = ["JPEG", "PNG", "WEBP", "BMP", "GIF", "TIFF", "HEIC", "HEIF", "MPO"]
+
+
+@router.get("/api/capabilities")
+async def capabilities():
+    """Discovery manifest so clients can adapt instead of hardcoding assumptions:
+    which detection types are usable right now, supported formats, pagination limits,
+    and which integration features this build exposes."""
+    try:
+        import onnxruntime as ort
+        gpu_available = "CUDAExecutionProvider" in ort.get_available_providers()
+        active_provider = "cuda" if gpu_available else "cpu"
+    except ImportError:
+        gpu_available = None
+        active_provider = None
+
+    face_row    = store.get_active_model("face")
+    object_row  = store.get_active_model("object")
+    face_ready  = bool(face_row   and registry.get_face_engine())
+    object_ready = bool(object_row and registry.get_object_engine())
+
+    return {
+        "version": __version__,
+        "gpu_available": gpu_available,
+        "active_provider": active_provider,
+        "detection": {
+            "faces":   {"available": face_ready,   "active_model": face_row["name"]   if face_row   else None},
+            "objects": {"available": object_ready, "active_model": object_row["name"] if object_row else None},
+        },
+        "supported_formats": _SUPPORTED_FORMATS,
+        "image_input": ["file", "image_url", "image_base64"],
+        "limits": {
+            "identities_list_max": 200,
+            "identities_summary_max": 1000,
+            "changes_max": 1000,
+            "batch_max": 500,
+        },
+        "features": {
+            "external_ref": True,
+            "change_feed": True,
+            "batch_label": True,
+            "batch_read": True,
+            "stateless_test": True,
+            "environments": True,
+        },
+    }

@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 from typing import Optional
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
 
 from app.core.auth import require_auth, require_env_id
@@ -13,6 +13,30 @@ from app.core.paths import crops_dir
 from app.db import store
 
 router = APIRouter()
+
+
+@router.get("/api/images")
+async def list_images_by_ref(
+    external_ref: str = Query(..., description="Opaque caller-owned correlation id"),
+    user_id: int = Depends(require_auth),
+    environment_id: int = Depends(require_env_id),
+):
+    """Resolve a caller's external_ref to Argus source image(s). Lets a client map its
+    own id back to source_image_id without tracking it at upload time."""
+    rows = store.list_source_images_by_ref(user_id, external_ref, environment_id)
+    return {
+        "items": [
+            {
+                "source_image_id": r["id"],
+                "external_ref": r["external_ref"],
+                "width": r["width"],
+                "height": r["height"],
+                "image_url": f"/media/sources/{r['file_path']}",
+                "uploaded_at": r["uploaded_at"],
+            }
+            for r in rows
+        ],
+    }
 
 
 def _parse_attributes(row) -> dict:

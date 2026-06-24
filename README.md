@@ -10,7 +10,9 @@ Self-hosted face and object recognition. Single Docker container, runs on your L
 - Environments — isolate recognition data into named workspaces (dev, prod, home, work…) within a single instance; API keys are scoped per environment
 - Review queue with ranked match suggestions, configurable auto-confirm threshold, and auto-enroll on confirm
 - Justified infinite-scroll galleries per identity with cover photo selection and bulk operations
-- Tag page — full source image with clickable face bbox overlays for labelling
+- Tag page — full source image with clickable face and object bbox overlays for labelling
+- Test page — check whether an image contains people or objects without storing, enrolling, or matching anything
+- Integration helpers — opaque `external_ref` correlation ids, a change feed for delta sync, a capabilities manifest, and batch label/read endpoints
 - Export and import with merge — move recognition data between instances
 - Live settings (thresholds, GPU, crop padding) — no restart needed
 - Hot-swap models without restarting
@@ -265,6 +267,24 @@ curl -X POST \
 
 Optional `threshold` (override) and `top_n` (suggestion count) via form field, JSON, or query.
 
+**Example — test (read-only): "is there a person or object in this image?"**
+
+Pure detection — runs the face and object engines and returns bounding boxes plus counts.
+Stores nothing, enrolls nothing, matches nothing. `?type=faces|objects|all` (default `all`)
+selects which engines run; an engine with no active model is skipped (its list is empty and
+`available` is false) rather than erroring. Also available as a UI page at `/test`.
+
+```bash
+curl -X POST \
+  -H "X-API-Key: argus_..." \
+  -F "file=@photo.jpg" \
+  "http://localhost:8100/api/test?type=all"
+# → {"faces": [{"bbox": {...}, "confidence": 0.95, "age": 30, "gender": "F", "pose": [...]}],
+#    "objects": [{"bbox": {...}, "confidence": 0.9, "class_name": "person", "class_id": 0}],
+#    "counts": {"faces": 1, "objects": 1},
+#    "available": {"faces": true, "objects": true}}
+```
+
 **Example — verify (1:1): "are these two faces the same person?"**
 
 Compares two images directly. Stores nothing.
@@ -311,6 +331,76 @@ curl -X POST \
   -H "X-API-Key: argus_..." \
   -F "file=@argus_export.zip" \
   http://localhost:8100/api/import
+```
+
+---
+
+## Integrating another system
+
+These endpoints make it easy for a client (a photo manager, a home server, any script) to
+correlate its own records with Argus and stay in sync. All are generic — Argus never
+interprets your identifiers.
+
+**`external_ref` — attach your own id.** Every detect and enroll call accepts an optional
+opaque `external_ref` string; it's stored on the source image (and, for enroll, the identity),
+echoed back in responses, and queryable. Set it at creation and you never have to match by name
+afterwards.
+
+```bash
+# Tag the image with your own id at detect time
+curl -X POST -H "X-API-Key: argus_..." \
+  -F "file=@photo.jpg" -F "external_ref=my-app-image-42" \
+  http://localhost:8100/api/detect/all
+
+# Resolve your id back to Argus's source_image_id
+curl -H "X-API-Key: argus_..." \
+  "http://localhost:8100/api/images?external_ref=my-app-image-42"
+
+# Same for identities
+curl -X POST -H "X-API-Key: argus_..." -H "Content-Type: application/json" \
+  -d '{"label": "Noah", "type": "face", "external_ref": "my-app-person-7"}' \
+  http://localhost:8100/api/identities
+curl -H "X-API-Key: argus_..." \
+  "http://localhost:8100/api/identities?external_ref=my-app-person-7"
+# Backfill a ref onto an existing identity:
+curl -X PUT -H "X-API-Key: argus_..." -H "Content-Type: application/json" \
+  -d '{"external_ref": "my-app-person-7"}' \
+  http://localhost:8100/api/identities/12/external_ref
+```
+
+**Change feed — sync deltas without re-scanning.** Poll `/api/changes?since=<cursor>` to learn
+what changed (identities/detections created, relabeled, deleted). The returned `next_cursor` is
+the value to pass as `since` next time. Detection events carry the source image's `external_ref`
+so you know which of your records to update.
+
+```bash
+curl -H "X-API-Key: argus_..." "http://localhost:8100/api/changes?since=0&limit=100"
+# → {"changes": [{"id": 1, "entity_type": "detection", "entity_id": 42,
+#                 "action": "relabeled", "external_ref": "my-app-image-42", ...}],
+#    "next_cursor": 1, "has_more": false}
+```
+
+**Capabilities — discover what this instance can do.** `/api/capabilities` reports which
+detection types are usable right now, active models, supported formats, pagination limits, and
+which integration features the build exposes — so a client can adapt instead of hardcoding.
+
+```bash
+curl http://localhost:8100/api/capabilities
+```
+
+**Batch operations.** Relabel or read many detections in one round-trip.
+
+```bash
+# Batch relabel — per-item results, one bad item never fails the others
+curl -X POST -H "X-API-Key: argus_..." -H "Content-Type: application/json" \
+  -d '{"items": [{"detection_id": 1, "label": "park bench"},
+                 {"detection_id": 2, "identity_id": 5}]}' \
+  http://localhost:8100/api/detections/label
+
+# Batch read — current state of many detections (unknown ids simply absent)
+curl -X POST -H "X-API-Key: argus_..." -H "Content-Type: application/json" \
+  -d '{"detection_ids": [1, 2, 3]}' \
+  http://localhost:8100/api/detections/query
 ```
 
 ---

@@ -43,15 +43,17 @@ async def detect_faces(
     raw = await acquire_image(request)
     label = await _extract_label(request)
     replace = await _extract_replace(request)
+    external_ref = await _extract_external_ref(request)
     if run_async:
         job_id = store.create_job(user_id, "detect_faces", environment_id)
-        background_tasks.add_task(_run_detection_job, job_id, user_id, environment_id, raw, label, replace, "face")
+        background_tasks.add_task(
+            _run_detection_job, job_id, user_id, environment_id, raw, label, replace, "face", external_ref)
         return {"job_id": job_id, "status": "pending"}
     img = open_and_validate(raw)
-    source_filename, source_id = _save_source_image(user_id, environment_id, raw, img)
+    source_filename, source_id = _save_source_image(user_id, environment_id, raw, img, external_ref)
     if replace:
         _clear_detections(user_id, environment_id, source_id, "face")
-    return {"source_image_id": source_id,
+    return {"source_image_id": source_id, "external_ref": external_ref,
             "faces": _run_faces(user_id, environment_id, img, source_id, label=label)}
 
 
@@ -65,15 +67,17 @@ async def detect_objects(
     run_async = _is_truthy(request.query_params.get("async", ""))
     raw = await acquire_image(request)
     replace = await _extract_replace(request)
+    external_ref = await _extract_external_ref(request)
     if run_async:
         job_id = store.create_job(user_id, "detect_objects", environment_id)
-        background_tasks.add_task(_run_detection_job, job_id, user_id, environment_id, raw, None, replace, "object")
+        background_tasks.add_task(
+            _run_detection_job, job_id, user_id, environment_id, raw, None, replace, "object", external_ref)
         return {"job_id": job_id, "status": "pending"}
     img = open_and_validate(raw)
-    source_filename, source_id = _save_source_image(user_id, environment_id, raw, img)
+    source_filename, source_id = _save_source_image(user_id, environment_id, raw, img, external_ref)
     if replace:
         _clear_detections(user_id, environment_id, source_id, "object")
-    return {"source_image_id": source_id,
+    return {"source_image_id": source_id, "external_ref": external_ref,
             "objects": _run_objects(user_id, environment_id, img, source_id)}
 
 
@@ -88,16 +92,19 @@ async def detect_all(
     raw = await acquire_image(request)
     label = await _extract_label(request)
     replace = await _extract_replace(request)
+    external_ref = await _extract_external_ref(request)
     if run_async:
         job_id = store.create_job(user_id, "detect_all", environment_id)
-        background_tasks.add_task(_run_detection_job, job_id, user_id, environment_id, raw, label, replace, "all")
+        background_tasks.add_task(
+            _run_detection_job, job_id, user_id, environment_id, raw, label, replace, "all", external_ref)
         return {"job_id": job_id, "status": "pending"}
     img = open_and_validate(raw)
-    source_filename, source_id = _save_source_image(user_id, environment_id, raw, img)
+    source_filename, source_id = _save_source_image(user_id, environment_id, raw, img, external_ref)
     if replace:
         _clear_detections(user_id, environment_id, source_id, None)  # both faces and objects
     return {
         "source_image_id": source_id,
+        "external_ref": external_ref,
         "faces": _run_faces(user_id, environment_id, img, source_id, label=label),
         "objects": _run_objects(user_id, environment_id, img, source_id),
     }
@@ -335,14 +342,15 @@ def _run_detection_job(
     label: str | None,
     replace: bool,
     det_type: str,  # 'face' | 'object' | 'all'
+    external_ref: str | None = None,
 ) -> None:
     try:
         store.update_job(job_id, "running")
         img = open_and_validate(raw)
-        _, source_id = _save_source_image(user_id, environment_id, raw, img)
+        _, source_id = _save_source_image(user_id, environment_id, raw, img, external_ref)
         if replace:
             _clear_detections(user_id, environment_id, source_id, None if det_type == "all" else det_type)
-        result: dict = {"source_image_id": source_id}
+        result: dict = {"source_image_id": source_id, "external_ref": external_ref}
         if det_type in ("face", "all"):
             result["faces"] = _run_faces(user_id, environment_id, img, source_id, label=label)
         if det_type in ("object", "all"):
@@ -373,6 +381,23 @@ async def _extract_label(request: Request) -> str | None:
     except Exception:
         pass
     return None
+
+
+async def _extract_external_ref(request: Request) -> str | None:
+    """Read the optional opaque `external_ref` (multipart form, JSON body, or query param)."""
+    raw = request.query_params.get("external_ref")
+    if raw is None:
+        ct = request.headers.get("content-type", "")
+        try:
+            if "multipart/form-data" in ct:
+                v = (await request.form()).get("external_ref")
+                raw = str(v) if v is not None else None
+            elif "application/json" in ct:
+                v = (await request.json()).get("external_ref")
+                raw = str(v) if v is not None else None
+        except Exception:
+            raw = None
+    return (raw or "").strip() or None
 
 
 def _is_truthy(v: Any) -> bool:
@@ -548,7 +573,9 @@ def _run_objects(user_id: int, environment_id: int, img: Any, source_id: int) ->
 # Private helpers
 # ---------------------------------------------------------------------------
 
-def _save_source_image(user_id: int, environment_id: int, raw_bytes: bytes, img: Any) -> tuple[str, int]:
+def _save_source_image(
+    user_id: int, environment_id: int, raw_bytes: bytes, img: Any, external_ref: str | None = None,
+) -> tuple[str, int]:
     content_hash = hashlib.sha256(raw_bytes).hexdigest()
     ext = _FMT_EXT.get(img.format or "JPEG", "jpg")
     filename = f"{content_hash}.{ext}"
@@ -556,7 +583,9 @@ def _save_source_image(user_id: int, environment_id: int, raw_bytes: bytes, img:
     if not dest.exists():
         sources_dir().mkdir(parents=True, exist_ok=True)
         dest.write_bytes(raw_bytes)
-    source_id = store.get_or_create_source_image(user_id, filename, img.width, img.height, environment_id)
+    source_id = store.get_or_create_source_image(
+        user_id, filename, img.width, img.height, environment_id, external_ref,
+    )
     return filename, source_id
 
 
