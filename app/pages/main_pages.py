@@ -60,7 +60,7 @@ def _base(request: Request, active: str = "") -> dict | None:
     user = store.get_user_by_id(user_id)
     env_id = get_session_env(request)
     if not env_id:
-        env_id = store.get_default_environment_id(user_id)
+        env_id = store.get_last_environment_id(user_id) or store.get_default_environment_id(user_id)
         if env_id:
             request.session["environment_id"] = env_id
     environments = store.list_environments(user_id)
@@ -116,6 +116,7 @@ async def switch_environment(env_id: int, request: Request):
     env = store.get_environment(env_id, ctx["user_id"])
     if env:
         request.session["environment_id"] = env_id
+        store.save_last_environment(ctx["user_id"], env_id)
     referer = request.headers.get("referer", "/")
     return RedirectResponse(referer, status_code=303)
 

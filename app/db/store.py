@@ -110,6 +110,59 @@ def _migrate(conn: sqlite3.Connection) -> None:
         ) WHERE environment_id = 0
     """)
 
+    # Migration v1: recreate identities + source_images with environment_id in UNIQUE
+    # constraint (ALTER TABLE cannot modify constraints, so must swap the table).
+    user_version = conn.execute("PRAGMA user_version").fetchone()[0]
+    if user_version < 1:
+        conn.execute("PRAGMA foreign_keys = OFF")
+        conn.execute("""
+            CREATE TABLE identities_v2 (
+                id                       INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id                  INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+                environment_id           INTEGER NOT NULL DEFAULT 0,
+                type                     TEXT    NOT NULL CHECK(type IN ('face', 'object')),
+                label                    TEXT    NOT NULL,
+                cover_detection_id       INTEGER REFERENCES detections(id) ON DELETE SET NULL,
+                representative_embedding BLOB,
+                created_at               TEXT    NOT NULL DEFAULT (datetime('now')),
+                UNIQUE(user_id, environment_id, type, label)
+            )
+        """)
+        conn.execute("""
+            INSERT INTO identities_v2
+                (id, user_id, environment_id, type, label,
+                 cover_detection_id, representative_embedding, created_at)
+            SELECT id, user_id, environment_id, type, label,
+                   cover_detection_id, representative_embedding, created_at
+            FROM identities
+        """)
+        conn.execute("DROP TABLE identities")
+        conn.execute("ALTER TABLE identities_v2 RENAME TO identities")
+
+        conn.execute("""
+            CREATE TABLE source_images_v2 (
+                id             INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id        INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+                environment_id INTEGER NOT NULL DEFAULT 0,
+                file_path      TEXT    NOT NULL,
+                width          INTEGER NOT NULL,
+                height         INTEGER NOT NULL,
+                uploaded_at    TEXT    NOT NULL DEFAULT (datetime('now')),
+                UNIQUE(user_id, environment_id, file_path)
+            )
+        """)
+        conn.execute("""
+            INSERT INTO source_images_v2
+                (id, user_id, environment_id, file_path, width, height, uploaded_at)
+            SELECT id, user_id, environment_id, file_path, width, height, uploaded_at
+            FROM source_images
+        """)
+        conn.execute("DROP TABLE source_images")
+        conn.execute("ALTER TABLE source_images_v2 RENAME TO source_images")
+
+        conn.execute("PRAGMA foreign_keys = ON")
+        conn.execute("PRAGMA user_version = 1")
+
     # Schema column additions
     existing_cols = {r[1] for r in conn.execute("PRAGMA table_info(detections)")}
     if "embedding" not in existing_cols:
@@ -126,6 +179,8 @@ def _migrate(conn: sqlite3.Connection) -> None:
         conn.execute("ALTER TABLE users ADD COLUMN timezone TEXT NOT NULL DEFAULT 'UTC'")
     if "locale" not in existing_user_pref_cols:
         conn.execute("ALTER TABLE users ADD COLUMN locale TEXT NOT NULL DEFAULT 'en-US'")
+    if "last_environment_id" not in existing_user_pref_cols:
+        conn.execute("ALTER TABLE users ADD COLUMN last_environment_id INTEGER")
 
     existing_identity_cols = {r[1] for r in conn.execute("PRAGMA table_info(identities)")}
     if "cover_detection_id" not in existing_identity_cols:
@@ -209,6 +264,29 @@ def create_user(username: str, password_hash: str, is_admin: bool = False, is_ap
             (user_id,),
         )
         return user_id
+
+
+def save_last_environment(user_id: int, env_id: int) -> None:
+    with _connect() as conn:
+        conn.execute(
+            "UPDATE users SET last_environment_id = ? WHERE id = ?",
+            (env_id, user_id),
+        )
+
+
+def get_last_environment_id(user_id: int) -> int | None:
+    with _connect() as conn:
+        row = conn.execute(
+            "SELECT last_environment_id FROM users WHERE id = ?", (user_id,)
+        ).fetchone()
+        if row and row[0]:
+            # Verify it still exists and belongs to this user
+            env = conn.execute(
+                "SELECT id FROM environments WHERE id = ? AND user_id = ?",
+                (row[0], user_id),
+            ).fetchone()
+            return int(env[0]) if env else None
+        return None
 
 
 def update_user_preferences(user_id: int, timezone: str, locale: str) -> None:
@@ -418,6 +496,18 @@ def create_identity(user_id: int, identity_type: str, label: str, environment_id
             (user_id, env_id, identity_type, label),
         )
         return conn.execute("SELECT last_insert_rowid()").fetchone()[0]
+
+
+def rename_identity(
+    identity_id: int, user_id: int, new_label: str, environment_id: int | None = None
+) -> bool:
+    with _connect() as conn:
+        env_id = _resolve_env(conn, user_id, environment_id)
+        cur = conn.execute(
+            "UPDATE identities SET label = ? WHERE id = ? AND user_id = ? AND environment_id = ?",
+            (new_label, identity_id, user_id, env_id),
+        )
+        return cur.rowcount > 0
 
 
 def delete_identity(identity_id: int, user_id: int, environment_id: int | None = None) -> tuple[bool, list[str]]:

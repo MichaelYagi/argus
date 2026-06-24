@@ -94,7 +94,7 @@ async def login(
 
     request.session["user_id"] = row["id"]
     request.session["username"] = row["username"]
-    env_id = store.get_default_environment_id(row["id"])
+    env_id = store.get_last_environment_id(row["id"]) or store.get_default_environment_id(row["id"])
     if env_id:
         request.session["environment_id"] = env_id
 

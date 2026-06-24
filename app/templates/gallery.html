@@ -12,7 +12,28 @@
   </span>
   <span class="nav-spacer"></span>
   <a href="/enroll" class="btn btn-ghost">Enroll more</a>
-  <button class="btn btn-danger" id="delete-identity-btn" style="margin-left:6px">Delete identity</button>
+  <button class="btn btn-ghost" id="rename-identity-btn" style="margin-left:6px">Rename</button>
+  <button class="btn btn-danger" id="delete-identity-btn" style="margin-left:4px">Delete identity</button>
+</div>
+
+<!-- Rename modal -->
+<div id="rename-overlay" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);
+     z-index:500;align-items:center;justify-content:center">
+  <div style="background:var(--surface);border-radius:10px;padding:24px;
+              min-width:300px;max-width:90vw;box-shadow:0 8px 32px rgba(0,0,0,.4)">
+    <h2 style="margin-bottom:16px;font-size:16px">Rename identity</h2>
+    <div class="form-group">
+      <label class="lbl">New name</label>
+      <input type="text" id="rename-input" style="width:100%" maxlength="120"
+             value="{{ identity.label }}">
+    </div>
+    <div style="display:flex;gap:8px;margin-top:16px">
+      <button id="rename-save-btn" class="btn btn-primary">Save</button>
+      <button class="btn btn-ghost"
+              onclick="document.getElementById('rename-overlay').style.display='none'">Cancel</button>
+    </div>
+    <p id="rename-error" style="color:#e53e3e;font-size:12px;margin-top:8px;display:none"></p>
+  </div>
 </div>
 
 <div id="gallery-bulk-bar"
@@ -32,6 +53,38 @@
 {% block scripts %}
 <script src="/static/js/gallery.js"></script>
 <script>
+document.getElementById('rename-identity-btn').addEventListener('click', () => {
+  const overlay = document.getElementById('rename-overlay');
+  overlay.style.display = 'flex';
+  document.getElementById('rename-input').select();
+});
+document.getElementById('rename-overlay').addEventListener('click', function(e) {
+  if (e.target === this) this.style.display = 'none';
+});
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape') document.getElementById('rename-overlay').style.display = 'none';
+});
+document.getElementById('rename-save-btn').addEventListener('click', async () => {
+  const label = document.getElementById('rename-input').value.trim();
+  const err   = document.getElementById('rename-error');
+  err.style.display = 'none';
+  if (!label) { err.textContent = 'Name is required'; err.style.display = 'block'; return; }
+  const resp = await fetch('/api/identities/{{ identity.id }}', {
+    method: 'PUT',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({label}),
+  });
+  if (resp.ok) {
+    document.querySelector('.page-header h1').textContent = label;
+    document.title = label + ' — Argus';
+    document.getElementById('rename-overlay').style.display = 'none';
+  } else {
+    const data = await resp.json().catch(() => ({}));
+    err.textContent = data.detail || 'Rename failed';
+    err.style.display = 'block';
+  }
+});
+
 document.getElementById('delete-identity-btn').addEventListener('click', () => {
   showConfirm(
     'Delete "{{ identity.label }}"?\n\n{{ identity.detection_count }} detection{{ "s" if identity.detection_count != 1 else "" }} and {{ identity.embedding_count }} enrolled reference{{ "s" if identity.embedding_count != 1 else "" }} will be permanently removed. This cannot be undone.',

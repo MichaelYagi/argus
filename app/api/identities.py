@@ -134,6 +134,29 @@ async def create_identity(
     return {"id": identity_id, "type": body.type, "label": label}
 
 
+class _RenameBody(BaseModel):
+    label: str
+
+
+@router.put("/api/identities/{identity_id}", status_code=200)
+async def rename_identity(
+    identity_id: int,
+    body: _RenameBody,
+    user_id: int = Depends(require_auth),
+    environment_id: int = Depends(require_env_id),
+):
+    label = body.label.strip()
+    if not label:
+        raise HTTPException(400, "label is required")
+    try:
+        ok = store.rename_identity(identity_id, user_id, label, environment_id)
+    except sqlite3.IntegrityError:
+        raise HTTPException(409, f"Identity '{label}' already exists in this environment")
+    if not ok:
+        raise HTTPException(404, "Identity not found")
+    return {"id": identity_id, "label": label}
+
+
 class _CoverBody(BaseModel):
     detection_id: int
 
