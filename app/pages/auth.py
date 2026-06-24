@@ -8,6 +8,7 @@ from fastapi import APIRouter, Form, Request
 from fastapi.responses import RedirectResponse
 from fastapi.templating import Jinja2Templates
 
+from app.core import settings_cache
 from app.core.security import (
     REMEMBER_MAX_AGE,
     create_remember_token,
@@ -16,7 +17,6 @@ from app.core.security import (
     hash_password,
     verify_password,
 )
-from app.core import settings_cache
 from app.db import store
 
 router = APIRouter()

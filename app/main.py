@@ -11,7 +11,20 @@ from fastapi.staticfiles import StaticFiles
 from starlette.middleware.sessions import SessionMiddleware
 
 from app import __version__
-from app.api import detect, enroll, export_import, health, identities, images, keys, media, models, review, settings
+from app.api import (
+    detect,
+    enroll,
+    export_import,
+    health,
+    identities,
+    images,
+    jobs,
+    keys,
+    media,
+    models,
+    review,
+    settings,
+)
 from app.core import settings_cache
 from app.db import store
 from app.pages import account, auth, bulk, main_pages, tag
@@ -72,6 +85,7 @@ app.mount("/static", StaticFiles(directory="app/static"), name="static")
 # API routes
 app.include_router(health.router)
 app.include_router(detect.router)
+app.include_router(jobs.router)
 app.include_router(media.router)
 app.include_router(keys.router)
 app.include_router(identities.router)

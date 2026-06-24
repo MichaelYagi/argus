@@ -9,6 +9,22 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Changed
 
+- **User management moved from Account page to Settings page** (admin-only, under System). Approve/revoke/restore/delete accounts is now a single place alongside the auto-approve toggle. Account page no longer shows the Users card.
+- Admin approve, revoke, and delete account actions now redirect back to `/settings` instead of `/account`.
+- Dashboard identity cards no longer show a references count — the figure was confusing alongside detections. Reference count is still shown on the identity detail/gallery page.
+
+### Added
+
+- `system.auto_approve_users` setting (default `true`) — new accounts are approved immediately on sign-up with no admin gate. Set to `false` to require admin approval before the account can sign in. First registered account (the admin) is always auto-approved regardless.
+- **SQLite WAL mode** — `PRAGMA journal_mode=WAL` + `synchronous=NORMAL` + `busy_timeout=5000` set on every connection. Concurrent reads no longer block on an in-progress write; write contention retries for up to 5 seconds before failing. Improves throughput with multiple simultaneous API clients.
+- **Async detection job queue** — add `?async=true` to any `POST /api/detect/faces|objects|all` call to get an immediate `{"job_id": "...", "status": "pending"}` response instead of blocking on inference. Poll the result with `GET /api/jobs/{job_id}`. List recent jobs with `GET /api/jobs`. Delete a completed job with `DELETE /api/jobs/{job_id}`. Job results match the synchronous detect response; failed jobs include an `error` field. Backed by a new `jobs` table; no external queue process.
+
+---
+
+## [0.1.0-alpha.3] — 2026-06-23
+
+### Changed
+
 - The identity gallery header ("N detections · M references") now updates **live** when you delete a detection, bulk-remove, or bulk-reassign — no page reload. Removing a crop decrements the detection count, and if it was an enrolled reference, the reference count too.
 - **"Delete all identity data" moved from Settings to the Account page.** Identity data is per-user, but Settings is now admin-only — so the wipe action lives on Account, where every user can clear their *own* data (the `DELETE /api/identities` endpoint is already user-scoped). Wording updated to "all of your … data".
 - **Settings and Models are now admin-only.** Both are instance-global (settings and the model registry are shared by every account in a single Argus instance), so only the admin (the first registered account) can view or change them. Non-admin accounts no longer see the Settings/Models nav links, are redirected away from those pages, and get `403` from `/api/settings/*` and `/api/models/*`. This prevents a secondary/test account from changing thresholds, the active model, or the match strategy for everyone.
@@ -165,5 +181,6 @@ Initial alpha release.
 
 ---
 
+[0.1.0-alpha.3]: https://github.com/MichaelYagi/argus/compare/v0.1.0-alpha.2...v0.1.0-alpha.3
 [0.1.0-alpha.2]: https://github.com/MichaelYagi/argus/compare/v0.1.0-alpha.1...v0.1.0-alpha.2
 [0.1.0-alpha.1]: https://github.com/MichaelYagi/argus/releases/tag/v0.1.0-alpha.1

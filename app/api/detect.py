@@ -7,7 +7,7 @@ import json
 import uuid
 from typing import Any
 
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request
 
 from app.core import settings_cache
 from app.core.auth import require_auth
@@ -33,10 +33,19 @@ _FMT_EXT = {"JPEG": "jpg", "PNG": "png", "WEBP": "webp", "BMP": "bmp",
 # ---------------------------------------------------------------------------
 
 @router.post("/api/detect/faces")
-async def detect_faces(request: Request, user_id: int = Depends(require_auth)):
+async def detect_faces(
+    request: Request,
+    background_tasks: BackgroundTasks,
+    user_id: int = Depends(require_auth),
+):
+    run_async = _is_truthy(request.query_params.get("async", ""))
     raw = await acquire_image(request)
     label = await _extract_label(request)
     replace = await _extract_replace(request)
+    if run_async:
+        job_id = store.create_job(user_id, "detect_faces")
+        background_tasks.add_task(_run_detection_job, job_id, user_id, raw, label, replace, "face")
+        return {"job_id": job_id, "status": "pending"}
     img = open_and_validate(raw)
     source_filename, source_id = _save_source_image(user_id, raw, img)
     if replace:
@@ -45,9 +54,18 @@ async def detect_faces(request: Request, user_id: int = Depends(require_auth)):
 
 
 @router.post("/api/detect/objects")
-async def detect_objects(request: Request, user_id: int = Depends(require_auth)):
+async def detect_objects(
+    request: Request,
+    background_tasks: BackgroundTasks,
+    user_id: int = Depends(require_auth),
+):
+    run_async = _is_truthy(request.query_params.get("async", ""))
     raw = await acquire_image(request)
     replace = await _extract_replace(request)
+    if run_async:
+        job_id = store.create_job(user_id, "detect_objects")
+        background_tasks.add_task(_run_detection_job, job_id, user_id, raw, None, replace, "object")
+        return {"job_id": job_id, "status": "pending"}
     img = open_and_validate(raw)
     source_filename, source_id = _save_source_image(user_id, raw, img)
     if replace:
@@ -56,10 +74,19 @@ async def detect_objects(request: Request, user_id: int = Depends(require_auth))
 
 
 @router.post("/api/detect/all")
-async def detect_all(request: Request, user_id: int = Depends(require_auth)):
+async def detect_all(
+    request: Request,
+    background_tasks: BackgroundTasks,
+    user_id: int = Depends(require_auth),
+):
+    run_async = _is_truthy(request.query_params.get("async", ""))
     raw = await acquire_image(request)
     label = await _extract_label(request)
     replace = await _extract_replace(request)
+    if run_async:
+        job_id = store.create_job(user_id, "detect_all")
+        background_tasks.add_task(_run_detection_job, job_id, user_id, raw, label, replace, "all")
+        return {"job_id": job_id, "status": "pending"}
     img = open_and_validate(raw)
     source_filename, source_id = _save_source_image(user_id, raw, img)
     if replace:
@@ -221,6 +248,36 @@ async def identify(request: Request, user_id: int = Depends(require_auth)):
         })
 
     return {"threshold": threshold, "faces": results}
+
+
+# ---------------------------------------------------------------------------
+# Async job runner
+# ---------------------------------------------------------------------------
+
+def _run_detection_job(
+    job_id: str,
+    user_id: int,
+    raw: bytes,
+    label: str | None,
+    replace: bool,
+    det_type: str,  # 'face' | 'object' | 'all'
+) -> None:
+    try:
+        store.update_job(job_id, "running")
+        img = open_and_validate(raw)
+        _, source_id = _save_source_image(user_id, raw, img)
+        if replace:
+            _clear_detections(user_id, source_id, None if det_type == "all" else det_type)
+        result: dict = {"source_image_id": source_id}
+        if det_type in ("face", "all"):
+            result["faces"] = _run_faces(user_id, img, source_id, label=label)
+        if det_type in ("object", "all"):
+            result["objects"] = _run_objects(user_id, img, source_id)
+        store.update_job(job_id, "done", result)
+    except HTTPException as exc:
+        store.update_job(job_id, "failed", {"error": exc.detail})
+    except Exception as exc:
+        store.update_job(job_id, "failed", {"error": str(exc)})
 
 
 # ---------------------------------------------------------------------------

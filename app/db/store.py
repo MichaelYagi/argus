@@ -31,6 +31,9 @@ def _connect():
     conn = sqlite3.connect(str(path), check_same_thread=False)
     conn.row_factory = sqlite3.Row
     try:
+        conn.execute("PRAGMA journal_mode=WAL")
+        conn.execute("PRAGMA synchronous=NORMAL")
+        conn.execute("PRAGMA busy_timeout=5000")
         conn.execute("PRAGMA foreign_keys = ON")
         yield conn
         conn.commit()
@@ -1226,6 +1229,56 @@ _SETTINGS_SEED: list[tuple] = [
 def get_settings_defaults() -> dict[str, str]:
     """Return {key: default_value} from seed data — used by the reset endpoint."""
     return {row[0]: row[1] for row in _SETTINGS_SEED}
+
+
+# ---------------------------------------------------------------------------
+# Jobs
+# ---------------------------------------------------------------------------
+
+def create_job(user_id: int, job_type: str) -> str:
+    import uuid as _uuid
+    job_id = _uuid.uuid4().hex
+    with _connect() as conn:
+        conn.execute(
+            "INSERT INTO jobs (id, user_id, type) VALUES (?, ?, ?)",
+            (job_id, user_id, job_type),
+        )
+    return job_id
+
+
+def update_job(job_id: str, status: str, result: object = None) -> None:
+    import json as _json
+    with _connect() as conn:
+        conn.execute(
+            """UPDATE jobs SET status = ?, result = ?, updated_at = datetime('now')
+               WHERE id = ?""",
+            (status, _json.dumps(result) if result is not None else None, job_id),
+        )
+
+
+def get_job(job_id: str, user_id: int) -> sqlite3.Row | None:
+    with _connect() as conn:
+        return conn.execute(
+            "SELECT * FROM jobs WHERE id = ? AND user_id = ?",
+            (job_id, user_id),
+        ).fetchone()
+
+
+def list_jobs(user_id: int, limit: int = 50) -> list[sqlite3.Row]:
+    with _connect() as conn:
+        return conn.execute(
+            "SELECT * FROM jobs WHERE user_id = ? ORDER BY created_at DESC LIMIT ?",
+            (user_id, limit),
+        ).fetchall()
+
+
+def delete_job(job_id: str, user_id: int) -> bool:
+    with _connect() as conn:
+        cur = conn.execute(
+            "DELETE FROM jobs WHERE id = ? AND user_id = ?",
+            (job_id, user_id),
+        )
+        return cur.rowcount > 0
 
 
 def _seed_models(conn: sqlite3.Connection) -> None:

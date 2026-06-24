@@ -106,6 +106,20 @@ CREATE TABLE IF NOT EXISTS models (
     UNIQUE(type, name)
 );
 
+-- jobs: async detection job queue — created by ?async=true detect calls, polled via /api/jobs
+CREATE TABLE IF NOT EXISTS jobs (
+    id          TEXT    PRIMARY KEY,
+    user_id     INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    type        TEXT    NOT NULL,
+    status      TEXT    NOT NULL DEFAULT 'pending'
+                        CHECK(status IN ('pending', 'running', 'done', 'failed')),
+    result      TEXT,
+    created_at  TEXT    NOT NULL DEFAULT (datetime('now')),
+    updated_at  TEXT    NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE INDEX IF NOT EXISTS idx_jobs_user ON jobs(user_id, created_at DESC);
+
 -- settings: shared key-value config for thresholds and behaviour knobs
 CREATE TABLE IF NOT EXISTS settings (
     key         TEXT PRIMARY KEY,
