@@ -43,11 +43,16 @@
     <tbody>
       {% for k in active_keys %}
       <tr style="border-bottom:1px solid var(--border)">
-        <td style="padding:8px 0"><strong>{{ k.label or 'Unnamed' }}</strong></td>
+        <td style="padding:8px 0">
+          <strong>{{ k.label or 'Unnamed' }}</strong>
+          {% if k.key_hint %}<code style="font-size:11px;color:var(--muted);margin-left:6px">...{{ k.key_hint }}</code>{% endif %}
+        </td>
         <td style="padding:8px 0;color:var(--muted);font-size:12px">{{ k.environment_name or 'default' }}</td>
         <td style="padding:8px 0;color:var(--muted)" title="Set once when the key was created — never changes"><time class="fmt-date" datetime="{{ k.created_at }}">{{ k.created_at }}</time></td>
         <td style="padding:8px 0;color:var(--muted)">{% if k.last_used_at %}<time class="fmt-date" datetime="{{ k.last_used_at }}">{{ k.last_used_at }}</time>{% else %}<span class="muted">Never</span>{% endif %}</td>
         <td style="padding:8px 0;text-align:right;display:flex;gap:4px;justify-content:flex-end">
+          <button class="btn btn-ghost" style="padding:3px 10px;font-size:12px"
+                  onclick="openKeyRename({{ k.id }}, '{{ (k.label or '') | replace("'", "\\'") }}')">Rename</button>
           <form method="post" action="/account/key/{{ k.id }}/revoke" style="display:inline">
             <button class="btn btn-ghost" style="padding:3px 10px;font-size:12px"
                     title="Disable this key (keeps it in history)">Revoke</button>
@@ -73,7 +78,9 @@
       <tbody>
         {% for k in revoked_keys %}
         <tr style="border-bottom:1px solid var(--border)">
-          <td style="padding:6px 0;color:var(--muted)">{{ k.label or 'Unnamed' }}</td>
+          <td style="padding:6px 0;color:var(--muted)">
+            {{ k.label or 'Unnamed' }}{% if k.key_hint %} <code style="font-size:11px">...{{ k.key_hint }}</code>{% endif %}
+          </td>
           <td style="padding:6px 0;color:var(--muted)"><time class="fmt-date" datetime="{{ k.created_at }}">{{ k.created_at }}</time></td>
           <td style="padding:6px 0;text-align:right">
             <button class="btn btn-ghost" style="padding:2px 8px;font-size:11px"
@@ -89,11 +96,10 @@
   </details>
   {% endif %}
   <div style="margin-top:14px;display:flex;flex-direction:column;gap:10px">
-    <form method="post" action="/account/key/create" style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
-      <input type="text" name="label" placeholder="Key label (e.g. Shashin, Home server…)"
-             style="width:240px" maxlength="80">
+    <form method="post" action="/account/key/create" style="display:flex;gap:8px;align-items:center">
+      <button type="submit" class="btn btn-primary" style="white-space:nowrap">Create key</button>
       {% if environments %}
-      <select name="environment_id" style="font-size:13px">
+      <select name="environment_id" style="font-size:13px;width:auto;flex-shrink:0">
         {% for env in environments %}
         <option value="{{ env.id }}" {% if env.id == current_env_id %}selected{% endif %}>{{ env.name }}</option>
         {% endfor %}
@@ -101,7 +107,8 @@
       {% else %}
       <input type="hidden" name="environment_id" value="{{ current_env_id or '' }}">
       {% endif %}
-      <button type="submit" class="btn btn-primary">Create key</button>
+      <input type="text" name="label" placeholder="Key label (e.g. Shashin, Home server…)"
+             style="flex:1;min-width:0" maxlength="80">
     </form>
     {% if keys | selectattr('is_active') | list %}
     <button type="button" class="btn btn-ghost"
@@ -110,6 +117,26 @@
     </button>
     <form id="revoke-all-form" method="post" action="/account/key/revoke-all" style="display:none"></form>
     {% endif %}
+  </div>
+</div>
+
+<!-- Key rename modal -->
+<div id="key-rename-overlay"
+     style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);
+            z-index:500;align-items:center;justify-content:center">
+  <div style="background:var(--surface);border-radius:10px;padding:24px;
+              min-width:300px;max-width:90vw;box-shadow:0 8px 32px rgba(0,0,0,.4)">
+    <h2 style="margin-bottom:16px;font-size:16px">Rename key</h2>
+    <div class="form-group">
+      <label class="lbl">Label</label>
+      <input type="text" id="key-rename-input" style="width:100%" maxlength="120">
+    </div>
+    <div style="display:flex;gap:8px;margin-top:16px">
+      <button id="key-rename-save" class="btn btn-primary">Save</button>
+      <button class="btn btn-ghost"
+              onclick="document.getElementById('key-rename-overlay').style.display='none'">Cancel</button>
+    </div>
+    <p id="key-rename-error" style="color:#e53e3e;font-size:12px;margin-top:8px;display:none"></p>
   </div>
 </div>
 
@@ -477,5 +504,39 @@ async function doImport() {
   </div>`;
   fileInput.value = '';
 }
+
+let _renameKeyId = null;
+function openKeyRename(id, currentLabel) {
+  _renameKeyId = id;
+  document.getElementById('key-rename-input').value = currentLabel;
+  document.getElementById('key-rename-error').style.display = 'none';
+  const overlay = document.getElementById('key-rename-overlay');
+  overlay.style.display = 'flex';
+  document.getElementById('key-rename-input').select();
+}
+document.getElementById('key-rename-overlay').addEventListener('click', function(e) {
+  if (e.target === this) this.style.display = 'none';
+});
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape') document.getElementById('key-rename-overlay').style.display = 'none';
+});
+document.getElementById('key-rename-save').addEventListener('click', async () => {
+  const label = document.getElementById('key-rename-input').value.trim();
+  const err   = document.getElementById('key-rename-error');
+  err.style.display = 'none';
+  if (!label) { err.textContent = 'Label is required'; err.style.display = 'block'; return; }
+  const resp = await fetch(`/api/keys/${_renameKeyId}`, {
+    method: 'PUT',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({label}),
+  });
+  if (resp.ok) {
+    location.reload();
+  } else {
+    const data = await resp.json().catch(() => ({}));
+    err.textContent = data.detail || 'Rename failed';
+    err.style.display = 'block';
+  }
+});
 </script>
 {% endblock %}

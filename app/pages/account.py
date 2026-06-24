@@ -8,7 +8,7 @@ from fastapi.templating import Jinja2Templates
 
 from app import __version__
 from app.core.auth import get_session_user
-from app.core.security import generate_api_key, hash_api_key, hash_password, verify_password
+from app.core.security import generate_api_key, hash_api_key, hash_password, key_hint, verify_password
 from app.db import store
 
 router = APIRouter()
@@ -97,7 +97,8 @@ async def create_key(
         return redir
     env_id = environment_id or request.session.get("environment_id") or None
     plaintext = generate_api_key()
-    store.create_api_key(user["id"], hash_api_key(plaintext), label.strip() or "Unnamed key", env_id)
+    hint = key_hint(plaintext)
+    store.create_api_key(user["id"], hash_api_key(plaintext), label.strip() or "Unnamed key", env_id, hint)
     request.session["new_key"] = plaintext
     return RedirectResponse("/account", status_code=303)
 

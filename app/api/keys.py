@@ -6,7 +6,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel
 
 from app.core.auth import require_auth
-from app.core.security import generate_api_key, hash_api_key
+from app.core.security import generate_api_key, hash_api_key, key_hint
 from app.db import store
 
 router = APIRouter()
@@ -24,6 +24,7 @@ async def list_keys(user_id: int = Depends(require_auth)):
         {
             "id": r["id"],
             "label": r["label"],
+            "key_hint": r["key_hint"],
             "environment_id": r["environment_id"],
             "environment_name": r["environment_name"],
             "created_at": r["created_at"],
@@ -42,7 +43,7 @@ async def create_key(
 ):
     env_id = body.environment_id or request.session.get("environment_id") or None
     plaintext = generate_api_key()
-    key_id = store.create_api_key(user_id, hash_api_key(plaintext), body.label, env_id)
+    key_id = store.create_api_key(user_id, hash_api_key(plaintext), body.label, env_id, key_hint(plaintext))
     env = store.get_environment(env_id, user_id) if env_id else None
     return {
         "id": key_id,
@@ -51,6 +52,20 @@ async def create_key(
         "environment_name": env["name"] if env else None,
         "key": plaintext,  # shown once — not stored
     }
+
+
+class _RenameKey(BaseModel):
+    label: str
+
+
+@router.put("/api/keys/{key_id}", status_code=200)
+async def rename_key(key_id: int, body: _RenameKey, user_id: int = Depends(require_auth)):
+    label = body.label.strip()
+    if not label:
+        raise HTTPException(400, "Label is required")
+    if not store.rename_api_key(key_id, user_id, label):
+        raise HTTPException(404, "Key not found")
+    return {"id": key_id, "label": label}
 
 
 @router.delete("/api/keys/{key_id}", status_code=204)

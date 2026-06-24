@@ -164,6 +164,10 @@ def _migrate(conn: sqlite3.Connection) -> None:
         conn.execute("PRAGMA user_version = 1")
 
     # Schema column additions
+    existing_key_cols = {r[1] for r in conn.execute("PRAGMA table_info(api_keys)")}
+    if "key_hint" not in existing_key_cols:
+        conn.execute("ALTER TABLE api_keys ADD COLUMN key_hint TEXT NOT NULL DEFAULT ''")
+
     existing_cols = {r[1] for r in conn.execute("PRAGMA table_info(detections)")}
     if "embedding" not in existing_cols:
         conn.execute("ALTER TABLE detections ADD COLUMN embedding BLOB")
@@ -352,12 +356,15 @@ def get_user_by_id(user_id: int) -> sqlite3.Row | None:
 # API keys
 # ---------------------------------------------------------------------------
 
-def create_api_key(user_id: int, key_hash: str, label: str, environment_id: int | None = None) -> int:
+def create_api_key(
+    user_id: int, key_hash: str, label: str,
+    environment_id: int | None = None, key_hint: str = "",
+) -> int:
     with _connect() as conn:
         env_id = _resolve_env(conn, user_id, environment_id)
         conn.execute(
-            "INSERT INTO api_keys (user_id, environment_id, key_hash, label) VALUES (?, ?, ?, ?)",
-            (user_id, env_id, key_hash, label),
+            "INSERT INTO api_keys (user_id, environment_id, key_hash, label, key_hint) VALUES (?, ?, ?, ?, ?)",
+            (user_id, env_id, key_hash, label, key_hint),
         )
         return conn.execute("SELECT last_insert_rowid()").fetchone()[0]
 
@@ -384,7 +391,7 @@ def touch_api_key(key_id: int) -> None:
 def list_api_keys(user_id: int) -> list[sqlite3.Row]:
     with _connect() as conn:
         return conn.execute(
-            """SELECT ak.id, ak.label, ak.created_at, ak.last_used_at, ak.is_active,
+            """SELECT ak.id, ak.label, ak.key_hint, ak.created_at, ak.last_used_at, ak.is_active,
                       ak.environment_id, e.name AS environment_name
                FROM api_keys ak
                LEFT JOIN environments e ON e.id = ak.environment_id
@@ -399,6 +406,15 @@ def revoke_api_key(key_id: int, user_id: int) -> bool:
         conn.execute(
             "UPDATE api_keys SET is_active = 0 WHERE id = ? AND user_id = ?",
             (key_id, user_id),
+        )
+        return conn.execute("SELECT changes()").fetchone()[0] > 0
+
+
+def rename_api_key(key_id: int, user_id: int, label: str) -> bool:
+    with _connect() as conn:
+        conn.execute(
+            "UPDATE api_keys SET label = ? WHERE id = ? AND user_id = ?",
+            (label, key_id, user_id),
         )
         return conn.execute("SELECT changes()").fetchone()[0] > 0
 

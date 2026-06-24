@@ -39,6 +39,11 @@ def generate_api_key() -> str:
     return f"argus_{secrets.token_hex(32)}"
 
 
+def key_hint(plaintext: str) -> str:
+    """Return the last 4 chars of the key for display (e.g. '...a3f9')."""
+    return plaintext[-4:] if len(plaintext) >= 4 else plaintext
+
+
 def hash_api_key(key: str) -> str:
     """Return the SHA-256 hex digest used for DB storage."""
     return hashlib.sha256(key.encode()).hexdigest()

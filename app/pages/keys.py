@@ -6,7 +6,7 @@ from fastapi import APIRouter, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 
 from app.core.auth import get_session_user
-from app.core.security import generate_api_key, hash_api_key
+from app.core.security import generate_api_key, hash_api_key, key_hint
 from app.db import store
 
 router = APIRouter()
@@ -76,7 +76,7 @@ async def create_key(request: Request):
     label = str(form.get("label") or "").strip()
 
     plaintext = generate_api_key()
-    store.create_api_key(user_id, hash_api_key(plaintext), label)
+    store.create_api_key(user_id, hash_api_key(plaintext), label, key_hint=key_hint(plaintext))
 
     # Store in session so it can be shown once on the next GET
     request.session["new_key"] = plaintext

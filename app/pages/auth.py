@@ -15,6 +15,7 @@ from app.core.security import (
     generate_api_key,
     hash_api_key,
     hash_password,
+    key_hint,
     verify_password,
 )
 from app.db import store
@@ -60,7 +61,7 @@ async def signup(
     if auto_approve:
         env_id = store.get_default_environment_id(user_id)
         plaintext = generate_api_key()
-        store.create_api_key(user_id, hash_api_key(plaintext), "Default key", env_id)
+        store.create_api_key(user_id, hash_api_key(plaintext), "Default key", env_id, key_hint(plaintext))
         request.session["user_id"] = user_id
         request.session["username"] = username
         request.session["environment_id"] = env_id
@@ -101,7 +102,7 @@ async def login(
     # Auto-generate first API key if the user has none yet; redirect to account so they see it
     if not store.list_api_keys(row["id"]):
         plaintext = generate_api_key()
-        store.create_api_key(row["id"], hash_api_key(plaintext), "Default key", env_id)
+        store.create_api_key(row["id"], hash_api_key(plaintext), "Default key", env_id, key_hint(plaintext))
         request.session["new_key"] = plaintext
         redirect_to = "/account"
     else:
