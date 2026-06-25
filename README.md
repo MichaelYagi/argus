@@ -26,6 +26,18 @@ Self-hosted face and object recognition. Single Docker container, runs on your L
 
 ---
 
+## Contents
+
+**Getting started:** [Quick start (Docker)](#quick-start-docker) · [First run](#first-run) · [Native run (no Docker)](#native-run-no-docker) · [Docker reference](#docker-reference)
+
+**Concepts:** [Review queue](#review-queue) · [Suggested people](#suggested-people-face-clustering) · [Object detection models](#object-detection-models) · [Environments](#environments)
+
+**API:** [API](#api) · [Export and import](#export-and-import) · [Integrating another system](#integrating-another-system)
+
+**Operations:** [Troubleshooting](#troubleshooting) · [Development](#development) · [Releasing a new version](#releasing-a-new-version)
+
+---
+
 ## Quick start (Docker)
 
 **1. Clone**
@@ -73,81 +85,6 @@ Port 8100 — Argus had 100 eyes.
 
 ---
 
-## Review queue
-
-Detections below the match threshold go into a review queue (`/review`). Each item shows:
-- The detected face crop
-- The current match (if any) and its similarity score
-- Ranked suggestions from enrolled faces
-- Actions: confirm, reject, reassign, or dismiss
-
-Key thresholds (all configurable in **Settings**):
-- `face.match_threshold` (default 0.5) — minimum similarity to assign a match at all. Below this, the face is stored but left unidentified.
-- `face.auto_confirm_threshold` (default 0.80) — detections at or above this similarity are confirmed automatically and skip the review queue. Below it, they land in the queue for manual review.
-- `face.auto_enroll_threshold` (default 0.92) — gate for the *automatic* path only. When Argus auto-confirms a high-similarity match with no human in the loop, the detection's embedding is added to the reference set only if its face-detection quality score clears this bar — avoiding the unattended promotion of low-quality crops. Set to 0 to disable automatic enrollment.
-
-**Human actions always enroll.** When you confirm, reassign, or label a face yourself, that's ground truth — its embedding is added to the person's reference set unconditionally (the threshold above does not apply), so future matches of that person improve.
-
-**Matching method (`face.match_strategy`, Settings):**
-- **Best match** (default) — a face is scored against *every* reference photo and takes the closest. Enrolled photos stay ~100%, and people who look different across photos (age, glasses, lighting) recognize better. Slightly more compute (every reference is indexed, not one centroid per person) — negligible until tens of thousands of faces.
-- **Average** — each person's reference photos are blended into one representative embedding; a face is scored against that average. Faster and steadier, but an individual photo's score drifts below 100% as you add varied references (it's measured against the moving average, not itself).
-
-Either way, confirming more varied shots of someone improves their recognition.
-
----
-
-## Suggested people (face clustering)
-
-The **Suggested** page (`/clusters`) groups *unlabeled* faces — ones that match nobody
-enrolled — into "probably the same person" clusters by similarity. Name a cluster once and
-every face in it is labelled and enrolled together. This is the fast way to seed recognition
-on an existing photo set: instead of labelling faces one at a time, you name a handful of
-clusters and you're mostly done.
-
-- Adjust grouping live with the threshold slider (backed by `face.cluster_threshold`,
-  default 0.5). Higher = stricter (splits more); lower = looser (merges more).
-- Singletons are dropped — a suggestion needs at least two corroborating faces.
-- Naming a cluster uses the same batch-label endpoint as everywhere else, so the faces are
-  enrolled as ground-truth references.
-- Available over the API: `GET /api/clusters?threshold=<0-1>&min_size=<n>` returns the
-  groups with their detection ids and crop URLs; name one by POSTing its ids to
-  `/api/detections/label`. Read-only — clustering is computed on demand and stores nothing.
-
-It complements the review queue: the queue handles faces that *do* resemble an enrolled
-person, clustering handles the residual unknowns that match no one yet.
-
----
-
-## Object detection models
-
-Argus supports two kinds of object detection models, selectable from the **Models** page:
-
-### Standard YOLO
-
-Models: `yolov8n`, `yolov8s`, `yolov8m`, `yolov8x`, `yolo11n`
-
-Detects a fixed set of 80 everyday object categories defined by the COCO dataset (people, vehicles, animals, furniture, food, etc.). Fast and consistent — the vocabulary is baked into the model weights and never changes. Use the **Object classes** setting to filter which of the 80 you care about.
-
-### YOLO-World (open vocabulary)
-
-Models: `yolov8s-worldv2`, `yolov8m-worldv2`, `yolov8l-worldv2`
-
-Detects anything you describe in plain language. Instead of a fixed list of 80 categories, you define a vocabulary of words and phrases, and the model finds those things in photos.
-
-**What is a "vocabulary"?** It's a list of physical things you want Argus to find and label. Each entry is a description of something that can appear in an image — "dog", "fire", "license plate", "person wearing a helmet". When Argus scans a photo, it looks for every item in your vocabulary and draws a bounding box around each one it finds.
-
-**Can you use arbitrary words?** Mostly yes, within reason. YOLO-World understands natural language, so descriptions like "golden retriever", "broken window", or "person on a bicycle" work. Abstract or non-visual concepts ("happiness", "expensive") do not — if you couldn't point at it in a photo, it won't work.
-
-**Why not just list thousands of things?** Two reasons:
-- Every entry in the vocabulary adds a small amount of compute per image. 100–300 classes is a practical sweet spot; thousands would be noticeably slower.
-- Precision degrades with a bloated list — more categories means more chances for false positives and misclassification between similar-sounding things.
-
-**Default vocabulary:** Argus ships with ~160 classes covering all 80 COCO categories plus common additions: weapons, fire, smoke, license plates, face masks, extended vehicle types, more animal species, and other frequently useful categories. Edit the vocabulary in **Settings → YOLO-World vocabulary** to add or remove anything. Changes take effect on the next detection — no restart needed.
-
-**When to use YOLO-World vs standard YOLO:** if the things you want to detect are all within COCO's 80 classes, standard YOLO is faster and more consistent. Switch to YOLO-World when you need to detect things outside that list — a specific vehicle type, safety equipment, environmental hazards, or anything else with a name.
-
----
-
 ## Native run (no Docker)
 
 Requires Python 3.11+.
@@ -191,6 +128,104 @@ Works natively. The image builds for ARM64 and `onnxruntime` (CPU) is installed 
 
 ---
 
+## Review queue
+
+Detections below the match threshold go into a review queue (`/review`). Each item shows:
+- The detected face crop
+- The current match (if any) and its similarity score
+- Ranked suggestions from enrolled faces
+- Actions: confirm, reject, reassign, or dismiss
+
+Key thresholds (all configurable in **Settings**):
+- `face.match_threshold` (default 0.5) — minimum similarity to assign a match at all. Below this, the face is stored but left unidentified.
+- `face.auto_confirm_threshold` (default 0.80) — detections at or above this similarity are confirmed automatically and skip the review queue. Below it, they land in the queue for manual review.
+- `face.auto_enroll_threshold` (default 0.92) — gate for the *automatic* path only. When Argus auto-confirms a high-similarity match with no human in the loop, the detection's embedding is added to the reference set only if its face-detection quality score clears this bar — avoiding the unattended promotion of low-quality crops. Set to 0 to disable automatic enrollment.
+
+**Human actions always enroll.** When you confirm, reassign, or label a face yourself, that's ground truth — its embedding is added to the person's reference set unconditionally (the threshold above does not apply), so future matches of that person improve.
+
+**Matching method (`face.match_strategy`, Settings):**
+- **Best match** (default) — a face is scored against *every* reference photo and takes the closest. Enrolled photos stay ~100%, and people who look different across photos (age, glasses, lighting) recognize better. Slightly more compute (every reference is indexed, not one centroid per person) — negligible until tens of thousands of faces.
+- **Average** — each person's reference photos are blended into one representative embedding; a face is scored against that average. Faster and steadier, but an individual photo's score drifts below 100% as you add varied references (it's measured against the moving average, not itself).
+
+Either way, confirming more varied shots of someone improves their recognition.
+
+---
+
+## Suggested people (face clustering)
+
+The **Suggested** page (`/clusters`) groups *unlabeled* faces — ones that match nobody
+enrolled — into "probably the same person" clusters by similarity. Name a group and every
+face in it is labelled and enrolled together. This is the fast way to seed recognition on an
+existing photo set: instead of labelling faces one at a time, you name a handful of groups
+and you're mostly done.
+
+- Adjust grouping live with the threshold slider (backed by `face.cluster_threshold`,
+  default 0.5). Higher = stricter (splits more); lower = looser (merges more).
+- Singletons are dropped — a suggestion needs at least two corroborating faces.
+- **Faces are individually selectable**, which is how you correct imperfect groups:
+  - **Remove a wrong face** — "Select all", then deselect the odd one out before naming; it stays unknown.
+  - **Split** — select part of a group and name it, then name the rest separately.
+  - **Merge** — select faces across two groups and name them together as one person.
+
+  "Select all" on a clean group then name is the one-click fast path.
+- Naming uses the same batch-label endpoint as everywhere else, so named faces are enrolled
+  as ground-truth references.
+- Available over the API: `GET /api/clusters?threshold=<0-1>&min_size=<n>` returns the
+  groups with their detection ids and crop URLs; name a selection by POSTing its ids to
+  `/api/detections/label`. Read-only — clustering is computed on demand and stores nothing.
+
+It complements the review queue: the queue handles faces that *do* resemble an enrolled
+person, clustering handles the residual unknowns that match no one yet.
+
+---
+
+## Object detection models
+
+Argus supports two kinds of object detection models, selectable from the **Models** page:
+
+### Standard YOLO
+
+Models: `yolov8n`, `yolov8s`, `yolov8m`, `yolov8x`, `yolo11n`
+
+Detects a fixed set of 80 everyday object categories defined by the COCO dataset (people, vehicles, animals, furniture, food, etc.). Fast and consistent — the vocabulary is baked into the model weights and never changes. Use the **Object classes** setting to filter which of the 80 you care about.
+
+### YOLO-World (open vocabulary)
+
+Models: `yolov8s-worldv2`, `yolov8m-worldv2`, `yolov8l-worldv2`
+
+Detects anything you describe in plain language. Instead of a fixed list of 80 categories, you define a vocabulary of words and phrases, and the model finds those things in photos.
+
+**What is a "vocabulary"?** It's a list of physical things you want Argus to find and label. Each entry is a description of something that can appear in an image — "dog", "fire", "license plate", "person wearing a helmet". When Argus scans a photo, it looks for every item in your vocabulary and draws a bounding box around each one it finds.
+
+**Can you use arbitrary words?** Mostly yes, within reason. YOLO-World understands natural language, so descriptions like "golden retriever", "broken window", or "person on a bicycle" work. Abstract or non-visual concepts ("happiness", "expensive") do not — if you couldn't point at it in a photo, it won't work.
+
+**Why not just list thousands of things?** Two reasons:
+- Every entry in the vocabulary adds a small amount of compute per image. 100–300 classes is a practical sweet spot; thousands would be noticeably slower.
+- Precision degrades with a bloated list — more categories means more chances for false positives and misclassification between similar-sounding things.
+
+**Default vocabulary:** Argus ships with ~160 classes covering all 80 COCO categories plus common additions: weapons, fire, smoke, license plates, face masks, extended vehicle types, more animal species, and other frequently useful categories. Edit the vocabulary in **Settings → YOLO-World vocabulary** to add or remove anything. Changes take effect on the next detection — no restart needed.
+
+**When to use YOLO-World vs standard YOLO:** if the things you want to detect are all within COCO's 80 classes, standard YOLO is faster and more consistent. Switch to YOLO-World when you need to detect things outside that list — a specific vehicle type, safety equipment, environmental hazards, or anything else with a name.
+
+---
+
+## Environments
+
+Each user has one or more named environments. All recognition data — identities, detections, enrolled faces, source images — is isolated per environment. Switching environments is instant; data in other environments is never visible.
+
+**Use cases:**
+- Separate a test or staging dataset from production data
+- Run multiple independent recognition projects under one account
+- Scope an API key to one dataset so a client app can only read/write its own data
+
+**Managing environments:** go to **Account → Manage environments** (or navigate to `/environments`). You can create, rename, and delete environments there. Deleting an environment permanently removes all its data — crops, detections, identities, and embeddings.
+
+**Switching:** use the environment name button in the top nav bar. The active environment is stored per user and restored on next login.
+
+**API keys are environment-scoped.** Each key is bound to one environment at creation time. Requests authenticated by that key read and write only that environment's data, regardless of which environment the browser session has active. Choose the environment when creating a key on the **Account** page.
+
+---
+
 ## API
 
 All `/api/*` routes require an `X-API-Key` header **or** a valid browser session (for same-origin UI calls — no header needed when calling from the browser while logged in).
@@ -202,6 +237,8 @@ All `/api/*` routes require an `X-API-Key` header **or** a valid browser session
 **Interactive docs:** `http://localhost:8100/docs`
 
 **Public API reference:** `https://michaelyagi.github.io/argus/`
+
+**Discovery (no key required):** `GET /api/health` reports status, version, active provider, and loaded models. `GET /api/capabilities` reports which detection types are usable, supported formats, pagination limits, and which integration features this build exposes — call it before integrating so a client can adapt instead of hardcoding.
 
 **Example — detect faces:**
 
@@ -440,23 +477,6 @@ curl -X POST -H "X-API-Key: argus_..." -H "Content-Type: application/json" \
   -d '{"detection_ids": [1, 2, 3]}' \
   http://localhost:8100/api/detections/query
 ```
-
----
-
-## Environments
-
-Each user has one or more named environments. All recognition data — identities, detections, enrolled faces, source images — is isolated per environment. Switching environments is instant; data in other environments is never visible.
-
-**Use cases:**
-- Separate a test or staging dataset from production data
-- Run multiple independent recognition projects under one account
-- Scope an API key to one dataset so a client app can only read/write its own data
-
-**Managing environments:** go to **Account → Manage environments** (or navigate to `/environments`). You can create, rename, and delete environments there. Deleting an environment permanently removes all its data — crops, detections, identities, and embeddings.
-
-**Switching:** use the environment name button in the top nav bar. The active environment is stored per user and restored on next login.
-
-**API keys are environment-scoped.** Each key is bound to one environment at creation time. Requests authenticated by that key read and write only that environment's data, regardless of which environment the browser session has active. Choose the environment when creating a key on the **Account** page.
 
 ---
 
