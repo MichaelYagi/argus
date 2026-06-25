@@ -7,17 +7,40 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
-### Changed
+---
 
-- **User management moved from Account page to Settings page** (admin-only, under System). Approve/revoke/restore/delete accounts is now a single place alongside the auto-approve toggle. Account page no longer shows the Users card.
-- Admin approve, revoke, and delete account actions now redirect back to `/settings` instead of `/account`.
-- Dashboard identity cards no longer show a references count — the figure was confusing alongside detections. Reference count is still shown on the identity detail/gallery page.
+## [0.1.0-alpha.4] — 2026-06-24
 
 ### Added
 
+- **Environments — per-user data isolation.** Each user has one or more named environments (e.g. `default`, `dev`, `prod`); all recognition data — identities, detections, enrolled faces, source images — is scoped to one environment and never visible from another. Switch instantly via the top-nav picker (the active environment is remembered across sign-out). Manage them at `/environments` (create/rename/delete). **API keys are environment-scoped** — a key reads and writes only its environment's data, regardless of the browser session.
+- **Suggested people (face clustering)** — the `/clusters` page groups unlabeled faces (matching nobody enrolled) into "probably the same person" clusters by similarity, so you can name a group and enroll everyone in it at once. Faces are individually selectable: deselect a wrong face (remove), select part of a group (split), or select across groups (merge). **Dismiss** hides faces from suggestions without deleting them; **Delete** removes the crops permanently. Tunable `face.cluster_threshold` setting. Over the API: `GET /api/clusters`; name a selection via `POST /api/detections/label`. Computed on demand, stores nothing.
+- **Stateless Test** — `/test` page and `POST /api/test` check whether an image contains people or objects without storing, enrolling, or matching anything; returns bounding boxes + counts, rendered with overlays in the UI. `?type=faces|objects|all`; a missing model is skipped (reported via an `available` flag) rather than erroring. **Batch variant** `POST /api/test/batch` tests many images (multipart files or JSON `image_urls`/`image_base64`) in one call; the Test page accepts multiple images.
+- **Integration helpers for client systems:**
+  - **`external_ref`** — an opaque, caller-owned correlation id on identities and source images. Settable on detect (`external_ref` field) and enroll, queryable (`GET /api/identities?external_ref=`, `GET /api/images?external_ref=`), settable on an existing identity (`PUT /api/identities/{id}/external_ref`), and echoed in responses. Lets a client map its own ids to Argus's without name-matching. Argus never interprets it.
+  - **Change feed** — `GET /api/changes?since=<cursor>` returns identity/detection created/relabeled/deleted events for delta sync, so a client learns what changed without re-scanning. Detection events carry the source image's `external_ref`.
+  - **Capabilities** — `GET /api/capabilities` reports usable detection types, active models, supported formats, pagination limits, and which integration features the build exposes.
+  - **Batch operations** — `POST /api/detections/label` (relabel many, per-item results), `POST /api/detections/query` (read current state of many), `POST /api/detections/dismiss`, `POST /api/detections/delete`.
+- **Object bounding boxes on the tag page** — `/tag/{id}` now draws object boxes (blue) alongside face boxes; click an object box to correct its class label via the shared label endpoint.
+- **API key rename + key hint** — keys can be renamed on the Account page, and each key shows a `argus_…xxxxxxxx` hint (last 8 chars) so you can tell them apart. Keys are created with an environment selector.
 - `system.auto_approve_users` setting (default `true`) — new accounts are approved immediately on sign-up with no admin gate. Set to `false` to require admin approval before the account can sign in. First registered account (the admin) is always auto-approved regardless.
-- **SQLite WAL mode** — `PRAGMA journal_mode=WAL` + `synchronous=NORMAL` + `busy_timeout=5000` set on every connection. Concurrent reads no longer block on an in-progress write; write contention retries for up to 5 seconds before failing. Improves throughput with multiple simultaneous API clients.
-- **Async detection job queue** — add `?async=true` to any `POST /api/detect/faces|objects|all` call to get an immediate `{"job_id": "...", "status": "pending"}` response instead of blocking on inference. Poll the result with `GET /api/jobs/{job_id}`. List recent jobs with `GET /api/jobs`. Delete a completed job with `DELETE /api/jobs/{job_id}`. Job results match the synchronous detect response; failed jobs include an `error` field. Backed by a new `jobs` table; no external queue process.
+- **SQLite WAL mode** — `PRAGMA journal_mode=WAL` + `synchronous=NORMAL` + `busy_timeout=5000` on every connection. Concurrent reads no longer block on an in-progress write; write contention retries for up to 5 seconds. Improves throughput with multiple simultaneous API clients.
+- **Async detection job queue** — add `?async=true` to any `POST /api/detect/faces|objects|all` call for an immediate `{"job_id": ..., "status": "pending"}` response instead of blocking on inference. Poll with `GET /api/jobs/{job_id}`, list with `GET /api/jobs`, delete with `DELETE /api/jobs/{job_id}`. Backed by a new `jobs` table; no external queue process.
+
+### Changed
+
+- **User management moved from Account to the Settings page** (admin-only, under System) — approve/revoke/restore/delete accounts alongside the auto-approve toggle. Admin account actions redirect back to `/settings`.
+- **All native browser dialogs replaced with in-app modals** — `alert()`/`confirm()` are gone; destructive actions use a styled confirm modal, notices use a message modal.
+- The environment switcher hides on pages where it doesn't apply (Settings, Models, Account), which instead show a "Manage environments" link; the picker now closes on an outside click.
+- Dashboard identity cards no longer show a references count (confusing next to detections); the count remains on the identity gallery page.
+
+### Fixed
+
+- **Deleting the `default` environment no longer resurrects it on restart.** The startup migration now seeds `default` only for users who have *no* environment, instead of re-adding it by name every boot — so a deliberately-deleted `default` stays gone while other environments exist.
+- **Average match strategy now rebuilds the face index correctly.** Representative (centroid) embeddings are recomputed on every index build instead of only when missing, fixing empty/stale suggestions and similarity scores after switching to the Average strategy.
+- Identity rename (`PUT /api/identities/{id}`) with a name that collides with another identity returns `409` and surfaces the error inline instead of failing opaquely.
+- Switching environments could hit a `UNIQUE constraint` error on `identities`/`source_images` carried over from the pre-environment schema; a one-time migration recreates those tables with environment-scoped uniqueness.
+- The environment-switcher button is now legible in the light theme.
 
 ---
 
@@ -181,6 +204,7 @@ Initial alpha release.
 
 ---
 
+[0.1.0-alpha.4]: https://github.com/MichaelYagi/argus/compare/v0.1.0-alpha.3...v0.1.0-alpha.4
 [0.1.0-alpha.3]: https://github.com/MichaelYagi/argus/compare/v0.1.0-alpha.2...v0.1.0-alpha.3
 [0.1.0-alpha.2]: https://github.com/MichaelYagi/argus/compare/v0.1.0-alpha.1...v0.1.0-alpha.2
 [0.1.0-alpha.1]: https://github.com/MichaelYagi/argus/releases/tag/v0.1.0-alpha.1
