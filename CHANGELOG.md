@@ -7,6 +7,10 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+### Fixed
+
+- **Change feed now covers review actions and single deletes.** Reassign, reject, and `DELETE /api/detections/{id}` previously mutated a detection without emitting an event, so a delta-sync client missed corrections made through the Review queue. They now record `relabeled`/`deleted` events like the casual-correction and bulk paths already did.
+
 ---
 
 ## [0.1.0-alpha.4] — 2026-06-24

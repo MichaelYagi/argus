@@ -1485,6 +1485,8 @@ def reject_detection(detection_id: int, user_id: int, environment_id: int | None
             (detection_id, user_id, env_id),
         )
         changed = conn.execute("SELECT changes()").fetchone()[0] > 0
+        if changed:  # identity cleared — surface as a relabel for delta-sync clients
+            record_change(conn, user_id, env_id, "detection", detection_id, "relabeled")
     _recompute_representative(old_id)
     return changed
 
@@ -1499,6 +1501,8 @@ def reassign_detection(detection_id: int, user_id: int, identity_id: int, enviro
             (identity_id, detection_id, user_id, env_id),
         )
         changed = conn.execute("SELECT changes()").fetchone()[0] > 0
+        if changed:  # identity changed — surface as a relabel for delta-sync clients
+            record_change(conn, user_id, env_id, "detection", detection_id, "relabeled")
     _recompute_representative(old_id)
     return changed
 
@@ -1529,6 +1533,8 @@ def delete_detection(detection_id: int, user_id: int, environment_id: int | None
             (detection_id, user_id, env_id),
         )
         deleted = conn.execute("SELECT changes()").fetchone()[0] > 0
+        if deleted:
+            record_change(conn, user_id, env_id, "detection", detection_id, "deleted")
 
     if ref_identity is not None:
         model_row = get_active_model("face")

@@ -127,6 +127,32 @@ def test_change_feed_requires_api_key(client):
     assert r.status_code in (401, 403)
 
 
+def test_change_feed_covers_relabel_and_delete(client):
+    """Casual relabel and delete of a detection must surface in the feed so a
+    delta-sync client sees corrections made outside the create path."""
+    user_id, key = _create_user_and_key()
+    env_id = store.get_default_environment_id(user_id)
+    iid = store.get_or_create_identity(user_id, "object", "thing", env_id)
+    sid = store.get_or_create_source_image(user_id, "x.jpg", 100, 100, env_id)
+    det = store.insert_detection(
+        user_id=user_id, identity_id=iid, source_image_id=sid,
+        detection_type="object", model_id=None, confidence=0.9,
+        bbox_x=1, bbox_y=2, bbox_w=3, bbox_h=4, crop_path="x.jpg", environment_id=env_id,
+    )
+    cursor = client.get("/api/changes", headers=_h(key)).json()["next_cursor"]
+
+    # Relabel via the casual-correction endpoint.
+    client.put(f"/api/detections/{det}/label", json={"label": "other"}, headers=_h(key))
+    evs = client.get(f"/api/changes?since={cursor}", headers=_h(key)).json()["changes"]
+    assert any(e["entity_type"] == "detection" and e["action"] == "relabeled" for e in evs)
+
+    cursor = evs[-1]["id"]
+    # Delete it.
+    client.delete(f"/api/detections/{det}", headers=_h(key))
+    evs = client.get(f"/api/changes?since={cursor}", headers=_h(key)).json()["changes"]
+    assert any(e["entity_type"] == "detection" and e["action"] == "deleted" for e in evs)
+
+
 # ---------------------------------------------------------------------------
 # Capabilities
 # ---------------------------------------------------------------------------
