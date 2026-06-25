@@ -230,7 +230,8 @@ async def environment_create(request: Request, name: str = Form(...)):
             store.create_environment(ctx["user_id"], name)
         except Exception:
             pass
-    return RedirectResponse("/environments", status_code=303)
+    # Back to wherever the action came from (modal on any page, or the /environments page).
+    return RedirectResponse(request.headers.get("referer", "/environments"), status_code=303)
 
 
 @router.post("/environments/{env_id}/rename")
@@ -244,7 +245,7 @@ async def environment_rename(env_id: int, request: Request, name: str = Form(...
             store.rename_environment(env_id, ctx["user_id"], name)
         except Exception:
             pass
-    return RedirectResponse("/environments", status_code=303)
+    return RedirectResponse(request.headers.get("referer", "/environments"), status_code=303)
 
 
 @router.post("/environments/{env_id}/delete")
@@ -268,4 +269,4 @@ async def environment_delete(env_id: int, request: Request):
                 remaining = store.list_environments(ctx["user_id"])
                 if remaining:
                     request.session["environment_id"] = remaining[0]["id"]
-    return RedirectResponse("/environments", status_code=303)
+    return RedirectResponse(request.headers.get("referer", "/environments"), status_code=303)

@@ -77,6 +77,8 @@ async def tag_page(source_image_id: int, request: Request):
         "confidence": r["confidence"],
     } for r in objects]
 
+    environments = store.list_environments(user_id)
+    env_name = next((e["name"] for e in environments if e["id"] == env_id), "default")
     return templates.TemplateResponse(request, "tag.html", {
         "username": request.session.get("username", ""),
         "is_admin": is_admin(user_id),
@@ -86,4 +88,7 @@ async def tag_page(source_image_id: int, request: Request):
         "nat_h": src["height"],
         "faces_json": json.dumps(face_data),
         "objects_json": json.dumps(object_data),
+        "environments": [dict(e) for e in environments],
+        "environment_id": env_id,
+        "environment_name": env_name,
     })

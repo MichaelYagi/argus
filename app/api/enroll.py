@@ -198,7 +198,11 @@ async def enroll_new(
         _fi.rebuild_user(user_id, environment_id)
     return {"identity_id": identity_id, "label": name, "embeddings": 1,
             "embedding_id": embedding_id, "detection_id": detection_id,
-            "external_ref": external_ref}
+            "external_ref": external_ref,
+            "source_image_id": source_id,
+            "source_image_url": f"/media/sources/{source_filename}",
+            "bbox": {"x": face_det.bbox[0], "y": face_det.bbox[1],
+                     "w": face_det.bbox[2], "h": face_det.bbox[3]}}
 
 
 @router.post("/api/identities/{identity_id}/enroll", status_code=201)

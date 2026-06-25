@@ -99,23 +99,39 @@
     previewStrip.innerHTML = '';
     if (total === 0) { previewStrip.style.display = 'none'; return; }
     previewStrip.style.display = 'flex';
-    fileList.forEach(f => {
+    fileList.forEach((f, i) => {
       const img = document.createElement('img');
       img.src = URL.createObjectURL(f); img.title = f.name; img.style.cssText = thumbStyle();
       img.onload = () => URL.revokeObjectURL(img.src);
-      previewStrip.appendChild(img);
+      previewStrip.appendChild(removableThumb(img, () => { fileList.splice(i, 1); updateQueue(); }));
     });
-    getUrls().forEach(url => {
+    getUrls().forEach((url, i) => {
       const img = document.createElement('img');
       img.src = url; img.title = url; img.style.cssText = thumbStyle();
-      previewStrip.appendChild(img);
+      previewStrip.appendChild(removableThumb(img, () => {
+        urlInput.value = getUrls().filter((_, j) => j !== i).join('\n'); updateQueue();
+      }));
     });
     getB64().forEach(b64 => {
       const img = document.createElement('img');
       img.src = b64.startsWith('data:') ? b64 : 'data:image/jpeg;base64,' + b64;
       img.style.cssText = thumbStyle();
-      previewStrip.appendChild(img);
+      previewStrip.appendChild(removableThumb(img, () => { b64Input.value = ''; updateQueue(); }));
     });
+  }
+
+  function removableThumb(child, onRemove) {
+    const wrap = document.createElement('div');
+    wrap.style.cssText = 'position:relative;display:inline-block;line-height:0;flex-shrink:0';
+    wrap.appendChild(child);
+    const x = document.createElement('button');
+    x.type = 'button'; x.title = 'Remove'; x.textContent = '×';
+    x.style.cssText = 'position:absolute;top:-6px;right:-6px;width:18px;height:18px;border-radius:50%;' +
+      'border:none;background:var(--danger);color:#fff;font-size:11px;line-height:18px;text-align:center;' +
+      'cursor:pointer;padding:0';
+    x.addEventListener('click', e => { e.stopPropagation(); onRemove(); });
+    wrap.appendChild(x);
+    return wrap;
   }
 
   clearBtn.addEventListener('click', () => {

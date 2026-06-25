@@ -75,24 +75,27 @@ async function _pool(items, concurrency, fn) {
     if (total === 0) { previewStrip.style.display = 'none'; return; }
     previewStrip.style.display = 'flex';
 
-    // File thumbnails — instant via object URL
-    fileList.forEach(f => {
+    // File thumbnails — instant via object URL; × removes the file from the queue
+    fileList.forEach((f, i) => {
       const img = document.createElement('img');
       img.src   = URL.createObjectURL(f);
       img.title = f.name;
       img.style.cssText = thumbStyle();
       img.onload = () => URL.revokeObjectURL(img.src);
-      previewStrip.appendChild(img);
+      previewStrip.appendChild(removableThumb(img, () => { fileList.splice(i, 1); updateQueue(); }));
     });
 
     // URL thumbnails — attempt to load, fall back to placeholder on error
-    urls.forEach(url => {
+    urls.forEach((url, i) => {
       const img = document.createElement('img');
       img.src   = url;
       img.title = url;
       img.style.cssText = thumbStyle();
+      const removeUrl = () => {
+        urlInput.value = getUrls().filter((_, j) => j !== i).join('\n');
+        updateQueue();
+      };
       img.onerror = () => {
-        // Replace broken image with a labelled placeholder
         const ph = document.createElement('div');
         ph.title = url;
         ph.style.cssText = thumbStyle() + ';background:var(--border);display:flex;' +
@@ -101,7 +104,7 @@ async function _pool(items, concurrency, fn) {
         ph.textContent = 'URL';
         img.replaceWith(ph);
       };
-      previewStrip.appendChild(img);
+      previewStrip.appendChild(removableThumb(img, removeUrl));
     });
 
     // Base64 thumbnail
@@ -118,8 +121,25 @@ async function _pool(items, concurrency, fn) {
         ph.textContent = 'B64';
         img.replaceWith(ph);
       };
-      previewStrip.appendChild(img);
+      previewStrip.appendChild(removableThumb(img, () => { if (b64Input) b64Input.value = ''; updateQueue(); }));
     });
+  }
+
+  // Wrap a thumbnail with a red × overlay that removes it from the upload queue.
+  function removableThumb(child, onRemove) {
+    const wrap = document.createElement('div');
+    wrap.style.cssText = 'position:relative;display:inline-block;line-height:0;flex-shrink:0';
+    wrap.appendChild(child);
+    const x = document.createElement('button');
+    x.type = 'button';
+    x.title = 'Remove';
+    x.textContent = '×';
+    x.style.cssText = 'position:absolute;top:-6px;right:-6px;width:18px;height:18px;border-radius:50%;' +
+      'border:none;background:var(--danger);color:#fff;font-size:11px;line-height:18px;text-align:center;' +
+      'cursor:pointer;padding:0';
+    x.addEventListener('click', e => { e.stopPropagation(); onRemove(); });
+    wrap.appendChild(x);
+    return wrap;
   }
 
   // ---------------------------------------------------------------------------

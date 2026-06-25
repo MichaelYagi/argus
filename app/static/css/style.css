@@ -129,6 +129,18 @@ a:hover { text-decoration: underline; }
   .nav-mobile   { display: flex !important; }
   .nav-burger   { display: block; }
   .dashboard-grid { grid-template-columns: 1fr !important; }
+
+  /* Identity/page headers wrap instead of scrolling sideways */
+  .page-header { flex-wrap: wrap; }
+  .page-header .nav-spacer { display: none; }
+
+  /* Source-image lightbox always fits the viewport */
+  .src-modal img { max-width: 96vw; max-height: 86vh; }
+
+  /* Review cards: checkbox + photo on the first row, everything stacked underneath */
+  .rc-card > div { flex-wrap: wrap; }
+  .rc-card .rc-info { flex: 1 1 100% !important; margin-top: 8px; }
+  .rc-card .rc-info > div { flex-wrap: wrap; }
 }
 
 /* ---------- Buttons ---------- */

@@ -23,6 +23,12 @@
 </div>
 {% endif %}
 
+<style>
+  /* Keep API-key columns separated and on one line; the wrapper scrolls, not the page. */
+  .apikey-table th, .apikey-table td { padding: 8px 16px 8px 0 !important; white-space: nowrap; vertical-align: top; }
+  .apikey-table th:last-child, .apikey-table td:last-child { padding-right: 0 !important; }
+</style>
+
 <!-- API Key management -->
 <div class="card" style="margin-bottom:16px">
   <h2 style="margin-bottom:12px">API key</h2>
@@ -30,7 +36,8 @@
   {% set revoked_keys = keys | rejectattr('is_active') | list %}
 
   {% if active_keys %}
-  <table style="width:100%;font-size:13px;border-collapse:collapse;margin-bottom:8px">
+  <div style="overflow-x:auto;-webkit-overflow-scrolling:touch;margin-bottom:8px">
+  <table class="apikey-table" style="width:100%;font-size:13px;border-collapse:collapse;min-width:520px">
     <thead>
       <tr style="border-bottom:1px solid var(--border)">
         <th style="text-align:left;padding:6px 0">Label</th>
@@ -68,6 +75,7 @@
       {% endfor %}
     </tbody>
   </table>
+  </div>
   {% else %}
   <p class="muted" style="margin-bottom:8px">No active keys.</p>
   {% endif %}
@@ -75,7 +83,8 @@
   {% if revoked_keys %}
   <details style="margin-bottom:8px">
     <summary class="muted" style="cursor:pointer;font-size:12px">{{ revoked_keys|length }} revoked key{{ 's' if revoked_keys|length != 1 }}</summary>
-    <table style="width:100%;font-size:12px;border-collapse:collapse;margin-top:6px;opacity:.7">
+    <div style="overflow-x:auto;-webkit-overflow-scrolling:touch">
+    <table class="apikey-table" style="width:100%;font-size:12px;border-collapse:collapse;margin-top:6px;opacity:.7;min-width:420px">
       <tbody>
         {% for k in revoked_keys %}
         <tr style="border-bottom:1px solid var(--border)">
@@ -95,6 +104,7 @@
         {% endfor %}
       </tbody>
     </table>
+    </div>
   </details>
   {% endif %}
   <div style="margin-top:14px;display:flex;flex-direction:column;gap:10px">

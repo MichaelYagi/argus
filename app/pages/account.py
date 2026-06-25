@@ -55,7 +55,8 @@ def _render(request: Request, user, error: str = "", success: str = ""):
     managed = store.list_managed_users(user["id"]) if user["is_admin"] else []
     keys = store.list_api_keys(user["id"])
     environments = store.list_environments(user["id"])
-    current_env_id = request.session.get("environment_id")
+    current_env_id = request.session.get("environment_id") or store.get_default_environment_id(user["id"])
+    env_name = next((e["name"] for e in environments if e["id"] == current_env_id), "default")
     return templates.TemplateResponse(request, "account.html", {
         "username": user["username"],
         "is_admin": bool(user["is_admin"]),
@@ -71,6 +72,8 @@ def _render(request: Request, user, error: str = "", success: str = ""):
         "locales": LOCALES,
         "environments": [dict(e) for e in environments],
         "current_env_id": current_env_id,
+        "environment_id": current_env_id,
+        "environment_name": env_name,
         "show_env_switcher": False,
     })
 

@@ -26,11 +26,17 @@
               placeholder="data:image/jpeg;base64,... or raw base64 string"
               style="font-size:12px;font-family:monospace;resize:vertical"></textarea>
   </div>
+  <div id="enroll-preview-wrap" style="display:none;position:relative;width:48px;
+       line-height:0;margin-bottom:12px">
+    <img id="enroll-preview"
+         style="width:48px;height:48px;object-fit:cover;border-radius:4px;border:1px solid var(--border)">
+    <button type="button" id="enroll-preview-x" title="Remove photo"
+            style="position:absolute;top:-6px;right:-6px;width:18px;height:18px;border-radius:50%;
+                   border:none;background:var(--danger);color:#fff;font-size:11px;line-height:18px;
+                   text-align:center;cursor:pointer;padding:0">&times;</button>
+  </div>
   <div style="display:flex;align-items:center;gap:12px;margin-top:4px">
     <button class="btn btn-primary" id="enroll-btn">Enroll</button>
-    <img id="enroll-preview" hidden
-         style="width:48px;height:48px;object-fit:cover;border-radius:4px;
-                border:1px solid var(--border)">
   </div>
   <div id="result" style="margin-top:12px"></div>
 </div>
@@ -44,19 +50,33 @@
   const ui      = document.getElementById('url-input');
   const b64     = document.getElementById('b64-input');
   const prevImg = document.getElementById('enroll-preview');
+  const prevWrap = document.getElementById('enroll-preview-wrap');
+
+  function esc(s) {
+    return String(s).replace(/[&<>"']/g, c => (
+      {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  }
 
   function showPreview(src) {
-    if (!prevImg) return;
-    prevImg.hidden = false;
+    if (!prevWrap) return;
+    prevWrap.style.display = 'block';
     prevImg.src = src;
-    prevImg.onerror = () => { prevImg.hidden = true; };
+    prevImg.onerror = () => { prevWrap.style.display = 'none'; };
   }
 
   function clearPreview() {
-    if (!prevImg) return;
-    prevImg.hidden = true;
+    if (!prevWrap) return;
+    prevWrap.style.display = 'none';
     prevImg.src = '';
   }
+
+  // Remove the chosen photo entirely (file/url/base64) before enrolling.
+  function clearInputs() {
+    fi.value = ''; ui.value = '';
+    if (b64) b64.value = '';
+    clearPreview();
+  }
+  document.getElementById('enroll-preview-x').addEventListener('click', clearInputs);
 
   dz.addEventListener('dragover', e => { e.preventDefault(); dz.classList.add('over'); });
   dz.addEventListener('dragleave', () => dz.classList.remove('over'));
@@ -96,11 +116,9 @@
     const resp = await fetch('/api/faces/enroll', { method: 'POST', body: fd });
     const data = await resp.json();
     if (resp.ok) {
-      msg(`Enrolled "${name}" successfully (identity #${data.identity_id}).`, 'success');
       document.getElementById('name-input').value = '';
-      fi.value = ''; ui.value = '';
-      if (b64) b64.value = '';
-      clearPreview();
+      clearInputs();
+      renderEnrollResult(data, name);
     } else {
       msg(data.detail || 'Enrollment failed.', 'error');
     }
@@ -110,6 +128,42 @@
     const el = document.getElementById('result');
     el.className = type === 'error' ? 'alert alert-error' : type === 'success' ? 'alert alert-success' : 'muted';
     el.textContent = text;
+  }
+
+  // Detect-style result: the source image with a box around the enrolled face.
+  function renderEnrollResult(data, name) {
+    const el = document.getElementById('result');
+    el.className = '';
+    el.innerHTML =
+      `<div class="alert alert-success" style="margin-bottom:10px">Enrolled "${esc(name)}" (identity #${data.identity_id}).</div>` +
+      (data.source_image_url
+        ? `<div class="img-wrap" style="position:relative;display:inline-block;max-width:100%;line-height:0">
+             <img class="enroll-result-img" src="${esc(data.source_image_url)}"
+                  style="max-width:100%;height:auto;border-radius:4px;display:block"></div>`
+        : '');
+    if (!data.source_image_url || !data.bbox) return;
+    const wrap = el.querySelector('.img-wrap');
+    const img  = el.querySelector('.enroll-result-img');
+    const draw = () => {
+      if (!img.naturalWidth) return;
+      wrap.querySelectorAll('.eo-box').forEach(b => b.remove());
+      const sx = img.clientWidth / img.naturalWidth, sy = img.clientHeight / img.naturalHeight;
+      const b = data.bbox;
+      const box = document.createElement('div');
+      box.className = 'eo-box';
+      box.style.cssText =
+        `position:absolute;border:2px solid #3a8ef6;border-radius:2px;box-sizing:border-box;` +
+        `left:${b.x * sx}px;top:${b.y * sy}px;width:${b.w * sx}px;height:${b.h * sy}px`;
+      const tag = document.createElement('span');
+      tag.textContent = name;
+      tag.style.cssText =
+        `position:absolute;left:-2px;top:-18px;background:#3a8ef6;color:#fff;font-size:10px;` +
+        `line-height:14px;padding:0 4px;border-radius:2px;white-space:nowrap`;
+      box.appendChild(tag);
+      wrap.appendChild(box);
+    };
+    if (img.complete && img.naturalWidth) draw(); else img.addEventListener('load', draw);
+    window.addEventListener('resize', draw);
   }
 })();
 </script>
