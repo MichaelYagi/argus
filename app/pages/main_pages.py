@@ -58,6 +58,11 @@ def _base(request: Request, active: str = "", show_env_switcher: bool = True) ->
     if not user_id:
         return None
     user = store.get_user_by_id(user_id)
+    if user is None:
+        # Stale session — the cookie points to a user that no longer exists
+        # (e.g. a fresh/reset DB). Treat as unauthenticated and clear the session.
+        request.session.clear()
+        return None
     env_id = get_session_env(request)
     if not env_id:
         env_id = store.get_last_environment_id(user_id) or store.get_default_environment_id(user_id)
