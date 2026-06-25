@@ -265,11 +265,15 @@
     if (r.faces.length) {
       html += `<table style="width:100%;font-size:12px;border-collapse:collapse;margin-top:8px">
         <thead><tr style="border-bottom:1px solid var(--border);text-align:left">
-          <th style="padding:4px 0">Face</th><th>Confidence</th><th>Age</th><th>Gender</th>
+          <th style="padding:4px 0">Face</th><th>Looks like</th><th>Confidence</th><th>Age</th><th>Gender</th>
         </tr></thead><tbody>`;
       r.faces.forEach((f, i) => {
+        const match = f.label
+          ? `${esc(f.label)} <span class="muted">${(f.similarity * 100).toFixed(0)}%</span>`
+          : '<span class="muted">—</span>';
         html += `<tr style="border-bottom:1px solid var(--border)">
           <td style="padding:4px 0">#${i + 1}</td>
+          <td>${match}</td>
           <td>${(f.confidence * 100).toFixed(0)}%</td>
           <td>${f.age != null ? f.age : '-'}</td>
           <td>${f.gender != null ? esc(f.gender) : '-'}</td></tr>`;
@@ -312,7 +316,8 @@
     if (!img.naturalWidth) return;
     wrap.querySelectorAll('.test-overlay').forEach(e => e.remove());
     r.objects.forEach(o => boxEl(wrap, img, o.bbox, OBJ_COLOR, `${o.class_name} ${(o.confidence * 100).toFixed(0)}%`));
-    r.faces.forEach((f, i) => boxEl(wrap, img, f.bbox, FACE_COLOR, `Face #${i + 1}`));
+    r.faces.forEach((f, i) => boxEl(wrap, img, f.bbox, FACE_COLOR,
+      f.label ? `${f.label} ${(f.similarity * 100).toFixed(0)}%` : `Face #${i + 1}`));
   }
 
   window.addEventListener('resize', () => {

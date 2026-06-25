@@ -291,12 +291,15 @@ async def test_detect(
 
     raw = await acquire_image(request)
     img = open_and_validate(raw)
-    return _stateless_detect(img, type_param)
+    return _stateless_detect(img, type_param, user_id, environment_id)
 
 
-def _stateless_detect(img: Any, type_param: str) -> dict:
+def _stateless_detect(
+    img: Any, type_param: str, user_id: int | None = None, environment_id: int | None = None,
+) -> dict:
     """Run the requested engines on one image and return bboxes + counts.
-    Stores nothing. Shared by /api/test and /api/test/batch."""
+    Stores nothing. Faces also get a read-only best-match (highest similarity, no
+    threshold) against the caller's enrolled people. Shared by /api/test[/batch]."""
     img_array = to_rgb_array(img)
 
     faces: list[dict] = []
@@ -307,14 +310,27 @@ def _stateless_detect(img: Any, type_param: str) -> dict:
     if type_param in ("faces", "all"):
         face_engine = registry.get_face_engine()
         if face_engine is not None:
+            from app.core import face_index
             face_available = True
             for det in face_engine.detect(img_array):
-                faces.append({
+                face = {
                     "bbox": {"x": det.bbox[0], "y": det.bbox[1],
                              "w": det.bbox[2], "h": det.bbox[3]},
                     "confidence": round(float(det.confidence), 4),
+                    "identity_id": None, "label": None, "similarity": None,
                     **_face_attrs(det),
-                })
+                }
+                # Read-only identification — top match regardless of threshold. No writes.
+                if user_id is not None:
+                    ranked = face_index.search(det.embedding, user_id, environment_id, threshold=0.0, k=1)
+                    if ranked:
+                        iid, sim = ranked[0]
+                        ident = store.get_identity(iid, user_id, environment_id)
+                        if ident:
+                            face["identity_id"] = iid
+                            face["label"] = ident["label"]
+                            face["similarity"] = round(float(sim), 4)
+                faces.append(face)
 
     if type_param in ("objects", "all"):
         object_engine = registry.get_object_engine()
@@ -401,7 +417,7 @@ async def test_detect_batch(
             continue
         try:
             img = open_and_validate(raw)
-            base.update(_stateless_detect(img, detect_type))
+            base.update(_stateless_detect(img, detect_type, user_id, environment_id))
         except HTTPException as exc:
             base["error"] = exc.detail
         except Exception as exc:

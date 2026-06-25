@@ -12,7 +12,7 @@ Self-hosted face and object recognition you can both **use and build on** — a 
 - Suggested people — clusters unlabeled faces into proposed identities; name a cluster to enroll everyone in it at once
 - Justified infinite-scroll galleries per identity with cover photo selection and bulk operations
 - Tag page — full source image with clickable face and object bbox overlays for labelling
-- Test page — check whether an image contains people or objects without storing, enrolling, or matching anything
+- Test page — check whether an image contains people or objects, and who each face looks like, without storing or enrolling anything (read-only)
 - Integration helpers — opaque `external_ref` correlation ids, a change feed for delta sync, a capabilities manifest, and batch label/read endpoints
 - Export and import with merge — move recognition data between instances
 - Live settings (thresholds, GPU, crop padding) — no restart needed
@@ -332,19 +332,22 @@ curl -X POST \
 
 Optional `threshold` (override) and `top_n` (suggestion count) via form field, JSON, or query.
 
-**Example — test (read-only): "is there a person or object in this image?"**
+**Example — test (read-only): "is there a person or object in this image, and who?"**
 
-Pure detection — runs the face and object engines and returns bounding boxes plus counts.
-Stores nothing, enrolls nothing, matches nothing. `?type=faces|objects|all` (default `all`)
-selects which engines run; an engine with no active model is skipped (its list is empty and
-`available` is false) rather than erroring. Also available as a UI page at `/test`.
+Detection plus read-only recognition — runs the face and object engines, returns bounding
+boxes plus counts, and for each face attaches the **best matching enrolled person**
+(`label` + `similarity`, highest score regardless of threshold; `null` if no one is enrolled).
+**Stores nothing and enrolls nothing** — the match is a lookup, not a write. `?type=faces|objects|all`
+(default `all`) selects which engines run; an engine with no active model is skipped (its list is
+empty and `available` is false) rather than erroring. Also available as a UI page at `/test`.
 
 ```bash
 curl -X POST \
   -H "X-API-Key: argus_..." \
   -F "file=@photo.jpg" \
   "http://localhost:8100/api/test?type=all"
-# → {"faces": [{"bbox": {...}, "confidence": 0.95, "age": 30, "gender": "F", "pose": [...]}],
+# → {"faces": [{"bbox": {...}, "confidence": 0.95, "label": "Noah", "similarity": 0.87,
+#               "identity_id": 2, "age": 30, "gender": "F", "pose": [...]}],
 #    "objects": [{"bbox": {...}, "confidence": 0.9, "class_name": "person", "class_id": 0}],
 #    "counts": {"faces": 1, "objects": 1},
 #    "available": {"faces": true, "objects": true}}

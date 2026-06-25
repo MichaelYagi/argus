@@ -9,8 +9,12 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Added
 
-- **More object detection models** in the registry, all producing bounding boxes: YOLOv8l, YOLO11 (s/m/l/x), YOLOv10 (s/m/l/x), and RT-DETR (l/x — a transformer detector, loaded via Ultralytics' `RTDETR`). Existing YOLO-World open-vocab models remain.
+- **More object detection models** in the registry, all producing bounding boxes: YOLOv8l, YOLO11 (s/m/l/x), YOLOv10 (s/m/l/x), and RT-DETR (l/x — a transformer detector, loaded via Ultralytics' `RTDETR`); plus the compact `buffalo_sc` face pack. Existing YOLO-World open-vocab models remain.
 - **Each model now has a short description** (stored in a new `models.description` column) shown on the Models page and returned by `/api/models`.
+
+### Changed
+
+- **The Test page now identifies faces** — each detected face shows the best-matching enrolled person (name + similarity, top match regardless of threshold) on the box and in the result table. Still read-only: nothing is stored, enrolled, or queued for review. `/api/test` and `/api/test/batch` faces gain `identity_id`/`label`/`similarity` fields (`null` when no one is enrolled).
 
 ---
 
