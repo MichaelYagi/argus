@@ -149,3 +149,44 @@ def test_clusters_no_active_model(client):
 def test_clusters_requires_api_key(client):
     r = client.get("/api/clusters")
     assert r.status_code in (401, 403)
+
+
+def test_dismiss_hides_from_clusters_but_keeps_row(client):
+    user_id, key = _create_user_and_key()
+    mid = _activate_face_model()
+    a1 = _insert_unknown_face(user_id, mid, _vec(1.0, 0.0), "a1.jpg")
+    a2 = _insert_unknown_face(user_id, mid, _vec(0.99, 0.02), "a2.jpg")
+
+    r = client.post("/api/detections/dismiss", json={"detection_ids": [a1, a2]},
+                    headers={"X-API-Key": key})
+    assert r.status_code == 200 and r.json()["dismissed"] == 2
+
+    # Gone from Suggested...
+    data = client.get("/api/clusters?threshold=0.9", headers={"X-API-Key": key}).json()
+    assert data["clusters"] == [] and data["unclustered"] == 0
+    # ...but the rows still exist.
+    with store._connect() as conn:
+        n = conn.execute("SELECT COUNT(*) FROM detections WHERE user_id = ?", (user_id,)).fetchone()[0]
+    assert n == 2
+
+
+def test_delete_removes_rows(client):
+    user_id, key = _create_user_and_key()
+    mid = _activate_face_model()
+    a1 = _insert_unknown_face(user_id, mid, _vec(1.0, 0.0), "a1.jpg")
+    a2 = _insert_unknown_face(user_id, mid, _vec(0.99, 0.02), "a2.jpg")
+
+    r = client.post("/api/detections/delete", json={"detection_ids": [a1, a2]},
+                    headers={"X-API-Key": key})
+    assert r.status_code == 200 and r.json()["deleted"] == 2
+
+    with store._connect() as conn:
+        n = conn.execute("SELECT COUNT(*) FROM detections WHERE user_id = ?", (user_id,)).fetchone()[0]
+    assert n == 0
+
+
+def test_dismiss_requires_ids(client):
+    _, key = _create_user_and_key()
+    r = client.post("/api/detections/dismiss", json={"detection_ids": []},
+                    headers={"X-API-Key": key})
+    assert r.status_code == 400

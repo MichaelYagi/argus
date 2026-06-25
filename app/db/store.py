@@ -184,6 +184,8 @@ def _migrate(conn: sqlite3.Connection) -> None:
         conn.execute("ALTER TABLE detections ADD COLUMN embedding BLOB")
     if "attributes" not in existing_cols:
         conn.execute("ALTER TABLE detections ADD COLUMN attributes TEXT")
+    if "ignored" not in existing_cols:
+        conn.execute("ALTER TABLE detections ADD COLUMN ignored INTEGER NOT NULL DEFAULT 0")
 
     existing_user_cols = {r[1] for r in conn.execute("PRAGMA table_info(users)")}
     if "is_approved" not in existing_user_cols:
@@ -777,9 +779,56 @@ def get_unknown_face_embeddings(
                FROM detections
                WHERE user_id = ? AND environment_id = ? AND type = 'face'
                  AND identity_id IS NULL AND embedding IS NOT NULL AND model_id = ?
+                 AND ignored = 0
                ORDER BY id""",
             (user_id, env_id, model_id),
         ).fetchall()
+
+
+def dismiss_detections(user_id: int, detection_ids: list[int], environment_id: int | None = None) -> int:
+    """Mark detections as ignored so they drop out of Suggested people, keeping the rows
+    (still visible on the tag page / in the image's data). Returns how many were updated."""
+    if not detection_ids:
+        return 0
+    with _connect() as conn:
+        env_id = _resolve_env(conn, user_id, environment_id)
+        placeholders = ",".join("?" * len(detection_ids))
+        cur = conn.execute(
+            f"""UPDATE detections SET ignored = 1
+                WHERE user_id = ? AND environment_id = ? AND id IN ({placeholders})""",
+            (user_id, env_id, *detection_ids),
+        )
+        return cur.rowcount
+
+
+def delete_detections(
+    user_id: int, detection_ids: list[int], environment_id: int | None = None
+) -> list[str]:
+    """Permanently delete detections, returning their crop filenames so the caller can
+    remove the files. Reconciles any orphaned references and records change events."""
+    if not detection_ids:
+        return []
+    with _connect() as conn:
+        env_id = _resolve_env(conn, user_id, environment_id)
+        placeholders = ",".join("?" * len(detection_ids))
+        rows = conn.execute(
+            f"""SELECT id, crop_path FROM detections
+                WHERE user_id = ? AND environment_id = ? AND id IN ({placeholders})""",
+            (user_id, env_id, *detection_ids),
+        ).fetchall()
+        if not rows:
+            return []
+        ids = [r["id"] for r in rows]
+        crops = [r["crop_path"] for r in rows]
+        del_ph = ",".join("?" * len(ids))
+        conn.execute(
+            f"DELETE FROM detections WHERE user_id = ? AND environment_id = ? AND id IN ({del_ph})",
+            (user_id, env_id, *ids),
+        )
+        for did in ids:
+            record_change(conn, user_id, env_id, "detection", did, "deleted")
+        _reconcile_orphan_references(conn, user_id)
+        return crops
 
 
 def get_unknown_detections(

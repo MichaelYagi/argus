@@ -11,6 +11,8 @@
   Unlabeled faces that match nobody enrolled, grouped by similarity. Click faces to select,
   then name them. Deselect a wrong face to leave it out (remove); select part of a group to
   split it; select across groups to merge. "Select all" names a whole clean group.
+  <strong>Dismiss</strong> hides selected faces from here (keeps the record);
+  <strong>Delete</strong> removes the crops permanently.
 </p>
 
 <div class="card" style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:16px">
@@ -31,6 +33,8 @@
   <input type="text" id="sel-name" placeholder="Name selected faces" maxlength="120"
          style="flex:1;min-width:160px">
   <button class="btn btn-primary" id="sel-name-btn">Name &amp; enroll</button>
+  <button class="btn btn-ghost" id="sel-dismiss" title="Hide from Suggested, keep the record">Dismiss</button>
+  <button class="btn btn-danger" id="sel-delete" title="Permanently delete these crops">Delete</button>
   <button class="btn btn-ghost" id="sel-clear">Clear</button>
   <span id="sel-err" style="font-size:12px;color:#e53e3e"></span>
 </div>
@@ -48,6 +52,8 @@
   const selCount = document.getElementById('sel-count');
   const selName  = document.getElementById('sel-name');
   const selBtn   = document.getElementById('sel-name-btn');
+  const selDismiss = document.getElementById('sel-dismiss');
+  const selDelete  = document.getElementById('sel-delete');
   const selClear = document.getElementById('sel-clear');
   const selErr   = document.getElementById('sel-err');
 
@@ -92,52 +98,94 @@
 
   const BTN_LABEL = selBtn.textContent;
 
-  function setBusy(on) {
-    selBtn.disabled = on;
-    selClear.disabled = on;
-    selName.disabled = on;
-    selBtn.textContent = on ? 'Enrolling…' : BTN_LABEL;
+  function setBusy(on, busyText) {
+    [selBtn, selDismiss, selDelete, selClear, selName].forEach(el => { el.disabled = on; });
+    selBtn.textContent = on ? (busyText || 'Working…') : BTN_LABEL;
     bar.style.opacity = on ? '0.7' : '1';
     bar.style.cursor = on ? 'progress' : '';
   }
 
-  selBtn.addEventListener('click', async () => {
-    if (selBtn.disabled) return;
-    const label = selName.value.trim();
-    selErr.textContent = '';
-    if (!label) { selErr.textContent = 'Enter a name'; return; }
-    if (!selected.size) return;
-    setBusy(true);
+  function dropSelectedFaces(faces) {
+    faces.forEach(([id, face]) => {
+      const card = face.closest('.cluster-card');
+      face.remove();
+      selected.delete(id);
+      if (card && !card.querySelector('.face')) card.remove();
+      else if (card) refreshCardCount(card);
+    });
+    updateBar();
+    if (!wrap.querySelector('.cluster-card')) statusEl.textContent = 'No more suggestions.';
+  }
 
-    const faces = [...selected.entries()];  // [id, faceEl]
-    const items = faces.map(([id]) => ({ detection_id: id, label }));
+  // Run a bulk action over the selection: POST the ids, drop the faces on success.
+  async function runOnSelection(url, extraBody, busyText, errMsg) {
+    if (!selected.size) return;
+    selErr.textContent = '';
+    setBusy(true, busyText);
+    const faces = [...selected.entries()];
+    const ids = faces.map(([id]) => id);
     try {
-      const resp = await fetch('/api/detections/label', {
+      const resp = await fetch(url, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ items }),
+        body: JSON.stringify({ detection_ids: ids, ...extraBody }),
       });
       if (!resp.ok) {
         const d = await resp.json().catch(() => ({}));
-        selErr.textContent = d.detail || 'Failed to name faces';
+        selErr.textContent = d.detail || errMsg;
         return;
       }
-      // Named faces are now enrolled — drop them from the view.
-      faces.forEach(([id, face]) => {
-        const card = face.closest('.cluster-card');
-        face.remove();
-        selected.delete(id);
-        if (card && !card.querySelector('.face')) card.remove();
-        else if (card) refreshCardCount(card);
-      });
+      dropSelectedFaces(faces);
       selName.value = '';
-      updateBar();
-      if (!wrap.querySelector('.cluster-card')) statusEl.textContent = 'All suggestions named.';
     } catch (err) {
       selErr.textContent = 'Network error — try again';
     } finally {
       setBusy(false);
     }
+  }
+
+  selBtn.addEventListener('click', () => {
+    if (selBtn.disabled) return;
+    const label = selName.value.trim();
+    selErr.textContent = '';
+    if (!label) { selErr.textContent = 'Enter a name'; return; }
+    // Naming uses the batch-label contract (items: [{detection_id, label}]).
+    const faces = [...selected.entries()];
+    const items = faces.map(([id]) => ({ detection_id: id, label }));
+    (async () => {
+      if (!selected.size) return;
+      setBusy(true, 'Enrolling…');
+      try {
+        const resp = await fetch('/api/detections/label', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ items }),
+        });
+        if (!resp.ok) {
+          const d = await resp.json().catch(() => ({}));
+          selErr.textContent = d.detail || 'Failed to name faces';
+          return;
+        }
+        dropSelectedFaces(faces);
+        selName.value = '';
+      } catch (err) {
+        selErr.textContent = 'Network error — try again';
+      } finally {
+        setBusy(false);
+      }
+    })();
+  });
+
+  selDismiss.addEventListener('click', () => {
+    if (selDismiss.disabled) return;
+    runOnSelection('/api/detections/dismiss', {}, 'Dismissing…', 'Failed to dismiss');
+  });
+
+  selDelete.addEventListener('click', () => {
+    if (selDelete.disabled) return;
+    const n = selected.size;
+    if (!confirm(`Permanently delete ${n} crop${n === 1 ? '' : 's'}? This cannot be undone.`)) return;
+    runOnSelection('/api/detections/delete', {}, 'Deleting…', 'Failed to delete');
   });
 
   function refreshCardCount(card) {

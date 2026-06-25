@@ -166,6 +166,11 @@ and you're mostly done.
   - **Remove a wrong face** — "Select all", then deselect the odd one out before naming; it stays unknown.
   - **Split** — select part of a group and name it, then name the rest separately.
   - **Merge** — select faces across two groups and name them together as one person.
+  - **Dismiss** — hide selected faces from Suggested without deleting them (sets an `ignored`
+    flag; the detection still shows on the tag page and in the image's data). For real faces
+    you just won't enroll.
+  - **Delete** — permanently remove the selected crops everywhere. For junk (false positives,
+    partial faces, strangers you'll never name).
 
   "Select all" on a clean group then name is the one-click fast path.
 - Naming uses the same batch-label endpoint as everywhere else, so named faces are enrolled

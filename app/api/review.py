@@ -286,6 +286,51 @@ async def label_detections_batch(
     return {"results": results}
 
 
+class _IdsBody(BaseModel):
+    detection_ids: list[int]
+
+
+@router.post("/api/detections/dismiss", status_code=200)
+async def dismiss_detections(
+    body: _IdsBody,
+    user_id: int = Depends(require_auth),
+    environment_id: int = Depends(require_env_id),
+):
+    """Hide detections from Suggested people without deleting them (sets an ignored flag).
+    The rows remain visible on the tag page and in the image's data."""
+    if not body.detection_ids:
+        raise HTTPException(400, "detection_ids is required")
+    if len(body.detection_ids) > _BATCH_MAX:
+        raise HTTPException(400, f"Too many items (max {_BATCH_MAX})")
+    n = store.dismiss_detections(user_id, body.detection_ids, environment_id)
+    return {"dismissed": n}
+
+
+@router.post("/api/detections/delete", status_code=200)
+async def delete_detections(
+    body: _IdsBody,
+    user_id: int = Depends(require_auth),
+    environment_id: int = Depends(require_env_id),
+):
+    """Permanently delete detections and their crop files. For junk crops you never want."""
+    from app.core.paths import crops_dir
+    if not body.detection_ids:
+        raise HTTPException(400, "detection_ids is required")
+    if len(body.detection_ids) > _BATCH_MAX:
+        raise HTTPException(400, f"Too many items (max {_BATCH_MAX})")
+    crops = store.delete_detections(user_id, body.detection_ids, environment_id)
+    removed = 0
+    for crop in crops:
+        try:
+            (crops_dir() / crop).unlink(missing_ok=True)
+            removed += 1
+        except OSError:
+            pass
+    from app.core import face_index as _fi
+    _fi.rebuild_user(user_id, environment_id)
+    return {"deleted": len(crops), "crops_removed": removed}
+
+
 # ---------------------------------------------------------------------------
 # Internal
 # ---------------------------------------------------------------------------
