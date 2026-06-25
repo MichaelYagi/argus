@@ -78,20 +78,88 @@ document.addEventListener('DOMContentLoaded', function() {
   if (envModal) {
     const openEnv  = () => { envModal.style.display = 'flex'; };
     const closeEnv = () => { envModal.style.display = 'none'; };
+    const activeId = parseInt(envModal.dataset.envId, 10);
     document.querySelectorAll('.env-manage-btn').forEach(b =>
       b.addEventListener('click', e => { e.stopPropagation(); openEnv(); }));
     envModal.querySelectorAll('.env-modal-close').forEach(b => b.addEventListener('click', closeEnv));
     envModal.addEventListener('click', e => { if (e.target === envModal) closeEnv(); });
     document.addEventListener('keydown', e => { if (e.key === 'Escape') closeEnv(); });
-    // Delete needs a confirm modal before submitting its form.
-    envModal.querySelectorAll('.env-del-btn').forEach(btn => btn.addEventListener('click', () => {
+
+    const envEsc = s => String(s).replace(/[&<>"']/g, c =>
+      ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+
+    // Delete confirm via delegation, so rebuilt rows keep working.
+    envModal.addEventListener('click', e => {
+      const btn = e.target.closest('.env-del-btn');
+      if (!btn) return;
       const name = btn.dataset.name || 'this environment';
       showConfirm(
         `Delete environment "${name}"? All its identities, detections, and crops are permanently removed.`,
         () => btn.closest('form').submit(),
         { confirmText: 'Delete', danger: true },
       );
-    }));
+    });
+
+    // Rebuild the environment list (used after an AJAX create) so delete-visibility
+    // and the Active marker stay correct without a full page reload.
+    function envRow(env, total) {
+      const isActive = env.id === activeId;
+      const mid = isActive
+        ? `<span class="btn" style="padding:3px 12px;font-size:12px;background:transparent;border:1px solid var(--success);color:var(--success);cursor:default">Active</span>`
+        : `<form method="post" action="/switch-environment/${env.id}" style="display:inline">
+             <button type="submit" class="btn btn-primary" style="padding:3px 12px;font-size:12px;border:1px solid transparent">Select</button>
+           </form>`;
+      const del = total > 1
+        ? `<form method="post" action="/environments/${env.id}/delete" class="env-del-form" style="display:inline">
+             <button type="button" class="btn btn-danger env-del-btn" data-name="${envEsc(env.name)}" style="padding:3px 10px;font-size:12px">Delete</button>
+           </form>` : '';
+      return `<div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center;padding:8px 0;border-bottom:1px solid var(--border)">
+        <form method="post" action="/environments/${env.id}/rename" style="display:flex;gap:6px;align-items:center;flex:1;min-width:200px">
+          <input type="text" name="name" value="${envEsc(env.name)}" maxlength="120" style="flex:1;min-width:0;font-size:13px">
+          <button type="submit" class="btn btn-ghost" style="padding:3px 10px;font-size:12px">Rename</button>
+        </form>${mid}${del}</div>`;
+    }
+    function rebuildList(envs) {
+      const list = document.getElementById('env-list');
+      if (list) list.innerHTML = envs.map(e => envRow(e, envs.length)).join('');
+    }
+
+    // Create via AJAX so the modal stays open; then ask whether to switch.
+    const createForm = document.getElementById('env-create-form');
+    if (createForm) {
+      const input = createForm.querySelector('input[name="name"]');
+      const btn   = createForm.querySelector('button');
+      createForm.addEventListener('submit', async e => {
+        e.preventDefault();
+        const name = input.value.trim();
+        if (!name) return;
+        btn.disabled = true;
+        try {
+          const resp = await fetch('/api/environments', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ name }),
+          });
+          const data = await resp.json().catch(() => ({}));
+          if (!resp.ok) { showMessage(data.detail || 'Could not create environment.'); return; }
+          input.value = '';
+          const listResp = await fetch('/api/environments');
+          if (listResp.ok) rebuildList(await listResp.json());
+          showConfirm(
+            `Environment "${data.name}" created. Switch to it now?`,
+            async () => {
+              await fetch('/switch-environment/' + data.id, { method: 'POST' });
+              window.location.reload();
+            },
+            { confirmText: 'Switch' },
+          );
+        } catch (err) {
+          showMessage('Network error — try again.');
+        } finally {
+          btn.disabled = false;
+        }
+      });
+    }
   }
 });
 </script>
@@ -142,15 +210,11 @@ setInterval(_updateReviewBadge, 30000);
   <span class="nav-spacer nav-desktop"></span>
 
   {% if environments is defined and environments %}
-  <span class="nav-desktop" title="Active environment"
-        style="font-size:11px;color:var(--nav-text);opacity:.85;white-space:nowrap">
-    {{ environment_name | default('default') }}
-  </span>
-  <button type="button" class="nav-desktop env-manage-btn"
+  <button type="button" class="nav-desktop env-manage-btn" title="Manage environments"
           style="background:none;border:1px solid rgba(255,255,255,.15);border-radius:5px;
                  padding:3px 8px;cursor:pointer;font-size:11px;color:var(--nav-text);
                  white-space:nowrap;font-family:inherit;margin-right:6px">
-    Manage environments
+    {{ environment_name | default('default') }}
   </button>
   {% endif %}
 
@@ -242,11 +306,10 @@ setInterval(_updateReviewBadge, 30000);
   <a href="/docs"     class="{% if active == 'docs'      %}active{% endif %}">API docs</a>
   {% if environments is defined and environments %}
   <div style="padding:6px 12px;border-top:1px solid var(--border);margin-top:4px">
-    <span style="font-size:11px;color:var(--muted)">Environment: {{ environment_name | default('default') }}</span>
-    <button type="button" class="env-manage-btn"
-            style="display:block;width:100%;text-align:left;margin-top:4px;padding:5px 8px;
+    <button type="button" class="env-manage-btn" title="Manage environments"
+            style="display:block;width:100%;text-align:left;padding:5px 8px;
                    border:none;background:none;cursor:pointer;font-size:12px;color:var(--text);
-                   font-family:inherit">Manage environments</button>
+                   font-family:inherit">Environment: {{ environment_name | default('default') }}</button>
   </div>
   {% endif %}
   {% if username %}
@@ -259,7 +322,8 @@ setInterval(_updateReviewBadge, 30000);
 
 {% if environments is defined and environments %}
 <!-- Manage environments modal -->
-<div id="env-modal" class="modal-overlay" style="display:none;position:fixed;inset:0;
+<div id="env-modal" data-env-id="{{ environment_id }}"
+     style="display:none;position:fixed;inset:0;
      background:rgba(0,0,0,.5);z-index:600;align-items:flex-start;justify-content:center;
      padding:40px 16px;overflow:auto">
   <div style="background:var(--surface);color:var(--text);border-radius:10px;
@@ -270,7 +334,7 @@ setInterval(_updateReviewBadge, 30000);
       <button type="button" class="env-modal-close"
               style="background:none;border:none;cursor:pointer;font-size:20px;color:var(--muted);line-height:1">&times;</button>
     </div>
-    <div style="padding:16px 20px;max-height:60vh;overflow:auto">
+    <div id="env-list" style="padding:16px 20px;max-height:60vh;overflow:auto">
       {% for env in environments %}
       <div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center;padding:8px 0;
                   border-bottom:1px solid var(--border)">
@@ -282,10 +346,11 @@ setInterval(_updateReviewBadge, 30000);
           <button type="submit" class="btn btn-ghost" style="padding:3px 10px;font-size:12px">Rename</button>
         </form>
         {% if env.id == environment_id %}
-        <span class="badge" style="font-size:11px">Active</span>
+        <span class="btn" style="padding:3px 12px;font-size:12px;background:transparent;
+              border:1px solid var(--success);color:var(--success);cursor:default">Active</span>
         {% else %}
         <form method="post" action="/switch-environment/{{ env.id }}" style="display:inline">
-          <button type="submit" class="btn btn-primary" style="padding:3px 12px;font-size:12px">Select</button>
+          <button type="submit" class="btn btn-primary" style="padding:3px 12px;font-size:12px;border:1px solid transparent">Select</button>
         </form>
         {% endif %}
         {% if environments|length > 1 %}
@@ -297,7 +362,7 @@ setInterval(_updateReviewBadge, 30000);
       </div>
       {% endfor %}
     </div>
-    <form method="post" action="/environments/create"
+    <form method="post" action="/environments/create" id="env-create-form"
           style="display:flex;gap:8px;align-items:center;padding:14px 20px;border-top:1px solid var(--border)">
       <input type="text" name="name" placeholder="New environment name" maxlength="120" required
              style="flex:1;min-width:0;font-size:13px">
