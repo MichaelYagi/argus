@@ -173,6 +173,9 @@ def _migrate(conn: sqlite3.Connection) -> None:
     if "key_hint" not in existing_key_cols:
         conn.execute("ALTER TABLE api_keys ADD COLUMN key_hint TEXT NOT NULL DEFAULT ''")
 
+    if "description" not in {r[1] for r in conn.execute("PRAGMA table_info(models)")}:
+        conn.execute("ALTER TABLE models ADD COLUMN description TEXT")
+
     # external_ref: opaque caller-owned correlation id on identities + source_images
     if "external_ref" not in {r[1] for r in conn.execute("PRAGMA table_info(identities)")}:
         conn.execute("ALTER TABLE identities ADD COLUMN external_ref TEXT")
@@ -1601,18 +1604,42 @@ def update_setting(key: str, value: str) -> None:
 # Seed data
 # ---------------------------------------------------------------------------
 
+# (type, name, embedding_dim, description). All object models produce bounding boxes.
 _MODEL_SEED: list[tuple] = [
-    ("face",   "buffalo_l",          512),
-    ("face",   "buffalo_s",          512),
-    ("face",   "antelopev2",         512),
-    ("object", "yolov8n",            None),
-    ("object", "yolov8s",            None),
-    ("object", "yolov8m",            None),
-    ("object", "yolov8x",            None),
-    ("object", "yolo11n",            None),
-    ("object", "yolov8s-worldv2",    None),
-    ("object", "yolov8m-worldv2",    None),
-    ("object", "yolov8l-worldv2",    None),
+    # --- Face (InsightFace packs: detection + ArcFace embeddings + age/gender/pose) ---
+    ("face",   "buffalo_l",       512,  "Large pack (RetinaFace + ArcFace). Best accuracy; recommended default."),
+    ("face",   "buffalo_s",       512,  "Small pack — faster and lighter, slightly lower accuracy than buffalo_l."),
+    ("face",   "buffalo_sc",      512,  "Compact pack — detect + recognize only (no age/gender/pose). Lightest."),
+    ("face",   "antelopev2",      512,  "Alternative ResNet100/glint360k pack. Accuracy comparable to buffalo_l."),
+
+    # --- Object: standard YOLO (fixed 80 COCO classes) ---
+    ("object", "yolov8n",         None, "YOLOv8 nano — fastest, lowest accuracy. 80 COCO classes."),
+    ("object", "yolov8s",         None, "YOLOv8 small — fast with a good speed/accuracy balance. 80 COCO classes."),
+    ("object", "yolov8m",         None, "YOLOv8 medium — more accurate, slower. 80 COCO classes."),
+    ("object", "yolov8l",         None, "YOLOv8 large — higher accuracy, heavier. 80 COCO classes."),
+    ("object", "yolov8x",         None, "YOLOv8 extra-large — most accurate v8, slowest. 80 COCO classes."),
+
+    # --- Object: YOLO11 (newer generation; better accuracy per size) ---
+    ("object", "yolo11n",         None, "YOLO11 nano — newer gen; beats yolov8n at similar speed."),
+    ("object", "yolo11s",         None, "YOLO11 small — newer gen; strong speed/accuracy balance."),
+    ("object", "yolo11m",         None, "YOLO11 medium — newer gen; more accurate, slower."),
+    ("object", "yolo11l",         None, "YOLO11 large — newer gen; high accuracy."),
+    ("object", "yolo11x",         None, "YOLO11 extra-large — newer gen; best YOLO11 accuracy, slowest."),
+
+    # --- Object: YOLOv10 (NMS-free, efficient) ---
+    ("object", "yolov10s",        None, "YOLOv10 small — NMS-free, efficient. 80 COCO classes."),
+    ("object", "yolov10m",        None, "YOLOv10 medium — NMS-free; accuracy/speed balance."),
+    ("object", "yolov10l",        None, "YOLOv10 large — NMS-free; higher accuracy."),
+    ("object", "yolov10x",        None, "YOLOv10 extra-large — NMS-free; top YOLOv10 accuracy."),
+
+    # --- Object: RT-DETR (transformer detector; strong accuracy, real-time) ---
+    ("object", "rtdetr-l",        None, "RT-DETR large — transformer detector; strong accuracy, real-time."),
+    ("object", "rtdetr-x",        None, "RT-DETR extra-large — transformer detector; highest accuracy, heavier."),
+
+    # --- Object: YOLO-World (open vocabulary — detect anything you describe) ---
+    ("object", "yolov8s-worldv2", None, "YOLO-World small — open vocabulary; detect any terms you define."),
+    ("object", "yolov8m-worldv2", None, "YOLO-World medium — open vocabulary; better accuracy than small."),
+    ("object", "yolov8l-worldv2", None, "YOLO-World large — open vocabulary; best open-vocab accuracy, slower."),
 ]
 
 # Default vocabulary for YOLO-World: 80 COCO classes + common extras
@@ -1880,8 +1907,11 @@ def get_environment_stats(env_id: int, user_id: int) -> dict:
 
 
 def _seed_models(conn: sqlite3.Connection) -> None:
+    # Insert new models; refresh the description on existing ones (leave embedding_dim
+    # and download/active state untouched).
     conn.executemany(
-        "INSERT OR IGNORE INTO models (type, name, embedding_dim) VALUES (?, ?, ?)",
+        """INSERT INTO models (type, name, embedding_dim, description) VALUES (?, ?, ?, ?)
+           ON CONFLICT(type, name) DO UPDATE SET description = excluded.description""",
         _MODEL_SEED,
     )
 

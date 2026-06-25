@@ -38,6 +38,11 @@ class ObjectEngine:
             from ultralytics import YOLOWorld
             self._model = YOLOWorld(str(model_path))
             self._apply_world_classes()
+        elif "rtdetr" in model_name.lower():
+            # RT-DETR is a transformer detector; it needs Ultralytics' RTDETR loader,
+            # but its results expose the same .boxes interface, so detect() is unchanged.
+            from ultralytics import RTDETR
+            self._model = RTDETR(str(model_path))
         else:
             from ultralytics import YOLO
             self._model = YOLO(str(model_path))

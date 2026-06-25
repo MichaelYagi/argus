@@ -68,21 +68,26 @@ def test_api_keys_hash_index_exists():
 
 def test_models_seeded_count():
     rows = _query("SELECT * FROM models")
-    assert len(rows) == 11
+    assert len(rows) == 23
 
 
 def test_models_seeded_face_entries():
     rows = _query("SELECT name, embedding_dim FROM models WHERE type='face' ORDER BY name")
     names = {r["name"] for r in rows}
-    assert names == {"buffalo_l", "buffalo_s", "antelopev2"}
+    assert names == {"buffalo_l", "buffalo_s", "buffalo_sc", "antelopev2"}
     assert all(r["embedding_dim"] == 512 for r in rows)
 
 
 def test_models_seeded_object_entries():
     rows = _query("SELECT name, embedding_dim FROM models WHERE type='object' ORDER BY name")
     names = {r["name"] for r in rows}
-    assert names == {"yolov8n", "yolov8s", "yolov8m", "yolov8x", "yolo11n",
-                     "yolov8s-worldv2", "yolov8m-worldv2", "yolov8l-worldv2"}
+    assert names == {
+        "yolov8n", "yolov8s", "yolov8m", "yolov8l", "yolov8x",
+        "yolo11n", "yolo11s", "yolo11m", "yolo11l", "yolo11x",
+        "yolov10s", "yolov10m", "yolov10l", "yolov10x",
+        "rtdetr-l", "rtdetr-x",
+        "yolov8s-worldv2", "yolov8m-worldv2", "yolov8l-worldv2",
+    }
     assert all(r["embedding_dim"] is None for r in rows)
 
 
@@ -141,5 +146,5 @@ def test_settings_categories():
 
 def test_init_db_idempotent():
     store.init_db()  # second call on same DB
-    assert len(_query("SELECT * FROM models")) == 11
+    assert len(_query("SELECT * FROM models")) == 23
     assert len(_query("SELECT * FROM settings")) == 19

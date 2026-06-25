@@ -108,6 +108,7 @@ CREATE TABLE IF NOT EXISTS models (
     name          TEXT    NOT NULL,
     file_path     TEXT,
     embedding_dim INTEGER,
+    description   TEXT,
     is_downloaded INTEGER NOT NULL DEFAULT 0,
     is_active     INTEGER NOT NULL DEFAULT 0,
     added_at      TEXT    NOT NULL DEFAULT (datetime('now')),

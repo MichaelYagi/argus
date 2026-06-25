@@ -53,22 +53,27 @@ def test_list_models_returns_all(client):
     h = _setup(client)
     r = client.get("/api/models", headers=h)
     assert r.status_code == 200
-    assert len(r.json()) == 11
+    assert len(r.json()) == 23
 
 
 def test_list_models_filter_face(client):
     h = _setup(client)
     r = client.get("/api/models?type=face", headers=h)
     names = {m["name"] for m in r.json()}
-    assert names == {"buffalo_l", "buffalo_s", "antelopev2"}
+    assert names == {"buffalo_l", "buffalo_s", "buffalo_sc", "antelopev2"}
 
 
 def test_list_models_filter_object(client):
     h = _setup(client)
     r = client.get("/api/models?type=object", headers=h)
     names = {m["name"] for m in r.json()}
-    assert names == {"yolov8n", "yolov8s", "yolov8m", "yolov8x", "yolo11n",
-                     "yolov8s-worldv2", "yolov8m-worldv2", "yolov8l-worldv2"}
+    assert names == {
+        "yolov8n", "yolov8s", "yolov8m", "yolov8l", "yolov8x",
+        "yolo11n", "yolo11s", "yolo11m", "yolo11l", "yolo11x",
+        "yolov10s", "yolov10m", "yolov10l", "yolov10x",
+        "rtdetr-l", "rtdetr-x",
+        "yolov8s-worldv2", "yolov8m-worldv2", "yolov8l-worldv2",
+    }
 
 
 def test_get_model_detail(client):

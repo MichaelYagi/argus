@@ -7,6 +7,11 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+### Added
+
+- **More object detection models** in the registry, all producing bounding boxes: YOLOv8l, YOLO11 (s/m/l/x), YOLOv10 (s/m/l/x), and RT-DETR (l/x — a transformer detector, loaded via Ultralytics' `RTDETR`). Existing YOLO-World open-vocab models remain.
+- **Each model now has a short description** (stored in a new `models.description` column) shown on the Models page and returned by `/api/models`.
+
 ---
 
 ## [0.1.0-alpha.5] — 2026-06-25

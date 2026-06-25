@@ -162,11 +162,16 @@ def _delete_files(model_type: str, model_name: str) -> None:
 
 
 def _fmt(row) -> dict:
+    try:
+        description = row["description"]
+    except (IndexError, KeyError):
+        description = None
     return {
         "id": row["id"],
         "type": row["type"],
         "name": row["name"],
         "embedding_dim": row["embedding_dim"],
+        "description": description,
         "is_downloaded": bool(row["is_downloaded"]),
         "is_active": bool(row["is_active"]),
     }
