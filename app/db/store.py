@@ -77,13 +77,18 @@ def _migrate(conn: sqlite3.Connection) -> None:
         if col not in cols:
             conn.execute(f"ALTER TABLE {tbl} ADD COLUMN {col} INTEGER NOT NULL DEFAULT 0")
 
-    # Create a "default" environment for every user that doesn't have one
+    # Ensure every user has at least one environment — but only seed 'default' for
+    # users who have NONE, so a deliberately-deleted 'default' isn't resurrected on
+    # restart when the user still has other environments.
     user_ids = [r[0] for r in conn.execute("SELECT id FROM users").fetchall()]
     for uid in user_ids:
-        conn.execute(
-            "INSERT OR IGNORE INTO environments (user_id, name) VALUES (?, 'default')",
-            (uid,),
-        )
+        has_env = conn.execute(
+            "SELECT 1 FROM environments WHERE user_id = ? LIMIT 1", (uid,)
+        ).fetchone()
+        if not has_env:
+            conn.execute(
+                "INSERT INTO environments (user_id, name) VALUES (?, 'default')", (uid,)
+            )
 
     # Backfill environment_id=0 rows to their user's default environment
     for tbl, user_col in [
