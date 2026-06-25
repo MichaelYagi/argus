@@ -8,8 +8,9 @@
   <button class="btn btn-ghost" id="refresh-btn">Refresh</button>
 </div>
 <p class="muted" style="margin-bottom:16px;font-size:13px">
-  Unlabeled faces that match nobody enrolled, grouped by similarity. Name a group to enroll
-  everyone in it at once. Adjust grouping with the threshold below.
+  Unlabeled faces that match nobody enrolled, grouped by similarity. Click faces to select,
+  then name them. Deselect a wrong face to leave it out (remove); select part of a group to
+  split it; select across groups to merge. "Select all" names a whole clean group.
 </p>
 
 <div class="card" style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:16px">
@@ -21,6 +22,18 @@
 
 <p id="status" class="muted" style="font-size:13px"></p>
 <div id="clusters"></div>
+
+<div id="action-bar" style="display:none;position:sticky;bottom:0;z-index:50;
+     background:var(--surface);border:1px solid var(--border);border-radius:8px;
+     box-shadow:0 -2px 12px rgba(0,0,0,.25);padding:10px 14px;margin-top:8px;
+     align-items:center;gap:10px;flex-wrap:wrap">
+  <span id="sel-count" style="font-size:13px;font-weight:500"></span>
+  <input type="text" id="sel-name" placeholder="Name selected faces" maxlength="120"
+         style="flex:1;min-width:160px">
+  <button class="btn btn-primary" id="sel-name-btn">Name &amp; enroll</button>
+  <button class="btn btn-ghost" id="sel-clear">Clear</button>
+  <span id="sel-err" style="font-size:12px;color:#e53e3e"></span>
+</div>
 {% endblock %}
 
 {% block scripts %}
@@ -31,11 +44,39 @@
   const statusEl = document.getElementById('status');
   const wrap     = document.getElementById('clusters');
   const refresh  = document.getElementById('refresh-btn');
+  const bar      = document.getElementById('action-bar');
+  const selCount = document.getElementById('sel-count');
+  const selName  = document.getElementById('sel-name');
+  const selBtn   = document.getElementById('sel-name-btn');
+  const selClear = document.getElementById('sel-clear');
+  const selErr   = document.getElementById('sel-err');
+
+  const selected = new Map();  // detection_id -> face element
 
   function esc(s) {
     return String(s).replace(/[&<>"']/g, c => (
       {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]
     ));
+  }
+
+  function updateBar() {
+    const n = selected.size;
+    bar.style.display = n ? 'flex' : 'none';
+    selCount.textContent = n + ' face' + (n === 1 ? '' : 's') + ' selected';
+  }
+
+  function setSelected(face, on) {
+    const id = +face.dataset.id;
+    if (on) {
+      selected.set(id, face);
+      face.style.outline = '3px solid var(--accent)';
+      face.querySelector('.check').style.display = 'block';
+    } else {
+      selected.delete(id);
+      face.style.outline = 'none';
+      face.querySelector('.check').style.display = 'none';
+    }
+    updateBar();
   }
 
   let timer = null;
@@ -45,10 +86,70 @@
     timer = setTimeout(load, 350);
   });
   refresh.addEventListener('click', load);
+  selClear.addEventListener('click', () => {
+    [...selected.values()].forEach(f => setSelected(f, false));
+  });
+
+  const BTN_LABEL = selBtn.textContent;
+
+  function setBusy(on) {
+    selBtn.disabled = on;
+    selClear.disabled = on;
+    selName.disabled = on;
+    selBtn.textContent = on ? 'Enrolling…' : BTN_LABEL;
+    bar.style.opacity = on ? '0.7' : '1';
+    bar.style.cursor = on ? 'progress' : '';
+  }
+
+  selBtn.addEventListener('click', async () => {
+    if (selBtn.disabled) return;
+    const label = selName.value.trim();
+    selErr.textContent = '';
+    if (!label) { selErr.textContent = 'Enter a name'; return; }
+    if (!selected.size) return;
+    setBusy(true);
+
+    const faces = [...selected.entries()];  // [id, faceEl]
+    const items = faces.map(([id]) => ({ detection_id: id, label }));
+    try {
+      const resp = await fetch('/api/detections/label', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ items }),
+      });
+      if (!resp.ok) {
+        const d = await resp.json().catch(() => ({}));
+        selErr.textContent = d.detail || 'Failed to name faces';
+        return;
+      }
+      // Named faces are now enrolled — drop them from the view.
+      faces.forEach(([id, face]) => {
+        const card = face.closest('.cluster-card');
+        face.remove();
+        selected.delete(id);
+        if (card && !card.querySelector('.face')) card.remove();
+        else if (card) refreshCardCount(card);
+      });
+      selName.value = '';
+      updateBar();
+      if (!wrap.querySelector('.cluster-card')) statusEl.textContent = 'All suggestions named.';
+    } catch (err) {
+      selErr.textContent = 'Network error — try again';
+    } finally {
+      setBusy(false);
+    }
+  });
+
+  function refreshCardCount(card) {
+    const n = card.querySelectorAll('.face').length;
+    const h = card.querySelector('.card-count');
+    if (h) h.textContent = n + ' face' + (n === 1 ? '' : 's');
+  }
 
   async function load() {
     statusEl.textContent = 'Finding groups...';
     wrap.innerHTML = '';
+    selected.clear(); updateBar();
     let data;
     try {
       const resp = await fetch('/api/clusters?threshold=' + encodeURIComponent(thr.value));
@@ -59,80 +160,70 @@
       wrap.innerHTML = `<div class="card" style="border-left:3px solid #e53e3e">${esc(err.message)}</div>`;
       return;
     }
-
     const clusters = data.clusters || [];
     statusEl.textContent = clusters.length
       ? `${clusters.length} suggested ${clusters.length === 1 ? 'person' : 'people'} · ${data.unclustered} ungrouped face${data.unclustered === 1 ? '' : 's'}`
       : `No groups found. ${data.unclustered} ungrouped face${data.unclustered === 1 ? '' : 's'}.`;
-
-    clusters.forEach((c, idx) => wrap.appendChild(renderCluster(c, idx)));
+    clusters.forEach(c => wrap.appendChild(renderCluster(c)));
   }
 
-  function renderCluster(c, idx) {
+  function faceEl(cr) {
+    const d = document.createElement('div');
+    d.className = 'face';
+    d.dataset.id = cr.detection_id;
+    d.style.cssText = 'position:relative;cursor:pointer;line-height:0;border-radius:4px';
+    d.innerHTML =
+      `<img src="${cr.crop_url}" style="width:64px;height:64px;object-fit:cover;border-radius:4px;border:1px solid var(--border)">` +
+      `<span class="check" style="display:none;position:absolute;top:2px;right:2px;background:var(--accent);` +
+      `color:#fff;border-radius:50%;width:16px;height:16px;font-size:11px;line-height:16px;text-align:center">&check;</span>`;
+    d.addEventListener('click', () => setSelected(d, !selected.has(+d.dataset.id)));
+    return d;
+  }
+
+  function renderCluster(c) {
+    const COLLAPSED = 12;
     const card = document.createElement('div');
-    card.className = 'card';
+    card.className = 'card cluster-card';
     card.style.marginBottom = '12px';
 
-    const COLLAPSED = 12;
-    const thumb = cr =>
-      `<img src="${cr.crop_url}" style="width:64px;height:64px;object-fit:cover;border-radius:4px;border:1px solid var(--border)">`;
-    const firstThumbs = c.crops.slice(0, COLLAPSED).map(thumb).join('');
-    const restThumbs  = c.crops.slice(COLLAPSED).map(thumb).join('');
-    const toggle = c.crops.length > COLLAPSED
-      ? `<button class="btn btn-ghost show-all" style="font-size:12px;padding:2px 10px;align-self:center">Show all ${c.size}</button>`
-      : '';
+    const header = document.createElement('div');
+    header.style.cssText = 'display:flex;align-items:center;gap:10px;margin-bottom:8px';
+    header.innerHTML =
+      `<span class="card-count" style="font-size:13px;font-weight:500">${c.size} faces</span>` +
+      `<button class="btn btn-ghost sel-all" style="font-size:12px;padding:2px 10px">Select all</button>`;
+    card.appendChild(header);
 
-    card.innerHTML = `
-      <div style="font-size:13px;font-weight:500;margin-bottom:8px">${c.size} faces</div>
-      <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px">
-        ${firstThumbs}<span class="rest" style="display:none">${restThumbs}</span>${toggle}
-      </div>
-      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
-        <input type="text" class="name-input" placeholder="Name this person" maxlength="120" style="flex:1;min-width:160px">
-        <button class="btn btn-primary name-btn">Name &amp; enroll</button>
-        <span class="muted err" style="font-size:12px;color:#e53e3e"></span>
-      </div>`;
+    const strip = document.createElement('div');
+    strip.style.cssText = 'display:flex;gap:6px;flex-wrap:wrap';
+    card.appendChild(strip);
 
-    const showAll = card.querySelector('.show-all');
-    if (showAll) {
-      showAll.addEventListener('click', () => {
-        const rest = card.querySelector('.rest');
-        const open = rest.style.display !== 'none';
-        rest.style.display = open ? 'none' : 'contents';
-        showAll.textContent = open ? `Show all ${c.size}` : 'Show fewer';
+    const faces = c.crops.map(faceEl);
+    faces.forEach((f, i) => {
+      if (i >= COLLAPSED) f.classList.add('extra'), f.style.display = 'none';
+      strip.appendChild(f);
+    });
+
+    if (c.crops.length > COLLAPSED) {
+      const toggle = document.createElement('button');
+      toggle.className = 'btn btn-ghost';
+      toggle.style.cssText = 'font-size:12px;padding:2px 10px;align-self:center';
+      toggle.textContent = `Show all ${c.size}`;
+      toggle.addEventListener('click', () => {
+        const hidden = card.querySelector('.extra').style.display === 'none';
+        card.querySelectorAll('.extra').forEach(e => e.style.display = hidden ? '' : 'none');
+        toggle.textContent = hidden ? 'Show fewer' : `Show all ${c.size}`;
       });
+      strip.appendChild(toggle);
     }
 
-    const input = card.querySelector('.name-input');
-    const btn   = card.querySelector('.name-btn');
-    const err   = card.querySelector('.err');
-
-    btn.addEventListener('click', async () => {
-      const label = input.value.trim();
-      err.textContent = '';
-      if (!label) { err.textContent = 'Enter a name'; return; }
-      btn.disabled = true;
-      const items = c.detection_ids.map(id => ({ detection_id: id, label }));
-      const resp = await fetch('/api/detections/label', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ items }),
-      });
-      if (resp.ok) {
-        card.style.transition = 'opacity .2s';
-        card.style.opacity = '0.4';
-        card.querySelector('div').textContent = `Named "${label}" — ${c.size} faces enrolled`;
-        card.querySelectorAll('input,button,.err').forEach(e => e.remove());
-      } else {
-        const d = await resp.json().catch(() => ({}));
-        err.textContent = d.detail || 'Failed to name group';
-        btn.disabled = false;
-      }
+    header.querySelector('.sel-all').addEventListener('click', () => {
+      const all = faces.every(f => selected.has(+f.dataset.id));
+      faces.forEach(f => setSelected(f, !all));
     });
     return card;
   }
 
-  // Init threshold from the server default, then load
+  // Init threshold from server default, then load
   fetch('/api/clusters').then(r => r.json()).then(d => {
     thr.value = d.threshold != null ? d.threshold : 0.5;
     thrVal.textContent = (+thr.value).toFixed(2);
