@@ -1,6 +1,6 @@
 # Argus
 
-Self-hosted face and object recognition. Single Docker container, runs on your LAN.
+Self-hosted face and object recognition you can both **use and build on** — a clean API backend for other apps *and* a real human curation UI in one, instead of a headless black box or a feature trapped inside a photo library. Single Docker container, runs on your LAN.
 
 **Features:**
 - Face detection and recognition (InsightFace/ArcFace) — enroll people by name, match them across photos
