@@ -9,6 +9,7 @@ Self-hosted face and object recognition. Single Docker container, runs on your L
 - Per-user accounts with admin approval flow and individually managed, named API keys
 - Environments — isolate recognition data into named workspaces (dev, prod, home, work…) within a single instance; API keys are scoped per environment
 - Review queue with ranked match suggestions, configurable auto-confirm threshold, and auto-enroll on confirm
+- Suggested people — clusters unlabeled faces into proposed identities; name a cluster to enroll everyone in it at once
 - Justified infinite-scroll galleries per identity with cover photo selection and bulk operations
 - Tag page — full source image with clickable face and object bbox overlays for labelling
 - Test page — check whether an image contains people or objects without storing, enrolling, or matching anything
@@ -92,6 +93,28 @@ Key thresholds (all configurable in **Settings**):
 - **Average** — each person's reference photos are blended into one representative embedding; a face is scored against that average. Faster and steadier, but an individual photo's score drifts below 100% as you add varied references (it's measured against the moving average, not itself).
 
 Either way, confirming more varied shots of someone improves their recognition.
+
+---
+
+## Suggested people (face clustering)
+
+The **Suggested** page (`/clusters`) groups *unlabeled* faces — ones that match nobody
+enrolled — into "probably the same person" clusters by similarity. Name a cluster once and
+every face in it is labelled and enrolled together. This is the fast way to seed recognition
+on an existing photo set: instead of labelling faces one at a time, you name a handful of
+clusters and you're mostly done.
+
+- Adjust grouping live with the threshold slider (backed by `face.cluster_threshold`,
+  default 0.5). Higher = stricter (splits more); lower = looser (merges more).
+- Singletons are dropped — a suggestion needs at least two corroborating faces.
+- Naming a cluster uses the same batch-label endpoint as everywhere else, so the faces are
+  enrolled as ground-truth references.
+- Available over the API: `GET /api/clusters?threshold=<0-1>&min_size=<n>` returns the
+  groups with their detection ids and crop URLs; name one by POSTing its ids to
+  `/api/detections/label`. Read-only — clustering is computed on demand and stores nothing.
+
+It complements the review queue: the queue handles faces that *do* resemble an enrolled
+person, clustering handles the residual unknowns that match no one yet.
 
 ---
 

@@ -13,6 +13,7 @@ from starlette.middleware.sessions import SessionMiddleware
 from app import __version__
 from app.api import (
     changes,
+    clusters,
     detect,
     enroll,
     environments,
@@ -98,6 +99,7 @@ app.include_router(settings.router)
 app.include_router(review.router)
 app.include_router(images.router)
 app.include_router(changes.router)
+app.include_router(clusters.router)
 app.include_router(export_import.router)
 
 # Page routes

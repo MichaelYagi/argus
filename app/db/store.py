@@ -765,6 +765,23 @@ def get_identity_gallery(
         return conn.execute(sql, params).fetchall()
 
 
+def get_unknown_face_embeddings(
+    user_id: int, model_id: int, environment_id: int | None = None,
+) -> list[sqlite3.Row]:
+    """Unlabeled face detections (identity_id IS NULL) that carry an embedding for the
+    given model. Used to cluster residual unknowns into suggested people."""
+    with _connect() as conn:
+        env_id = _resolve_env(conn, user_id, environment_id)
+        return conn.execute(
+            """SELECT id, crop_path, confidence, embedding
+               FROM detections
+               WHERE user_id = ? AND environment_id = ? AND type = 'face'
+                 AND identity_id IS NULL AND embedding IS NOT NULL AND model_id = ?
+               ORDER BY id""",
+            (user_id, env_id, model_id),
+        ).fetchall()
+
+
 def get_unknown_detections(
     user_id: int,
     detection_type: str | None = None,
@@ -1594,6 +1611,10 @@ _SETTINGS_SEED: list[tuple] = [
     ("face.min_face_size",
      "40",    "int",    "face",
      "Minimum Face Size | Faces smaller than this many pixels wide or tall are ignored"),
+    ("face.cluster_threshold",
+     "0.5",   "float",  "face",
+     "Suggested-People Threshold | How similar two unknown faces must be (0–1) to be grouped "
+     "as the same person on the Suggested People page. Higher splits more; lower merges more"),
     ("object.detection_confidence",
      "0.5",   "float",  "object",
      "Detection Confidence | Minimum confidence for a detected object to be reported"),

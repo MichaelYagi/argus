@@ -159,6 +159,14 @@ async def test_page(request: Request):
     return _r(request, "test.html", ctx)
 
 
+@router.get("/clusters")
+async def clusters_page(request: Request):
+    ctx = _base(request, "clusters")
+    if not ctx:
+        return RedirectResponse("/login")
+    return _r(request, "clusters.html", ctx)
+
+
 @router.get("/models")
 async def models_page(request: Request):
     ctx = _base(request, "models", show_env_switcher=False)
