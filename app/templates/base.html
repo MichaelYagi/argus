@@ -82,6 +82,7 @@ document.addEventListener('DOMContentLoaded', function() {
       envMenu.style.display = envMenu.style.display === 'none' ? 'block' : 'none';
     });
     envMenu.addEventListener('click', e => e.stopPropagation());
+    document.addEventListener('click', () => { envMenu.style.display = 'none'; });
   }
 });
 </script>
