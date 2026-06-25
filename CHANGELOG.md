@@ -9,12 +9,17 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Added
 
+- **Camera capture** on Enroll, Detect, and Test — a "Use camera" button grabs a photo from the device camera and feeds it straight into the flow. Uses the live in-browser webcam where the page is a secure context (HTTPS or `localhost`), and falls back to the phone's native camera (capture file input) over plain LAN HTTP, so snapping a photo on a phone works without HTTPS. No backend changes — the captured frame goes through the existing upload path.
 - **More object detection models** in the registry, all producing bounding boxes: YOLOv8l, YOLO11 (s/m/l/x), YOLOv10 (s/m/l/x), and RT-DETR (l/x — a transformer detector, loaded via Ultralytics' `RTDETR`); plus the compact `buffalo_sc` face pack. Existing YOLO-World open-vocab models remain.
 - **Each model now has a short description** (stored in a new `models.description` column) shown on the Models page and returned by `/api/models`.
 
 ### Changed
 
 - **The Test page now identifies faces** — each detected face shows the best-matching enrolled person (name + similarity, top match regardless of threshold) on the box and in the result table. Still read-only: nothing is stored, enrolled, or queued for review. `/api/test` and `/api/test/batch` faces gain `identity_id`/`label`/`similarity` fields (`null` when no one is enrolled).
+
+### Fixed
+
+- **Recognition now works without a restart on a freshly set-up instance.** When a face model was activated before anyone was enrolled, the in-memory match index never recorded the active model, so the first enrollments were saved but not loaded into the index — matching only started working after a restart. `build_all` now records the active model even with no enrolled faces, so the first enrollment takes effect immediately.
 
 ---
 

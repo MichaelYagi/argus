@@ -26,6 +26,8 @@
   </div>
 
   <div id="test-inputs" {% if not (face_active or object_active) %}hidden{% endif %}>
+  <button type="button" class="btn btn-ghost" id="test-camera"
+          style="margin-bottom:8px;font-size:13px">Use camera</button>
   <div class="drop-zone" id="drop-zone">
     <p>Drop images here or click to browse</p>
     <p class="muted" style="font-size:12px">Multiple files supported — JPEG, PNG, WEBP, HEIC and more</p>
@@ -100,6 +102,8 @@
     fileList = [...fileList, ...e.dataTransfer.files]; updateQueue();
   });
   fileInput.addEventListener('change', () => { fileList = [...fileList, ...fileInput.files]; updateQueue(); });
+  document.getElementById('test-camera')
+    ?.addEventListener('click', () => capturePhoto(file => { fileList.push(file); updateQueue(); }));
   urlInput.addEventListener('input', updateQueue);
   b64Input.addEventListener('input', updateQueue);
 

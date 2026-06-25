@@ -39,6 +39,8 @@ async function _pool(items, concurrency, fn) {
   });
   dropZone.addEventListener('click', () => fileInput.click());
   fileInput.addEventListener('change', () => addFiles([...fileInput.files]));
+  document.getElementById('detect-camera')
+    ?.addEventListener('click', () => capturePhoto(file => addFiles([file])));
 
   function addFiles(newFiles) {
     fileList = [...fileList, ...newFiles];

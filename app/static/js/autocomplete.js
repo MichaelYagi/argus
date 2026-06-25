@@ -236,6 +236,75 @@
     return remove;
   };
 
+  // ---------------------------------------------------------------------------
+  // capturePhoto(onCapture) — get a photo from the device camera.
+  // Live in-browser webcam where the page is a secure context (HTTPS / localhost);
+  // otherwise the phone's native camera via a capture file input (works over LAN HTTP).
+  // Calls onCapture(File) with a JPEG/photo File. No backend involvement.
+  // ---------------------------------------------------------------------------
+  window.capturePhoto = function (onCapture) {
+    const liveOk = window.isSecureContext && navigator.mediaDevices
+                   && typeof navigator.mediaDevices.getUserMedia === 'function';
+
+    if (!liveOk) {
+      // Native camera: hand off to the OS camera app via the file input.
+      const inp = document.createElement('input');
+      inp.type = 'file';
+      inp.accept = 'image/*';
+      inp.setAttribute('capture', 'environment');
+      inp.style.display = 'none';
+      inp.addEventListener('change', () => {
+        if (inp.files && inp.files[0]) onCapture(inp.files[0]);
+        inp.remove();
+      });
+      document.body.appendChild(inp);
+      inp.click();
+      return;
+    }
+
+    // Live webcam modal (not given the modal-overlay class, so showToast/showMessage
+    // don't purge it).
+    let stream = null;
+    const overlay = document.createElement('div');
+    overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.85);z-index:700;' +
+      'display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;padding:16px';
+    const video = document.createElement('video');
+    video.autoplay = true; video.playsInline = true; video.muted = true;
+    video.style.cssText = 'max-width:100%;max-height:70vh;border-radius:8px;background:#000';
+    const row = document.createElement('div');
+    row.style.cssText = 'display:flex;gap:10px';
+    const snap = document.createElement('button');
+    snap.className = 'btn btn-primary'; snap.textContent = 'Capture';
+    const cancel = document.createElement('button');
+    cancel.className = 'btn btn-ghost'; cancel.textContent = 'Cancel';
+    row.appendChild(snap); row.appendChild(cancel);
+    overlay.appendChild(video); overlay.appendChild(row);
+    document.body.appendChild(overlay);
+
+    const stop = () => {
+      if (stream) stream.getTracks().forEach(t => t.stop());
+      overlay.remove();
+    };
+    cancel.addEventListener('click', stop);
+    overlay.addEventListener('keydown', e => { if (e.key === 'Escape') stop(); });
+
+    navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' }, audio: false })
+      .then(s => { stream = s; video.srcObject = s; })
+      .catch(err => { stop(); if (window.showToast) showToast('Camera unavailable: ' + err.message, 'error'); });
+
+    snap.addEventListener('click', () => {
+      if (!video.videoWidth) return;
+      const canvas = document.createElement('canvas');
+      canvas.width = video.videoWidth;
+      canvas.height = video.videoHeight;
+      canvas.getContext('2d').drawImage(video, 0, 0);
+      canvas.toBlob(blob => {
+        if (blob) onCapture(new File([blob], 'capture.jpg', { type: 'image/jpeg' }));
+        stop();
+      }, 'image/jpeg', 0.92);
+    });
+  };
+
   window.showLabelPopup = (anchor, onConfirm, placeholder = 'Name (blank to clear)') => {
     document.querySelectorAll('.label-popup, .label-backdrop').forEach(p => p.remove());
 

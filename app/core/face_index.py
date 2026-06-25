@@ -132,6 +132,13 @@ def build_all(model_id: int) -> None:
     if _try_import_faiss() is None:
         log.warning("faiss disabled or unavailable — using numpy similarity search")
 
+    # Record the active model even when there are no enrolled faces yet, so a later
+    # rebuild_user() (the first enrollment) isn't a no-op. Otherwise the index only
+    # comes alive after a restart on a freshly-activated model.
+    global _current_model_id
+    with _lock:
+        _current_model_id = model_id
+
     from app.db import store
     with store._connect() as conn:
         pairs = [(r[0], r[1]) for r in conn.execute(
