@@ -184,8 +184,11 @@
   selDelete.addEventListener('click', () => {
     if (selDelete.disabled) return;
     const n = selected.size;
-    if (!confirm(`Permanently delete ${n} crop${n === 1 ? '' : 's'}? This cannot be undone.`)) return;
-    runOnSelection('/api/detections/delete', {}, 'Deleting…', 'Failed to delete');
+    showConfirm(
+      `Permanently delete ${n} crop${n === 1 ? '' : 's'}? This cannot be undone.`,
+      () => runOnSelection('/api/detections/delete', {}, 'Deleting…', 'Failed to delete'),
+      { confirmText: 'Delete', danger: true },
+    );
   });
 
   function refreshCardCount(card) {

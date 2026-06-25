@@ -353,7 +353,7 @@ async function openExportModal() {
   const identities = await resp.json();
 
   if (!identities.length) {
-    alert('No identities to export.');
+    showMessage('No identities to export.');
     return;
   }
 
@@ -432,7 +432,7 @@ async function openExportModal() {
 
   downloadBtn.addEventListener('click', async () => {
     const ids = [...document.querySelectorAll('.export-cb:checked')].map(c => parseInt(c.value));
-    if (!ids.length) { alert('Select at least one identity.'); return; }
+    if (!ids.length) { showMessage('Select at least one identity.'); return; }
 
     downloadBtn.disabled = true;
     downloadBtn.innerHTML = '<span style="display:inline-flex;align-items:center;gap:6px">'
