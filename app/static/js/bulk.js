@@ -194,11 +194,18 @@ async function _pool(items, concurrency, fn) {
       if (job.type === 'file')        fd.append('file',          job.payload);
       else if (job.type === 'url')    fd.append('image_url',     job.payload);
       else if (job.type === 'base64') fd.append('image_base64',  job.payload);
-      const resp = await fetch(`/api/detect/${mode}`, { method: 'POST', body: fd });
-      const data = await resp.json();
-      done++;
-      updateProgress();
-      renderResult(rows[job.i], job.i, job.label, resp.ok, data, mode);
+      try {
+        const resp = await fetch(`/api/detect/${mode}`, { method: 'POST', body: fd });
+        const data = await resp.json();
+        renderResult(rows[job.i], job.i, job.label, resp.ok, data, mode);
+      } catch (err) {
+        // A network error here used to break the whole batch — keep going, show it.
+        renderResult(rows[job.i], job.i, job.label, false, { detail: 'Network error' }, mode);
+        if (window.showToast) showToast('Detection failed for ' + job.label + ' (network error).', 'error');
+      } finally {
+        done++;
+        updateProgress();
+      }
     });
 
     progressLbl.textContent = `Done — ${total} image${total === 1 ? '' : 's'} processed`;

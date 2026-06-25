@@ -7,9 +7,33 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+---
+
+## [0.1.0-alpha.5] — 2026-06-25
+
+### Added
+
+- **Recognition readiness indicators.** A banner on every signed-in page flags when models aren't set up — red and persistent when none are active, amber and dismissible (per session) when only one type is active; both active shows nothing. A matching status dot sits on the Models nav item for admins. Running People-only, Objects-only, or both are all treated as valid setups, so a missing type is only flagged when nothing is active.
+- **Adaptive Detect/Test controls.** The mode selector reflects what's active: "People + Objects / People / Objects" when both are active, a fixed "People" or "Objects" when only one is, and "No models active" with the inputs hidden when none are.
+- **Toast notifications** (`showToast`/`flashToast`) for model download/activate/remove events and for enroll/detect errors. Detect now survives a per-image network error instead of aborting the whole batch.
+- **Admin onboarding.** The first signup button reads "Create account as admin"; first registration and admin login land on the Models page until at least one model is downloaded, then on the dashboard.
+- **Removable upload thumbnails** — an × on each queued image (Enroll, Detect, Test) to drop it before submitting.
+- **Enroll result preview** — after enrolling, the source image is shown with a box around the enrolled face, matching the Detect/Test style.
+- A **download spinner** on the Models page while weights download.
+- `/api/capabilities` reports `downloaded` per detection type.
+
+### Changed
+
+- **Environments are managed in one full-page modal** (Select / Rename / Delete / Create) opened from the nav, which now shows the active environment's name; the old dropdown is gone. Creating an environment no longer reloads the page and prompts whether to switch to it. The `/environments` page remains.
+- **Face-only features hide when no face model is active** — Enroll, Review, and Suggested drop out of the nav (desktop and mobile).
+- **Themes are defined once** — a single list drives the JS palette and both the desktop and mobile pickers; the active theme is marked with an accent ring, and the theme picker is now available in the mobile menu.
+- Detect's mode labels use "People" to match Test.
+
 ### Fixed
 
 - **Change feed now covers review actions and single deletes.** Reassign, reject, and `DELETE /api/detections/{id}` previously mutated a detection without emitting an event, so a delta-sync client missed corrections made through the Review queue. They now record `relabeled`/`deleted` events like the casual-correction and bulk paths already did.
+- **Startup crash on a stale session.** A session cookie pointing at a user that no longer exists (e.g. after a database reset) now redirects to sign-in instead of returning a 500.
+- **Mobile horizontal-scroll fixes** — the identity page header, the crop lightbox, review cards, and the Account API-key table no longer overflow sideways on small screens.
 
 ---
 
@@ -208,6 +232,7 @@ Initial alpha release.
 
 ---
 
+[0.1.0-alpha.5]: https://github.com/MichaelYagi/argus/compare/v0.1.0-alpha.4...v0.1.0-alpha.5
 [0.1.0-alpha.4]: https://github.com/MichaelYagi/argus/compare/v0.1.0-alpha.3...v0.1.0-alpha.4
 [0.1.0-alpha.3]: https://github.com/MichaelYagi/argus/compare/v0.1.0-alpha.2...v0.1.0-alpha.3
 [0.1.0-alpha.2]: https://github.com/MichaelYagi/argus/compare/v0.1.0-alpha.1...v0.1.0-alpha.2

@@ -10,13 +10,22 @@
 <div class="card" style="max-width:680px">
   <div style="display:flex;align-items:center;gap:12px;margin-bottom:16px">
     <label class="lbl" style="margin:0;white-space:nowrap">Test for</label>
+    {% if face_active and object_active %}
     <select id="test-mode" style="width:auto">
       <option value="all" selected>People + Objects</option>
       <option value="faces">People</option>
       <option value="objects">Objects</option>
     </select>
+    {% elif face_active %}
+    <strong>People</strong><input type="hidden" id="test-mode" value="faces">
+    {% elif object_active %}
+    <strong>Objects</strong><input type="hidden" id="test-mode" value="objects">
+    {% else %}
+    <strong style="color:#e53e3e">No models active</strong><input type="hidden" id="test-mode" value="all">
+    {% endif %}
   </div>
 
+  <div id="test-inputs" {% if not (face_active or object_active) %}hidden{% endif %}>
   <div class="drop-zone" id="drop-zone">
     <p>Drop images here or click to browse</p>
     <p class="muted" style="font-size:12px">Multiple files supported — JPEG, PNG, WEBP, HEIC and more</p>
@@ -42,6 +51,7 @@
     <button class="btn btn-primary" id="test-btn" disabled>Test</button>
     <button class="btn btn-ghost" id="clear-btn" type="button">Clear</button>
     <span id="test-status" class="muted" style="font-size:13px"></span>
+  </div>
   </div>
 </div>
 

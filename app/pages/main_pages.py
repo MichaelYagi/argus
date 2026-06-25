@@ -13,6 +13,16 @@ from app.db import store
 router = APIRouter()
 templates = Jinja2Templates(directory="app/templates")
 
+
+def engine_flags() -> dict:
+    """Which recognition engines are active (model activated AND engine loaded).
+    Drives nav visibility, the Detect/Test mode control, and the readiness banner —
+    all rendered server-side so there's no flash. Shared by every page context."""
+    from app.core.engine_registry import registry
+    face_active = bool(store.get_active_model("face") and registry.get_face_engine())
+    object_active = bool(store.get_active_model("object") and registry.get_object_engine())
+    return {"face_active": face_active, "object_active": object_active}
+
 SLIDER_RANGES = {
     "face.match_threshold":        (0.0, 1.0, 0.01),
     "face.detection_confidence":   (0.0, 1.0, 0.01),
@@ -82,6 +92,7 @@ def _base(request: Request, active: str = "", show_env_switcher: bool = True) ->
         "environment_name": env_name,
         "environments": [dict(e) for e in environments],
         "show_env_switcher": show_env_switcher,
+        **engine_flags(),
     }
 
 

@@ -479,6 +479,15 @@ def get_active_model(model_type: str) -> sqlite3.Row | None:
         ).fetchone()
 
 
+def has_downloaded_model(model_type: str) -> bool:
+    """Whether any model of this type has been downloaded (active or not)."""
+    with _connect() as conn:
+        return conn.execute(
+            "SELECT 1 FROM models WHERE type = ? AND is_downloaded = 1 LIMIT 1",
+            (model_type,),
+        ).fetchone() is not None
+
+
 def set_model_active(model_id: int, model_type: str) -> None:
     with _connect() as conn:
         conn.execute("UPDATE models SET is_active = 0 WHERE type = ?", (model_type,))

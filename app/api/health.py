@@ -61,8 +61,10 @@ async def capabilities():
         "gpu_available": gpu_available,
         "active_provider": active_provider,
         "detection": {
-            "faces":   {"available": face_ready,   "active_model": face_row["name"]   if face_row   else None},
-            "objects": {"available": object_ready, "active_model": object_row["name"] if object_row else None},
+            "faces":   {"available": face_ready,   "downloaded": store.has_downloaded_model("face"),
+                        "active_model": face_row["name"]   if face_row   else None},
+            "objects": {"available": object_ready, "downloaded": store.has_downloaded_model("object"),
+                        "active_model": object_row["name"] if object_row else None},
         },
         "supported_formats": _SUPPORTED_FORMATS,
         "image_input": ["file", "image_url", "image_base64"],

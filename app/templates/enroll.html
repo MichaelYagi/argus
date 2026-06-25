@@ -121,6 +121,7 @@
       renderEnrollResult(data, name);
     } else {
       msg(data.detail || 'Enrollment failed.', 'error');
+      if (window.showToast) showToast(data.detail || 'Enrollment failed.', 'error');
     }
   });
 

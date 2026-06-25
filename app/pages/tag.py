@@ -12,6 +12,7 @@ from app import __version__
 from app.core import settings_cache
 from app.core.auth import get_session_env, get_session_user, is_admin
 from app.db import store
+from app.pages.main_pages import engine_flags as _engine_flags
 
 router = APIRouter()
 templates = Jinja2Templates(directory="app/templates")
@@ -91,4 +92,5 @@ async def tag_page(source_image_id: int, request: Request):
         "environments": [dict(e) for e in environments],
         "environment_id": env_id,
         "environment_name": env_name,
+        **_engine_flags(),
     })

@@ -162,6 +162,12 @@ def test_capabilities_endpoint(client):
     assert r.status_code == 200
     data = r.json()
     assert "detection" in data and "faces" in data["detection"]
+    # Each detection type reports availability AND whether a model is downloaded
+    # (drives the readiness banner / Models badge).
+    for kind in ("faces", "objects"):
+        assert "available" in data["detection"][kind]
+        assert "downloaded" in data["detection"][kind]
+        assert data["detection"][kind]["downloaded"] is False  # nothing downloaded in tests
     assert data["features"]["external_ref"] is True
     assert data["features"]["change_feed"] is True
     assert "JPEG" in data["supported_formats"]

@@ -197,6 +197,45 @@
     });
   };
 
+  // ---------------------------------------------------------------------------
+  // showToast — transient corner notification (info / success / error)
+  // ---------------------------------------------------------------------------
+  window.showToast = (message, level = 'info', { timeout = 5000 } = {}) => {
+    let stack = document.getElementById('toast-stack');
+    if (!stack) {
+      stack = document.createElement('div');
+      stack.id = 'toast-stack';
+      stack.style.cssText = 'position:fixed;top:16px;right:16px;z-index:900;' +
+        'display:flex;flex-direction:column;gap:8px;max-width:min(360px,90vw)';
+      document.body.appendChild(stack);
+    }
+    const colors = {
+      info:    { bar: 'var(--accent)',  },
+      success: { bar: 'var(--success)', },
+      error:   { bar: '#e53e3e',        },
+    };
+    const c = colors[level] || colors.info;
+    const toast = document.createElement('div');
+    toast.style.cssText = 'background:var(--surface);color:var(--text);border-radius:8px;' +
+      'box-shadow:0 4px 20px rgba(0,0,0,.3);border-left:3px solid ' + c.bar + ';' +
+      'padding:10px 12px;font-size:13px;line-height:1.4;display:flex;align-items:flex-start;gap:10px';
+    const text = document.createElement('div');
+    text.style.cssText = 'flex:1;min-width:0;word-break:break-word';
+    text.textContent = message;
+    const close = document.createElement('button');
+    close.textContent = '×';
+    close.setAttribute('aria-label', 'Dismiss');
+    close.style.cssText = 'background:none;border:none;color:var(--muted);cursor:pointer;' +
+      'font-size:16px;line-height:1;padding:0';
+    const remove = () => { toast.remove(); if (!stack.children.length) stack.remove(); };
+    close.addEventListener('click', remove);
+    toast.appendChild(text);
+    toast.appendChild(close);
+    stack.appendChild(toast);
+    if (timeout) setTimeout(remove, timeout);
+    return remove;
+  };
+
   window.showLabelPopup = (anchor, onConfirm, placeholder = 'Name (blank to clear)') => {
     document.querySelectorAll('.label-popup, .label-backdrop').forEach(p => p.remove());
 
@@ -284,3 +323,19 @@ window.openSourceModal = function openSourceModal(url) {
   const onKey = e => { if (e.key === 'Escape') { close(); document.removeEventListener('keydown', onKey); } };
   document.addEventListener('keydown', onKey);
 };
+
+// Queue a toast to show after the next page load (for actions that reload, e.g. the
+// Models page). Read once on load below.
+window.flashToast = (message, level = 'info') => {
+  try { sessionStorage.setItem('argus-flash', JSON.stringify({ message, level })); } catch (e) {}
+};
+document.addEventListener('DOMContentLoaded', () => {
+  let f;
+  try { f = sessionStorage.getItem('argus-flash'); } catch (e) { return; }
+  if (!f) return;
+  try { sessionStorage.removeItem('argus-flash'); } catch (e) {}
+  try {
+    const { message, level } = JSON.parse(f);
+    if (message && window.showToast) window.showToast(message, level);
+  } catch (e) {}
+});

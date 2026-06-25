@@ -26,9 +26,19 @@ templates = Jinja2Templates(directory="app/templates")
 _COOKIE = "argus_remember"
 
 
+def _admin_landing() -> str:
+    """Where an admin lands after auth: the Models page until at least one model is
+    downloaded (so a fresh instance is guided to set one up), then the dashboard."""
+    if store.has_downloaded_model("face") or store.has_downloaded_model("object"):
+        return "/"
+    return "/models"
+
+
 @router.get("/signup")
 async def signup_page(request: Request):
-    return templates.TemplateResponse(request, "signup.html", {"error": ""})
+    return templates.TemplateResponse(
+        request, "signup.html", {"error": "", "is_first_user": store.count_users() == 0}
+    )
 
 
 @router.post("/signup")
@@ -49,7 +59,9 @@ async def signup(
     elif store.get_user_by_username(username):
         err = "Username already taken."
     if err:
-        return templates.TemplateResponse(request, "signup.html", {"error": err})
+        return templates.TemplateResponse(
+            request, "signup.html", {"error": err, "is_first_user": store.count_users() == 0}
+        )
 
     is_first = store.count_users() == 0
     auto_approve = is_first or settings_cache.cache.get_or("system.auto_approve_users", True)
@@ -66,7 +78,10 @@ async def signup(
         request.session["username"] = username
         request.session["environment_id"] = env_id
         request.session["new_key"] = plaintext
-        return RedirectResponse("/account", status_code=303)
+        # First account is the admin — guide them to set up a model first (the new API
+        # key stays in the session and is shown next time they open the Account page).
+        dest = _admin_landing() if is_first else "/account"
+        return RedirectResponse(dest, status_code=303)
 
     # Admin approval required
     return templates.TemplateResponse(request, "pending.html", {"request": request})
@@ -105,6 +120,9 @@ async def login(
         store.create_api_key(row["id"], hash_api_key(plaintext), "Default key", env_id, key_hint(plaintext))
         request.session["new_key"] = plaintext
         redirect_to = "/account"
+    elif row["is_admin"]:
+        # Admins land on Models until a model is downloaded, then the dashboard.
+        redirect_to = _admin_landing()
     else:
         redirect_to = "/"
 

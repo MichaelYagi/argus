@@ -23,9 +23,12 @@
   ('dark',  'Dark',  '#0d1117', '#161b22', '#58a6ff'),
   ('ember', 'Ember', '#1a1612', '#252018', '#f59e0b'),
 ] %}
+{# Active recognition engines: 0 = not set up (red), 1 = partial (amber), 2 = all good. #}
+{% set active_count = (1 if face_active else 0) + (1 if object_active else 0) %}
 <script>
 window.USER_TZ     = "{{ user_tz     | default('UTC') }}";
 window.USER_LOCALE = "{{ user_locale | default('en-US') }}";
+window.ARGUS_IS_ADMIN = {{ 'true' if is_admin else 'false' }};
 
 // ---------------------------------------------------------------------------
 // Theme picker — runs after DOM is ready so elements exist
@@ -193,6 +196,24 @@ function _updateReviewBadge() {
 }
 _updateReviewBadge();
 setInterval(_updateReviewBadge, 30000);
+
+// ---------------------------------------------------------------------------
+// Readiness banner: the red (no models active) banner is persistent; the amber
+// (one type active) banner is dismissible for the session. The banner itself is
+// rendered server-side from the active-model state.
+// ---------------------------------------------------------------------------
+(function() {
+  const banner = document.getElementById('readiness-banner');
+  if (!banner || !banner.dataset.dismissible) return;
+  let dismissed = false;
+  try { dismissed = sessionStorage.getItem('argus-readiness-dismissed') === '1'; } catch (e) {}
+  if (dismissed) { banner.style.display = 'none'; return; }
+  const x = document.getElementById('readiness-dismiss');
+  if (x) x.addEventListener('click', () => {
+    banner.style.display = 'none';
+    try { sessionStorage.setItem('argus-readiness-dismissed', '1'); } catch (e) {}
+  });
+})();
 </script>
 <nav>
   <a href="/" style="display:flex;align-items:center;gap:7px;text-decoration:none;margin-right:4px">
@@ -200,10 +221,13 @@ setInterval(_updateReviewBadge, 30000);
     <span class="brand">Argus</span>
   </a>
 
-  <!-- Desktop links -->
+  <!-- Desktop links. Enroll/Review/Suggested are face-only — hidden when no face model is active. -->
   <a href="/"         class="nav-desktop {% if active == 'dashboard' %}active{% endif %}">Dashboard</a>
+  {% if face_active %}
   <a href="/enroll"   class="nav-desktop {% if active == 'enroll'    %}active{% endif %}">Enroll</a>
+  {% endif %}
   <a href="/detect"   class="nav-desktop {% if active == 'detect'    %}active{% endif %}">Detect</a>
+  {% if face_active %}
   <a href="/review"   class="nav-desktop {% if active == 'review'    %}active{% endif %}">
     Review <span id="review-count-badge"
       style="display:none;background:#e53e3e;color:#fff;border-radius:99px;
@@ -211,9 +235,14 @@ setInterval(_updateReviewBadge, 30000);
              vertical-align:middle;line-height:16px"></span>
   </a>
   <a href="/clusters" class="nav-desktop {% if active == 'clusters'  %}active{% endif %}">Suggested</a>
+  {% endif %}
   <a href="/test"     class="nav-desktop {% if active == 'test'      %}active{% endif %}">Test</a>
   {% if is_admin %}
-  <a href="/models"   class="nav-desktop {% if active == 'models'    %}active{% endif %}">Models</a>
+  <a href="/models"   class="nav-desktop {% if active == 'models'    %}active{% endif %}">Models{% if active_count < 2 %} <span
+      class="models-status-badge"
+      title="{{ 'No recognition models are active' if active_count == 0 else 'Only one model type is active' }}"
+      style="display:inline-block;width:8px;height:8px;border-radius:50%;margin-left:2px;vertical-align:middle;
+      background:{{ '#e53e3e' if active_count == 0 else '#f59e0b' }}"></span>{% endif %}</a>
   <a href="/settings" class="nav-desktop {% if active == 'settings'  %}active{% endif %}">Settings</a>
   {% endif %}
   <a href="/docs"     class="nav-desktop {% if active == 'docs'      %}active{% endif %}">API docs</a>
@@ -282,14 +311,22 @@ setInterval(_updateReviewBadge, 30000);
 <!-- Mobile dropdown -->
 <div id="mobile-menu" class="mobile-menu" hidden>
   <a href="/"         class="{% if active == 'dashboard' %}active{% endif %}">Dashboard</a>
+  {% if face_active %}
   <a href="/enroll"   class="{% if active == 'enroll'    %}active{% endif %}">Enroll</a>
+  {% endif %}
   <a href="/detect"   class="{% if active == 'detect'    %}active{% endif %}">Detect</a>
+  {% if face_active %}
   <a href="/review"   class="{% if active == 'review'    %}active{% endif %}">Review</a>
   <a href="/clusters" class="{% if active == 'clusters'  %}active{% endif %}">Suggested</a>
+  {% endif %}
   <a href="/test"     class="{% if active == 'test'      %}active{% endif %}">Test</a>
   <div style="border-top:1px solid rgba(255,255,255,.12);margin:6px 0"></div>
   {% if is_admin %}
-  <a href="/models"   class="{% if active == 'models'    %}active{% endif %}">Models</a>
+  <a href="/models"   class="{% if active == 'models'    %}active{% endif %}">Models{% if active_count < 2 %} <span
+      class="models-status-badge"
+      title="{{ 'No recognition models are active' if active_count == 0 else 'Only one model type is active' }}"
+      style="display:inline-block;width:8px;height:8px;border-radius:50%;margin-left:2px;vertical-align:middle;
+      background:{{ '#e53e3e' if active_count == 0 else '#f59e0b' }}"></span>{% endif %}</a>
   <a href="/settings" class="{% if active == 'settings'  %}active{% endif %}">Settings</a>
   {% endif %}
   <a href="/docs"     class="{% if active == 'docs'      %}active{% endif %}">API docs</a>
@@ -320,6 +357,36 @@ setInterval(_updateReviewBadge, 30000);
   </form>
   {% endif %}
 </div>
+
+{% if username and active_count < 2 %}
+<!-- Recognition readiness banner. Red (no models active) is persistent; amber (one type
+     active — a deliberate setup is fine) is dismissible per session. Rendered server-side. -->
+<div id="readiness-banner" {% if active_count == 1 %}data-dismissible="1"{% endif %}
+     style="padding:10px 16px;font-size:13px;line-height:1.5;display:flex;align-items:flex-start;gap:10px;
+            border-bottom:1px solid var(--border);color:var(--text);
+            background:{{ 'rgba(229,62,62,.12)' if active_count == 0 else 'rgba(245,158,11,.12)' }};
+            border-left:3px solid {{ '#e53e3e' if active_count == 0 else '#f59e0b' }}">
+  <div style="flex:1">
+    {% if active_count == 0 %}
+      <strong>No recognition models are active.</strong>
+      {% if is_admin %} Set one up on the <a href="/models" style="color:inherit;text-decoration:underline">Models</a> page.
+      {% else %} Ask an admin to set up a model.{% endif %}
+    {% elif face_active %}
+      Object detection isn't set up.
+      {% if is_admin %} Add an object model on the <a href="/models" style="color:inherit;text-decoration:underline">Models</a> page.
+      {% else %} Ask an admin to add an object model.{% endif %}
+    {% else %}
+      Face recognition isn't set up.
+      {% if is_admin %} Add a face model on the <a href="/models" style="color:inherit;text-decoration:underline">Models</a> page.
+      {% else %} Ask an admin to add a face model.{% endif %}
+    {% endif %}
+  </div>
+  {% if active_count == 1 %}
+  <button type="button" id="readiness-dismiss" aria-label="Dismiss"
+          style="background:none;border:none;color:var(--muted);cursor:pointer;font-size:16px;line-height:1;padding:0">&times;</button>
+  {% endif %}
+</div>
+{% endif %}
 
 {% if environments is defined and environments %}
 <!-- Manage environments modal -->

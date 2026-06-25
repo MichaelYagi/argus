@@ -72,7 +72,8 @@ def test_login_valid_credentials(client):
     client.post("/signup", data={"username": "alice", "password": "password123", "confirm": "password123"})
     r = client.post("/login", data={"username": "alice", "password": "password123"})
     assert r.status_code == 303
-    assert r.headers["location"] in ("/", "/account")
+    # alice is the first user (admin); with no models downloaded, admins land on /models.
+    assert r.headers["location"] in ("/", "/account", "/models")
 
 
 def test_login_invalid_password(client):
