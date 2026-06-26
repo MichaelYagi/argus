@@ -15,6 +15,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Changed
 
+- **Review queue split into two sections** — "Suggested matches" (faces Argus tentatively matched to someone) and "No match" (below-threshold faces). Each has its own selection and one unambiguous bulk action: **Confirm selected** for suggested matches, **Dismiss selected** for no-match faces. This removes the old single-checkbox/two-button model where "Confirm selected" silently ignored unmatched faces. The sections sit side by side on desktop and stack on mobile.
 - **The Test page now identifies faces** — each detected face shows the best-matching enrolled person (name + similarity, top match regardless of threshold) on the box and in the result table. Still read-only: nothing is stored, enrolled, or queued for review. `/api/test` and `/api/test/batch` faces gain `identity_id`/`label`/`similarity` fields (`null` when no one is enrolled).
 
 ### Fixed

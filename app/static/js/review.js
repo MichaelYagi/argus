@@ -1,29 +1,35 @@
 'use strict';
 (() => {
-  const container = document.getElementById('review-list');
-  if (!container) return;
-  let cursor = null, hasMore = true, loading = false;
-  const selected = new Set();
+  const suggestedList = document.getElementById('suggested-list');
+  const nomatchList   = document.getElementById('nomatch-list');
+  if (!suggestedList || !nomatchList) return;
 
-  // Face labels come from the shared autocomplete.js (loaded in base.html)
+  let cursor = null, hasMore = true, loading = false;
+
+  // Independent selection per section so a checkbox's meaning is unambiguous:
+  // Suggested → Confirm; No match → Dismiss.
+  const selSg = new Set();   // suggested-match detection ids
+  const selNm = new Set();   // no-match detection ids
 
   function esc(s) {
     return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
   }
 
   // ---------------------------------------------------------------------------
-  // Bulk actions
+  // Per-section bulk bars
   // ---------------------------------------------------------------------------
-  const bulkCount      = document.getElementById('bulk-count');
-  const bulkConfirmBtn = document.getElementById('bulk-confirm-btn');
-  const bulkRejectBtn  = document.getElementById('bulk-reject-btn');
-  const selectAllCb    = document.getElementById('select-all-cb');
+  const sgCount = document.getElementById('sg-count');
+  const sgBtn   = document.getElementById('sg-confirm-btn');
+  const sgAll   = document.getElementById('sg-select-all');
+  const nmCount = document.getElementById('nm-count');
+  const nmBtn   = document.getElementById('nm-dismiss-btn');
+  const nmAll   = document.getElementById('nm-select-all');
 
-  function updateBulkBar() {
-    const n = selected.size;
-    if (bulkCount)      bulkCount.textContent   = n;
-    if (bulkConfirmBtn) bulkConfirmBtn.disabled  = n === 0;
-    if (bulkRejectBtn)  bulkRejectBtn.disabled   = n === 0;
+  function updateBars() {
+    if (sgCount) sgCount.textContent = selSg.size;
+    if (sgBtn)   sgBtn.disabled = selSg.size === 0;
+    if (nmCount) nmCount.textContent = selNm.size;
+    if (nmBtn)   nmBtn.disabled = selNm.size === 0;
   }
 
   function decrementBadge(n = 1) {
@@ -34,39 +40,36 @@
     badge.style.display = next === 0 ? 'none' : 'inline';
   }
 
-  window.doBulkConfirm = async () => {
-    const ids = [...selected];
-    const items = ids.map(id => ({ detection_id: id, action: 'confirm' }));
-    await fetch('/api/review/bulk', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(items) });
-    ids.forEach(id => document.getElementById('rc-' + id)?.remove());
-    decrementBadge(ids.length);
-    selected.clear();
-    if (selectAllCb) selectAllCb.checked = false;
-    updateBulkBar();
-  };
-
-  window.doBulkReject = async () => {
-    const ids = [...selected];
-    const items = ids.map(id => ({ detection_id: id, action: 'reject' }));
-    await fetch('/api/review/bulk', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(items) });
-    ids.forEach(id => document.getElementById('rc-' + id)?.remove());
-    decrementBadge(ids.length);
-    selected.clear();
-    if (selectAllCb) selectAllCb.checked = false;
-    updateBulkBar();
-  };
-
-  window.doSelectAll = cb => {
-    document.querySelectorAll('.rc-check').forEach(c => {
-      c.checked = cb.checked;
-      const id = parseInt(c.dataset.id);
-      if (cb.checked) selected.add(id); else selected.delete(id);
+  async function bulkAction(ids, action, sel, allCb) {
+    if (!ids.length) return;
+    const items = ids.map(id => ({ detection_id: id, action }));
+    await fetch('/api/review/bulk', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(items),
     });
-    updateBulkBar();
-  };
+    ids.forEach(id => { document.getElementById('rc-' + id)?.remove(); sel.delete(id); });
+    decrementBadge(ids.length);
+    if (allCb) allCb.checked = false;
+    updateBars();
+    checkEmpty();
+  }
+
+  window.sgConfirm = () => bulkAction([...selSg], 'confirm', selSg, sgAll);
+  window.nmDismiss = () => bulkAction([...selNm], 'reject',  selNm, nmAll);
+
+  window.sgSelectAll = cb => toggleAll(suggestedList, selSg, cb.checked);
+  window.nmSelectAll = cb => toggleAll(nomatchList, selNm, cb.checked);
+
+  function toggleAll(listEl, sel, on) {
+    listEl.querySelectorAll('.rc-check').forEach(c => {
+      c.checked = on;
+      const id = parseInt(c.dataset.id);
+      if (on) sel.add(id); else sel.delete(id);
+    });
+    updateBars();
+  }
 
   // ---------------------------------------------------------------------------
-  // Render
+  // Load + render
   // ---------------------------------------------------------------------------
   async function loadPage() {
     if (loading || !hasMore) return;
@@ -80,28 +83,35 @@
     cursor = data.next_cursor;
     data.items.forEach(renderItem);
     loading = false;
-    if (!hasMore) {
-      if (!container.querySelector('.rc-card')) {
-        const p = document.createElement('p');
-        p.className = 'muted';
-        p.style.cssText = 'text-align:center;padding:32px';
-        p.textContent = 'No pending items in the review queue.';
-        container.appendChild(p);
-      }
-      sentinel.remove();
+    if (!hasMore) { sentinel.remove(); checkEmpty(); }
+  }
+
+  function checkEmpty() {
+    emptyMsg(suggestedList, 'No suggested matches.');
+    emptyMsg(nomatchList, 'No unmatched faces.');
+  }
+  function emptyMsg(listEl, text) {
+    if (loading || hasMore) return;
+    const has = listEl.querySelector('.rc-card');
+    let msg = listEl.querySelector('.rc-empty');
+    if (!has && !msg) {
+      msg = document.createElement('p');
+      msg.className = 'muted rc-empty';
+      msg.style.cssText = 'text-align:center;padding:28px;font-size:13px';
+      msg.textContent = text;
+      listEl.appendChild(msg);
+    } else if (has && msg) {
+      msg.remove();
     }
   }
 
   function renderItem(item) {
-    const card = document.createElement('div');
-    card.className = 'review-card rc-card';
-    card.id = 'rc-' + item.detection_id;
-
     const matched = item.current_identity;
     const name = matched ? esc(matched.label) : null;
-    const currentId = matched?.identity_id;
+    const currentId = matched ? matched.identity_id : null;
+    const listEl = matched ? suggestedList : nomatchList;
+    const sel = matched ? selSg : selNm;
 
-    // Pull similarity for the current match from the suggestions list
     const currentMatchData = item.suggested_matches.find(m => m.identity_id === currentId);
     const currentSim = currentMatchData
       ? `<span class="muted" style="font-size:12px;margin-left:6px">${(currentMatchData.similarity*100).toFixed(0)}% similarity</span>`
@@ -115,6 +125,9 @@
          </button>`
       ).join('');
 
+    const card = document.createElement('div');
+    card.className = 'review-card rc-card';
+    card.id = 'rc-' + item.detection_id;
     card.innerHTML = `
       <div style="display:flex;width:100%;align-items:flex-start;gap:8px">
         <input type="checkbox" class="rc-check" data-id="${item.detection_id}" style="margin-top:4px;flex-shrink:0">
@@ -166,22 +179,21 @@
 
     card.querySelector('.rc-check').addEventListener('change', e => {
       const id = item.detection_id;
-      if (e.target.checked) selected.add(id); else selected.delete(id);
-      updateBulkBar();
+      if (e.target.checked) sel.add(id); else sel.delete(id);
+      updateBars();
     });
 
-    // Wire autocomplete after the card is in the DOM
     const raInput = card.querySelector('#ra-' + item.detection_id);
-    container.appendChild(card);
+    listEl.appendChild(card);
     makeAutocomplete(raInput);
   }
 
-
   function removeCard(id) {
     document.getElementById('rc-' + id)?.remove();
-    selected.delete(id);
+    selSg.delete(id); selNm.delete(id);
     decrementBadge(1);
-    updateBulkBar();
+    updateBars();
+    checkEmpty();
   }
 
   window.doConfirm = async id => {
@@ -211,7 +223,7 @@
   };
 
   const sentinel = document.createElement('div');
-  container.after(sentinel);
+  nomatchList.parentElement.parentElement.after(sentinel);
   new IntersectionObserver(([e]) => { if (e.isIntersecting) loadPage(); }, { rootMargin: '300px' }).observe(sentinel);
   loadPage();
 })();

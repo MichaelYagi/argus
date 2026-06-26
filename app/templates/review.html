@@ -7,16 +7,33 @@
   <span class="muted" style="font-size:13px">Faces awaiting review</span>
 </div>
 
-<div style="background:var(--surface);color:var(--text);padding:10px 16px;border-radius:var(--radius);margin-bottom:16px;display:flex;align-items:center;gap:12px;box-shadow:var(--shadow);border-left:3px solid var(--accent)">
-  <label style="display:flex;align-items:center;gap:6px;font-size:13px;cursor:pointer">
-    <input type="checkbox" id="select-all-cb" onchange="doSelectAll(this)"> Select all
-  </label>
-  <span class="muted" style="font-size:13px"><span id="bulk-count">0</span> selected</span>
-  <button id="bulk-confirm-btn" class="btn btn-success" onclick="doBulkConfirm()" disabled>Confirm selected</button>
-  <button id="bulk-reject-btn"  class="btn btn-danger"  onclick="doBulkReject()"  disabled>Reject selected</button>
-</div>
+<div class="review-cols">
+  <!-- Suggested matches: faces Argus tentatively matched to someone. -->
+  <section class="review-col">
+    <h2 style="font-size:15px;margin-bottom:8px">Suggested matches</h2>
+    <div class="review-bulk" style="border-left-color:var(--success)">
+      <label style="display:flex;align-items:center;gap:6px;font-size:13px;cursor:pointer">
+        <input type="checkbox" id="sg-select-all" onchange="sgSelectAll(this)"> Select all
+      </label>
+      <span class="muted" style="font-size:13px"><span id="sg-count">0</span> selected</span>
+      <button id="sg-confirm-btn" class="btn btn-success" onclick="sgConfirm()" disabled>Confirm selected</button>
+    </div>
+    <div id="suggested-list"></div>
+  </section>
 
-<div id="review-list"></div>
+  <!-- No match: faces with no above-threshold match (pick a name or dismiss). -->
+  <section class="review-col">
+    <h2 style="font-size:15px;margin-bottom:8px">No match</h2>
+    <div class="review-bulk" style="border-left-color:var(--danger)">
+      <label style="display:flex;align-items:center;gap:6px;font-size:13px;cursor:pointer">
+        <input type="checkbox" id="nm-select-all" onchange="nmSelectAll(this)"> Select all
+      </label>
+      <span class="muted" style="font-size:13px"><span id="nm-count">0</span> selected</span>
+      <button id="nm-dismiss-btn" class="btn btn-danger" onclick="nmDismiss()" disabled>Dismiss selected</button>
+    </div>
+    <div id="nomatch-list"></div>
+  </section>
+</div>
 {% endblock %}
 
 {% block scripts %}
