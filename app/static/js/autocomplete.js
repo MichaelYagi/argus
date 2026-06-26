@@ -305,6 +305,17 @@
     });
   };
 
+  // Hide [data-camera-btn] buttons where the camera can't actually be used: no live
+  // webcam (insecure context) AND no touch device. Otherwise the button would just open
+  // a file dialog on desktop, which is pointless and confusing.
+  document.addEventListener('DOMContentLoaded', () => {
+    const liveOk = window.isSecureContext && navigator.mediaDevices
+                   && typeof navigator.mediaDevices.getUserMedia === 'function';
+    const hasTouch = ('ontouchstart' in window) || navigator.maxTouchPoints > 0;
+    if (liveOk || hasTouch) return;
+    document.querySelectorAll('[data-camera-btn]').forEach(b => { b.style.display = 'none'; });
+  });
+
   window.showLabelPopup = (anchor, onConfirm, placeholder = 'Name (blank to clear)') => {
     document.querySelectorAll('.label-popup, .label-backdrop').forEach(p => p.remove());
 
