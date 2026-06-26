@@ -78,6 +78,47 @@
 </div>
 {% endfor %}
 
+{# Logs — admin only #}
+<div class="card" style="margin-bottom:16px">
+  <h2 style="margin-bottom:4px">Logs</h2>
+  <p class="muted" style="font-size:12px;margin-bottom:12px">
+    Recent application logs kept in memory (most recent lines, set by Log Buffer Size above).
+    Cleared on restart.
+  </p>
+  <button class="btn btn-ghost" id="view-logs-btn" type="button">View logs</button>
+</div>
+
+{# Log viewer modal (plain overlay — not .modal-overlay, so toasts don't remove it) #}
+<div id="logs-modal"
+     style="position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:650;
+            display:none;align-items:center;justify-content:center;padding:16px">
+  <div style="background:var(--surface);color:var(--text);border-radius:var(--radius);
+              box-shadow:var(--shadow);width:min(960px,96%);max-height:85vh;
+              display:flex;flex-direction:column">
+    <div style="display:flex;align-items:center;gap:12px;padding:12px 16px;border-bottom:1px solid var(--border)">
+      <strong style="flex:1">Logs</strong>
+      <select id="logs-level" style="width:auto;font-size:12px">
+        <option value="">All levels</option>
+        <option value="ERROR">Error</option>
+        <option value="WARNING">Warning</option>
+        <option value="INFO">Info</option>
+      </select>
+      <button class="btn btn-ghost" id="logs-copy" type="button" title="Copy logs"
+              style="font-size:12px;display:inline-flex;align-items:center">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+             stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <rect x="9" y="9" width="13" height="13" rx="2"/>
+          <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>
+        </svg>
+      </button>
+      <button class="btn btn-ghost" id="logs-refresh" type="button" style="font-size:12px">Refresh</button>
+      <button class="btn btn-ghost" id="logs-close" type="button" style="font-size:12px">Close</button>
+    </div>
+    <pre id="logs-output" style="margin:0;overflow:auto;flex:1;min-height:240px;padding:12px 16px;
+         font-size:12px;line-height:1.5;white-space:pre-wrap;word-break:break-word"></pre>
+  </div>
+</div>
+
 {# User management — admin only #}
 <div class="card" style="margin-bottom:16px">
   <h2 style="margin-bottom:4px">Users</h2>
@@ -174,6 +215,72 @@
 
 {% block scripts %}
 <script src="/static/js/settings.js"></script>
+<script>
+(() => {
+  const modal   = document.getElementById('logs-modal');
+  const output  = document.getElementById('logs-output');
+  const levelEl = document.getElementById('logs-level');
+  if (!modal) return;
+
+  function esc(s) {
+    return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  }
+  const COLORS = { ERROR:'#e53e3e', CRITICAL:'#e53e3e', WARNING:'#d69e2e', INFO:'var(--muted)', DEBUG:'var(--muted)' };
+
+  async function load() {
+    output.textContent = 'Loading…';
+    const params = new URLSearchParams();
+    if (levelEl.value) params.set('level', levelEl.value);
+    try {
+      const r = await fetch('/api/logs?' + params);
+      if (!r.ok) { output.textContent = 'Failed to load logs (' + r.status + ').'; return; }
+      const data = await r.json();
+      if (!data.lines.length) { output.textContent = 'No log lines in the buffer.'; return; }
+      output.innerHTML = data.lines.map(l =>
+        `<div><span style="color:var(--muted)">${esc(l.time)}</span> ` +
+        `<strong style="color:${COLORS[l.level] || 'var(--text)'}">${esc(l.level)}</strong> ` +
+        `<span style="color:var(--muted)">${esc(l.logger)}</span> ${esc(l.message)}</div>`
+      ).join('');
+      output.scrollTop = output.scrollHeight;  // newest at the bottom
+    } catch (e) {
+      output.textContent = 'Failed to load logs.';
+    }
+  }
+
+  function open()  { modal.style.display = 'flex'; load(); }
+  function close() { modal.style.display = 'none'; }
+
+  async function copyLogs() {
+    const text = output.innerText || '';
+    if (!text.trim()) return;
+    try {
+      if (navigator.clipboard && window.isSecureContext) {
+        await navigator.clipboard.writeText(text);
+      } else {
+        // Fallback for plain LAN HTTP, where the clipboard API isn't available.
+        const ta = document.createElement('textarea');
+        ta.value = text;
+        ta.style.cssText = 'position:fixed;top:0;left:0;opacity:0';
+        document.body.appendChild(ta);
+        ta.select();
+        document.execCommand('copy');
+        ta.remove();
+      }
+      if (window.showToast) showToast('Logs copied to clipboard', 'success');
+    } catch (e) {
+      if (window.showToast) showToast('Copy failed', 'error');
+    }
+  }
+
+  document.getElementById('view-logs-btn').addEventListener('click', open);
+  document.getElementById('logs-close').addEventListener('click', close);
+  document.getElementById('logs-copy').addEventListener('click', copyLogs);
+  document.getElementById('logs-refresh').addEventListener('click', load);
+  levelEl.addEventListener('change', load);
+  modal.addEventListener('click', e => { if (e.target === modal) close(); });
+  document.addEventListener('keydown', e => { if (e.key === 'Escape' && modal.style.display !== 'none') close(); });
+})();
+</script>
 {% if active_obj_world %}
 <script src="/static/js/world-suggestions.js"></script>
 <script>

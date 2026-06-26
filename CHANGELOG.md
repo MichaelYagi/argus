@@ -9,6 +9,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Added
 
+- **Admin log viewer.** A "View logs" button on the Settings page opens a modal that replays Argus's recent in-memory logs (level filter + Refresh), backed by a new admin-only `GET /api/logs`. A new `system.log_buffer_size` setting (default 500, bounded 100–100000) controls how many lines are kept in memory and is resized live when changed. In-memory only (cleared on restart); stdlib-only, no new dependencies.
 - **Camera capture** on Enroll, Detect, and Test — a "Use camera" button grabs a photo from the device camera and feeds it straight into the flow. Uses the live in-browser webcam where the page is a secure context (HTTPS or `localhost`), and falls back to the phone's native camera (capture file input) over plain LAN HTTP, so snapping a photo on a phone works without HTTPS. No backend changes — the captured frame goes through the existing upload path.
 - **More object detection models** in the registry, all producing bounding boxes: YOLOv8l, YOLO11 (s/m/l/x), YOLOv10 (s/m/l/x), and RT-DETR (l/x — a transformer detector, loaded via Ultralytics' `RTDETR`); plus the compact `buffalo_sc` face pack. Existing YOLO-World open-vocab models remain.
 - **Each model now has a short description** (stored in a new `models.description` column) shown on the Models page and returned by `/api/models`.

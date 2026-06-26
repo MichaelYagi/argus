@@ -23,12 +23,13 @@ from app.api import (
     images,
     jobs,
     keys,
+    logs,
     media,
     models,
     review,
     settings,
 )
-from app.core import settings_cache
+from app.core import log_buffer, settings_cache
 from app.db import store
 from app.pages import account, auth, bulk, main_pages, tag
 from app.pages import keys as keys_page
@@ -42,6 +43,8 @@ async def lifespan(app: FastAPI):
         log.warning("SECRET_KEY is not set — sessions are insecure.")
     store.init_db()
     settings_cache.cache.load()
+    _row = store.get_setting("system.log_buffer_size")
+    log_buffer.install(int(_row["value"]) if _row else log_buffer.DEFAULT_SIZE)
     _autoload_engines()
     yield
 
@@ -96,6 +99,7 @@ app.include_router(identities.router)
 app.include_router(enroll.router)
 app.include_router(models.router)
 app.include_router(settings.router)
+app.include_router(logs.router)
 app.include_router(review.router)
 app.include_router(images.router)
 app.include_router(changes.router)

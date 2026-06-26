@@ -1739,6 +1739,9 @@ _SETTINGS_SEED: list[tuple] = [
     ("system.auto_approve_users",
      "true",  "bool",   "system",
      "Auto-approve New Users | Approve new accounts immediately on sign-up; disable to require admin approval"),
+    ("system.log_buffer_size",
+     "500",   "int",    "system",
+     "Log Buffer Size | Number of recent log lines kept in memory and replayed in the log viewer (100–100000)"),
 ]
 
 

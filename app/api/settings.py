@@ -58,6 +58,11 @@ async def update_setting(key: str, body: _UpdateBody, user_id: int = Depends(req
             from app.core import face_index
             face_index.build_all(model_row["id"])
 
+    # Resize the live log ring buffer when its size setting changes.
+    if key == "system.log_buffer_size":
+        from app.core import log_buffer
+        log_buffer.resize(int(value_str))
+
     return _fmt(store.get_setting(key))
 
 
@@ -117,6 +122,15 @@ def _validate_value(key: str, raw: str, value_type: str) -> str:
     # Special rule: system.use_gpu = true is rejected when GPU is unavailable
     if key == "system.use_gpu" and raw == "true":
         _require_gpu_available()
+
+    # Log buffer size must stay within sane memory bounds.
+    if key == "system.log_buffer_size":
+        from app.core import log_buffer
+        if not (log_buffer.MIN_SIZE <= int(raw) <= log_buffer.MAX_SIZE):
+            raise HTTPException(
+                400,
+                f"system.log_buffer_size must be between {log_buffer.MIN_SIZE} and {log_buffer.MAX_SIZE}",
+            )
 
     # Face matching method is a fixed choice.
     if key == "face.match_strategy":
