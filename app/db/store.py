@@ -1643,37 +1643,52 @@ _MODEL_SEED: list[tuple] = [
 ]
 
 # Default vocabulary for YOLO-World: 80 COCO classes + common extras
+# Curated for general photo tagging: things that actually appear in everyday and
+# family photos and are visually distinct. Deliberately omits security/military,
+# medical, industrial and abstract-event terms (e.g. "weapon", "accident"), which
+# lack crisp visual anchors and are the main source of false positives.
 _WORLD_CLASSES_DEFAULT = (
-    # COCO 80
-    "person,bicycle,car,motorcycle,airplane,bus,train,truck,boat,"
-    "traffic light,fire hydrant,stop sign,parking meter,bench,"
-    "bird,cat,dog,horse,sheep,cow,elephant,bear,zebra,giraffe,"
-    "backpack,umbrella,handbag,tie,suitcase,frisbee,skis,snowboard,"
-    "sports ball,kite,baseball bat,baseball glove,skateboard,surfboard,"
-    "tennis racket,bottle,wine glass,cup,fork,knife,spoon,bowl,"
-    "banana,apple,sandwich,orange,broccoli,carrot,hot dog,pizza,"
-    "donut,cake,chair,couch,potted plant,bed,dining table,toilet,"
-    "tv,laptop,mouse,remote,keyboard,cell phone,microwave,oven,"
-    "toaster,sink,refrigerator,book,clock,vase,scissors,teddy bear,"
-    "hair drier,toothbrush,"
-    # Safety and security
-    "gun,rifle,pistol,weapon,sword,face mask,helmet,handcuffs,"
-    "security camera,fire extinguisher,police car,ambulance,fire truck,"
-    # Events and hazards
-    "fire,smoke,explosion,flood,crowd,accident,graffiti,trash,"
-    # Extended vehicles
-    "van,scooter,tractor,forklift,crane,excavator,helicopter,drone,"
-    "go-kart,golf cart,wheelchair,baby stroller,"
-    # More animals
-    "lion,tiger,leopard,cheetah,wolf,fox,deer,rabbit,squirrel,"
-    "raccoon,skunk,beaver,otter,monkey,gorilla,penguin,flamingo,"
-    "dolphin,whale,shark,seal,crab,lobster,jellyfish,"
-    "turtle,snake,lizard,frog,eagle,owl,parrot,crow,peacock,"
-    # Documents and IDs
-    "license plate,passport,credit card,badge,barcode,QR code,"
-    # Misc useful
-    "cigarette,alcohol bottle,ladder,fence,gate,stairs,"
-    "fire hydrant,manhole,traffic cone,road sign,street light"
+    # People and animals
+    "person,dog,cat,bird,fish,rabbit,hamster,horse,cow,sheep,goat,pig,"
+    "chicken,duck,squirrel,deer,fox,butterfly,bee,elephant,lion,tiger,"
+    "giraffe,zebra,bear,panda,monkey,penguin,dolphin,whale,turtle,frog,snake,"
+    # Vehicles
+    "car,truck,pickup truck,suv,van,taxi,bus,motorcycle,bicycle,scooter,"
+    "boat,sailboat,kayak,canoe,airplane,helicopter,hot air balloon,train,"
+    # Food and drink
+    "apple,banana,orange,strawberry,grape,watermelon,lemon,pineapple,peach,"
+    "cherry,avocado,tomato,carrot,corn,broccoli,mushroom,bread,sandwich,"
+    "hamburger,pizza,taco,burrito,sushi,hot dog,french fries,pasta,noodles,"
+    "rice,soup,salad,steak,egg,bacon,cheese,cake,cupcake,donut,cookie,"
+    "ice cream,chocolate,candy,popcorn,pancake,waffle,coffee cup,mug,"
+    "wine glass,beer bottle,bottle,cup,jug,plate,bowl,fork,knife,spoon,chopsticks,"
+    # Nature and outdoors
+    "tree,flower,rose,sunflower,tulip,potted plant,cactus,palm tree,grass,leaf,"
+    "mountain,hill,cliff,cave,beach,ocean,wave,lake,river,waterfall,pond,"
+    "rock,sand,snow,ice,cloud,rainbow,"
+    # Buildings and places
+    "house,building,skyscraper,barn,church,castle,tower,lighthouse,windmill,"
+    "bridge,tunnel,fountain,statue,monument,store,restaurant,hotel,door,window,"
+    "stairs,fence,gate,mailbox,bench,street light,"
+    # Home and indoor
+    "chair,couch,armchair,table,dining table,desk,stool,bed,lamp,chandelier,"
+    "mirror,clock,picture frame,painting,vase,candle,rug,pillow,curtain,"
+    "fireplace,bookshelf,refrigerator,oven,microwave,toaster,stove,sink,"
+    "toilet,bathtub,tv,laptop,computer,monitor,keyboard,mouse,cell phone,"
+    "camera,headphones,speaker,game controller,book,newspaper,pen,"
+    # Personal items and clothing
+    "backpack,handbag,suitcase,wallet,umbrella,glasses,sunglasses,watch,hat,"
+    "cap,scarf,tie,shirt,t-shirt,dress,jacket,coat,suit,jeans,shoe,sneaker,"
+    "boot,sandal,high heels,necklace,ring,bracelet,earring,"
+    # Sports and recreation
+    "soccer ball,basketball,football,baseball,tennis racket,baseball bat,"
+    "skateboard,surfboard,skis,snowboard,kite,frisbee,fishing rod,golf club,"
+    "dumbbell,tent,sleeping bag,"
+    # Instruments
+    "guitar,piano,violin,drum,trumpet,flute,"
+    # Toys, baby and events
+    "teddy bear,doll,toy,balloon,baby stroller,baby bottle,christmas tree,"
+    "wreath,fireworks,flag,gift box,birthday cake"
 )
 
 _SETTINGS_SEED: list[tuple] = [
