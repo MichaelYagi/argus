@@ -67,7 +67,7 @@ def install(size: int) -> None:
         return
 
     _handler = RingBufferHandler(size)
-    _handler.setLevel(logging.INFO)
+    _handler.setLevel(logging.DEBUG)  # capture everything; the viewer filters by level
 
     root = logging.getLogger()
     root.addHandler(_handler)

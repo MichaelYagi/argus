@@ -96,13 +96,9 @@
               box-shadow:var(--shadow);width:min(960px,96%);max-height:85vh;
               display:flex;flex-direction:column">
     <div style="display:flex;align-items:center;gap:12px;padding:12px 16px;border-bottom:1px solid var(--border)">
-      <strong style="flex:1">Logs</strong>
-      <select id="logs-level" style="width:auto;font-size:12px">
-        <option value="">All levels</option>
-        <option value="ERROR">Error</option>
-        <option value="WARNING">Warning</option>
-        <option value="INFO">Info</option>
-      </select>
+      <strong>Logs</strong>
+      <input id="logs-filter" type="text" placeholder="Filter… (use -term to exclude)"
+             style="flex:1;min-width:120px;font-size:12px;padding:4px 8px">
       <button class="btn btn-ghost" id="logs-copy" type="button" title="Copy logs"
               style="font-size:12px;display:inline-flex;align-items:center">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"
@@ -113,6 +109,13 @@
       </button>
       <button class="btn btn-ghost" id="logs-refresh" type="button" style="font-size:12px">Refresh</button>
       <button class="btn btn-ghost" id="logs-close" type="button" style="font-size:12px">Close</button>
+    </div>
+    <div id="logs-levels" style="display:flex;gap:6px;flex-wrap:wrap;padding:10px 16px;border-bottom:1px solid var(--border)">
+      <button type="button" class="btn logs-level-btn" data-level="DEBUG" style="font-size:12px;padding:3px 12px">Debug</button>
+      <button type="button" class="btn logs-level-btn" data-level="INFO" style="font-size:12px;padding:3px 12px">Info</button>
+      <button type="button" class="btn logs-level-btn" data-level="WARNING" style="font-size:12px;padding:3px 12px">Warning</button>
+      <button type="button" class="btn logs-level-btn" data-level="ERROR" style="font-size:12px;padding:3px 12px">Error</button>
+      <button type="button" class="btn logs-level-btn" data-level="CRITICAL" style="font-size:12px;padding:3px 12px">Critical</button>
     </div>
     <pre id="logs-output" style="margin:0;overflow:auto;flex:1;min-height:240px;padding:12px 16px;
          font-size:12px;line-height:1.5;white-space:pre-wrap;word-break:break-word"></pre>
@@ -217,9 +220,10 @@
 <script src="/static/js/settings.js"></script>
 <script>
 (() => {
-  const modal   = document.getElementById('logs-modal');
-  const output  = document.getElementById('logs-output');
-  const levelEl = document.getElementById('logs-level');
+  const modal    = document.getElementById('logs-modal');
+  const output   = document.getElementById('logs-output');
+  const filterEl = document.getElementById('logs-filter');
+  const levelBtns = Array.from(document.querySelectorAll('.logs-level-btn'));
   if (!modal) return;
 
   function esc(s) {
@@ -227,27 +231,56 @@
   }
   const COLORS = { ERROR:'#e53e3e', CRITICAL:'#e53e3e', WARNING:'#d69e2e', INFO:'var(--muted)', DEBUG:'var(--muted)' };
 
+  let lines = [];
+  const activeLevels = new Set(levelBtns.map(b => b.dataset.level));  // all on by default
+
+  function syncLevelButtons() {
+    levelBtns.forEach(b => {
+      const on = activeLevels.has(b.dataset.level);
+      b.classList.toggle('btn-primary', on);
+      b.classList.toggle('btn-ghost', !on);
+    });
+  }
+
+  // Space-separated terms: a plain term must be present, a -term must be absent.
+  function matches(line) {
+    if (!activeLevels.has(line.level)) return false;
+    const terms = filterEl.value.trim().toLowerCase().split(/\s+/).filter(Boolean);
+    if (!terms.length) return true;
+    const hay = `${line.time} ${line.level} ${line.logger} ${line.message}`.toLowerCase();
+    for (const t of terms) {
+      if (t.startsWith('-')) { if (t.length > 1 && hay.includes(t.slice(1))) return false; }
+      else if (!hay.includes(t)) return false;
+    }
+    return true;
+  }
+
+  function render() {
+    const shown = lines.filter(matches);
+    if (!lines.length)      { output.textContent = 'No log lines in the buffer.'; return; }
+    if (!shown.length)      { output.textContent = 'No lines match the filter.'; return; }
+    output.innerHTML = shown.map(l =>
+      `<div><span style="color:var(--muted)">${esc(l.time)}</span> ` +
+      `<strong style="color:${COLORS[l.level] || 'var(--text)'}">${esc(l.level)}</strong> ` +
+      `<span style="color:var(--muted)">${esc(l.logger)}</span> ${esc(l.message)}</div>`
+    ).join('');
+    output.scrollTop = output.scrollHeight;  // newest at the bottom
+  }
+
   async function load() {
     output.textContent = 'Loading…';
-    const params = new URLSearchParams();
-    if (levelEl.value) params.set('level', levelEl.value);
     try {
-      const r = await fetch('/api/logs?' + params);
+      const r = await fetch('/api/logs');
       if (!r.ok) { output.textContent = 'Failed to load logs (' + r.status + ').'; return; }
       const data = await r.json();
-      if (!data.lines.length) { output.textContent = 'No log lines in the buffer.'; return; }
-      output.innerHTML = data.lines.map(l =>
-        `<div><span style="color:var(--muted)">${esc(l.time)}</span> ` +
-        `<strong style="color:${COLORS[l.level] || 'var(--text)'}">${esc(l.level)}</strong> ` +
-        `<span style="color:var(--muted)">${esc(l.logger)}</span> ${esc(l.message)}</div>`
-      ).join('');
-      output.scrollTop = output.scrollHeight;  // newest at the bottom
+      lines = data.lines || [];
+      render();
     } catch (e) {
       output.textContent = 'Failed to load logs.';
     }
   }
 
-  function open()  { modal.style.display = 'flex'; load(); }
+  function open()  { syncLevelButtons(); modal.style.display = 'flex'; load(); }
   function close() { modal.style.display = 'none'; }
 
   async function copyLogs() {
@@ -276,7 +309,13 @@
   document.getElementById('logs-close').addEventListener('click', close);
   document.getElementById('logs-copy').addEventListener('click', copyLogs);
   document.getElementById('logs-refresh').addEventListener('click', load);
-  levelEl.addEventListener('change', load);
+  filterEl.addEventListener('input', render);
+  levelBtns.forEach(b => b.addEventListener('click', () => {
+    const lv = b.dataset.level;
+    if (activeLevels.has(lv)) activeLevels.delete(lv); else activeLevels.add(lv);
+    syncLevelButtons();
+    render();
+  }));
   modal.addEventListener('click', e => { if (e.target === modal) close(); });
   document.addEventListener('keydown', e => { if (e.key === 'Escape' && modal.style.display !== 'none') close(); });
 })();
