@@ -98,6 +98,8 @@ function labelBox(div, tip) {
         tip.textContent = 'Unknown';
         div.classList.remove('labeled');
         setStatus('Cleared label.');
+      } else {
+        setStatus('Error clearing label.');
       }
       return;
     }

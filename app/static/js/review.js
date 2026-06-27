@@ -40,17 +40,38 @@
     badge.style.display = next === 0 ? 'none' : 'inline';
   }
 
+  // Single feedback helper so every review action reports success/failure. Returns
+  // true only when the server accepted it, so callers don't optimistically remove
+  // cards for requests that actually failed.
+  async function sendReview(url, opts) {
+    try {
+      const resp = await fetch(url, opts);
+      if (!resp.ok) {
+        if (window.showToast) showToast('Action failed (' + resp.status + ').', 'error');
+        return false;
+      }
+      return true;
+    } catch (e) {
+      if (window.showToast) showToast('Action failed (network error).', 'error');
+      return false;
+    }
+  }
+
   async function bulkAction(ids, action, sel, allCb) {
     if (!ids.length) return;
     const items = ids.map(id => ({ detection_id: id, action }));
-    await fetch('/api/review/bulk', {
+    const ok = await sendReview('/api/review/bulk', {
       method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(items),
     });
+    if (!ok) return;
     ids.forEach(id => { document.getElementById('rc-' + id)?.remove(); sel.delete(id); });
     decrementBadge(ids.length);
     if (allCb) allCb.checked = false;
     updateBars();
     checkEmpty();
+    if (window.showToast) {
+      showToast(ids.length + (action === 'confirm' ? ' confirmed' : ' dismissed'), 'success');
+    }
   }
 
   window.sgConfirm = () => bulkAction([...selSg], 'confirm', selSg, sgAll);
@@ -197,29 +218,26 @@
   }
 
   window.doConfirm = async id => {
-    await fetch('/api/review/' + id + '/confirm', { method: 'POST' });
-    removeCard(id);
+    if (await sendReview('/api/review/' + id + '/confirm', { method: 'POST' })) removeCard(id);
   };
   window.doReject = async id => {
-    await fetch('/api/review/' + id + '/reject', { method: 'POST' });
-    removeCard(id);
+    if (await sendReview('/api/review/' + id + '/reject', { method: 'POST' })) removeCard(id);
   };
   window.doReassign = async (id, identityId) => {
-    await fetch('/api/review/' + id + '/reassign', {
+    const ok = await sendReview('/api/review/' + id + '/reassign', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ identity_id: identityId }),
     });
-    removeCard(id);
+    if (ok) removeCard(id);
   };
   window.doReassignLabel = async id => {
     const label = document.getElementById('ra-' + id)?.value.trim();
     if (!label) return;
-    addFaceLabel(label);
-    await fetch('/api/review/' + id + '/reassign', {
+    const ok = await sendReview('/api/review/' + id + '/reassign', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ label }),
     });
-    removeCard(id);
+    if (ok) { addFaceLabel(label); removeCard(id); }
   };
 
   const sentinel = document.createElement('div');

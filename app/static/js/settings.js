@@ -3,6 +3,14 @@
   const alertEl = document.getElementById('settings-alert');
 
   function showAlert(msg, type) {
+    // Prefer the floating corner toast so feedback is visible regardless of scroll
+    // position — the inline banner sits at the top of the page and is missed when
+    // saving a form further down (e.g. the YOLO-World vocabulary box).
+    if (window.showToast) {
+      window.showToast(msg, type === 'error' ? 'error' : 'success');
+      return;
+    }
+    if (!alertEl) return;
     alertEl.className = 'alert alert-' + type;
     alertEl.textContent = msg;
     alertEl.hidden = false;

@@ -60,15 +60,25 @@
       `Remove ${selected.size} detection${selected.size === 1 ? '' : 's'} from this identity?`,
       async () => {
         const items = [...selected].map(id => ({ detection_id: id, action: 'reject' }));
-        await fetch('/api/review/bulk', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(items),
-        });
+        const n = selected.size;
+        let ok = false;
+        try {
+          const resp = await fetch('/api/review/bulk', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(items),
+          });
+          ok = resp.ok;
+        } catch (e) { ok = false; }
+        if (!ok) {
+          if (window.showToast) showToast('Could not remove the selected detections.', 'error');
+          return;
+        }
         removeItems([...selected]);
         selected.clear();
         updateBulkBar();
         render();
+        if (window.showToast) showToast(n + ' detection' + (n === 1 ? '' : 's') + ' removed', 'success');
       },
       { confirmText: 'Delete', danger: true }
     );
@@ -79,16 +89,26 @@
     showLabelPopup(btn, async label => {
       if (!label) return;
       const items = [...selected].map(id => ({ detection_id: id, action: 'reassign', label }));
-      await fetch('/api/review/bulk', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(items),
-      });
+      const n = selected.size;
+      let ok = false;
+      try {
+        const resp = await fetch('/api/review/bulk', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(items),
+        });
+        ok = resp.ok;
+      } catch (e) { ok = false; }
+      if (!ok) {
+        if (window.showToast) showToast('Could not reassign the selected detections.', 'error');
+        return;
+      }
       addFaceLabel(label);
       removeItems([...selected]);
       selected.clear();
       updateBulkBar();
       render();
+      if (window.showToast) showToast(n + ' moved to ' + label, 'success');
     });
   };
 
@@ -197,12 +217,21 @@
         delBtn.addEventListener('click', async e => {
           e.stopPropagation();
           showConfirm('Delete this detection permanently?', async () => {
-            const resp = await fetch(`/api/detections/${item.detection_id}`, { method: 'DELETE' });
+            let resp;
+            try {
+              resp = await fetch(`/api/detections/${item.detection_id}`, { method: 'DELETE' });
+            } catch (err) {
+              if (window.showToast) showToast('Could not delete the detection (network error).', 'error');
+              return;
+            }
             if (resp.ok || resp.status === 204) {
               removeItems([item.detection_id]);
               selected.delete(item.detection_id);
               updateBulkBar();
               render();
+              if (window.showToast) showToast('Detection deleted', 'success');
+            } else if (window.showToast) {
+              showToast('Could not delete the detection.', 'error');
             }
           }, { confirmText: 'Delete', danger: true });
         });
@@ -232,6 +261,8 @@
                   const d = await resp.json();
                   if (d.added) adjustRefCount(1);
                   enrolled = true;
+                } else if (window.showToast) {
+                  showToast('Could not add to reference set.', 'error');
                 }
               } else {
                 const resp = await fetch(`/api/detections/${item.detection_id}/enroll`, { method: 'DELETE' });
@@ -239,10 +270,14 @@
                   const d = await resp.json();
                   if (d.removed) adjustRefCount(-1);
                   enrolled = false;
+                } else if (window.showToast) {
+                  showToast('Could not remove from reference set.', 'error');
                 }
               }
               item.enrolled = enrolled;
               renderEnroll();
+            } catch (err) {
+              if (window.showToast) showToast('Reference update failed (network error).', 'error');
             } finally {
               enrollBtn.disabled = false;
             }
@@ -261,11 +296,17 @@
         coverBtn.title = isCover ? 'Current cover photo' : 'Set as cover photo';
         coverBtn.addEventListener('click', async e => {
           e.stopPropagation();
-          const resp = await fetch(`/api/identities/${identityId}/cover`, {
-            method: 'PUT',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ detection_id: item.detection_id }),
-          });
+          let resp;
+          try {
+            resp = await fetch(`/api/identities/${identityId}/cover`, {
+              method: 'PUT',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ detection_id: item.detection_id }),
+            });
+          } catch (err) {
+            if (window.showToast) showToast('Could not set the cover photo (network error).', 'error');
+            return;
+          }
           if (resp.ok) {
             container.querySelectorAll('.g-cover-btn.is-cover').forEach(b => {
               b.classList.remove('is-cover');
@@ -274,6 +315,9 @@
             coverBtn.classList.add('is-cover');
             coverBtn.title = 'Current cover photo';
             coverId = String(item.detection_id);
+            if (window.showToast) showToast('Cover photo updated', 'success');
+          } else if (window.showToast) {
+            showToast('Could not set the cover photo.', 'error');
           }
         });
         el.appendChild(coverBtn);

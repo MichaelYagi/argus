@@ -423,16 +423,17 @@
     });
   }
 
-  // Sanitize before save: strip non-list entries and duplicates
+  // Sanitize before save: trim blanks and drop duplicates only. YOLO-World is an
+  // open vocabulary, so any visible thing the user types is valid — the suggestion
+  // list only powers autocomplete and must NOT gate what can be saved.
   const worldForm = document.querySelector('form[data-category="world"]');
   if (worldForm) {
     worldForm.addEventListener('submit', () => {
-      const valid = new Set(all.map(s => s.toLowerCase()));
       const seen  = new Set();
       const cleaned = ta.value
         .split(',')
         .map(s => s.trim())
-        .filter(s => s && valid.has(s.toLowerCase()))
+        .filter(Boolean)
         .filter(s => { const k = s.toLowerCase(); return seen.has(k) ? false : seen.add(k); });
       ta.value = cleaned.join(',');
     }, true); // capture phase fires before settings.js
