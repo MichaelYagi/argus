@@ -76,6 +76,7 @@
 
   const FACE_COLOR = '#3a8ef6';
   const OBJ_COLOR  = '#10b981';
+  const HILITE     = '#f97316';  // orange — shared hover highlight for a face row and its box
 
   let fileList = [];
   let rendered = [];  // {img, data} for resize redraws
@@ -275,7 +276,7 @@
         const match = f.label
           ? `${esc(f.label)} <span class="muted">${(f.similarity * 100).toFixed(0)}%</span>`
           : '<span class="muted">—</span>';
-        html += `<tr style="border-bottom:1px solid var(--border)">
+        html += `<tr data-face-row="${i}" style="border-bottom:1px solid var(--border);cursor:default">
           <td style="padding:4px 0">#${i + 1}</td>
           <td>${match}</td>
           <td>${(f.confidence * 100).toFixed(0)}%</td>
@@ -286,6 +287,14 @@
     }
 
     card.innerHTML = html;
+
+    // Row hover -> highlight the matching face box. Boxes are resolved at hover
+    // time (they get rebuilt on image load / resize), so this survives redraws.
+    card.querySelectorAll('tr[data-face-row]').forEach(row => {
+      const idx = +row.dataset.faceRow;
+      row.addEventListener('mouseenter', () => setHilite(card, idx, true));
+      row.addEventListener('mouseleave', () => setHilite(card, idx, false));
+    });
 
     const wrap = card.querySelector('.img-wrap');
     const img  = card.querySelector('.test-img');
@@ -299,21 +308,44 @@
     rendered.push({ wrap, img, data: r });
   }
 
-  function boxEl(wrap, img, b, color, label) {
+  function boxEl(wrap, img, b, color, label, faceIndex = null) {
     const sx = img.clientWidth / img.naturalWidth;
     const sy = img.clientHeight / img.naturalHeight;
+    const interactive = faceIndex !== null;
     const d = document.createElement('div');
     d.className = 'test-overlay';
     d.style.cssText =
-      `position:absolute;border:2px solid ${color};border-radius:2px;box-sizing:border-box;pointer-events:none;` +
+      `position:absolute;border:2px solid ${color};border-radius:2px;box-sizing:border-box;` +
+      `pointer-events:${interactive ? 'auto' : 'none'};${interactive ? 'cursor:default;' : ''}` +
       `left:${b.x * sx}px;top:${b.y * sy}px;width:${b.w * sx}px;height:${b.h * sy}px`;
     const tag = document.createElement('span');
+    tag.className = 'test-overlay-tag';
     tag.textContent = label;
     tag.style.cssText =
       `position:absolute;left:-2px;top:-18px;background:${color};color:#fff;font-size:10px;` +
       `line-height:14px;padding:0 4px;border-radius:2px;white-space:nowrap`;
     d.appendChild(tag);
+    if (interactive) {
+      d.dataset.faceIndex = faceIndex;
+      const card = wrap.parentElement;
+      d.addEventListener('mouseenter', () => setHilite(card, faceIndex, true));
+      d.addEventListener('mouseleave', () => setHilite(card, faceIndex, false));
+    }
     wrap.appendChild(d);
+  }
+
+  // Toggle the shared highlight on a face's box (border + label) and its table row.
+  function setHilite(card, index, on) {
+    const box = card.querySelector(`.test-overlay[data-face-index="${index}"]`);
+    if (box) {
+      const color = on ? HILITE : FACE_COLOR;
+      box.style.borderColor = color;
+      box.style.zIndex = on ? '5' : '';
+      const tag = box.querySelector('.test-overlay-tag');
+      if (tag) tag.style.background = color;
+    }
+    const row = card.querySelector(`tr[data-face-row="${index}"]`);
+    if (row) row.style.background = on ? 'rgba(249,115,22,0.15)' : '';
   }
 
   function drawOverlays(wrap, img, r) {
@@ -321,7 +353,7 @@
     wrap.querySelectorAll('.test-overlay').forEach(e => e.remove());
     r.objects.forEach(o => boxEl(wrap, img, o.bbox, OBJ_COLOR, `${o.class_name} ${(o.confidence * 100).toFixed(0)}%`));
     r.faces.forEach((f, i) => boxEl(wrap, img, f.bbox, FACE_COLOR,
-      f.label ? `${f.label} ${(f.similarity * 100).toFixed(0)}%` : `Face #${i + 1}`));
+      f.label ? `${f.label} ${(f.similarity * 100).toFixed(0)}%` : `Face #${i + 1}`, i));
   }
 
   window.addEventListener('resize', () => {
