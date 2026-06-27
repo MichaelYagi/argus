@@ -102,6 +102,23 @@
     });
   });
 
+  // Instant-save toggles — standalone switches with no Save button (e.g. the
+  // auto-approve toggle in User Management). Persist on change and confirm via toast.
+  document.querySelectorAll('input[type=checkbox][data-instant][data-key]').forEach(cb => {
+    cb.addEventListener('change', async () => {
+      cb.disabled = true;
+      const err = await saveSetting(cb.dataset.key, cb.checked ? 'true' : 'false');
+      cb.disabled = false;
+      const label = cb.closest('.setting-row')?.querySelector('.s-label strong')?.textContent.trim() || 'Setting';
+      if (err) {
+        cb.checked = !cb.checked;  // revert — the change did not stick
+        showAlert(label + ': ' + err, 'error');
+      } else {
+        showAlert(label + (cb.checked ? ' enabled' : ' disabled'), 'success');
+      }
+    });
+  });
+
   // COCO all-classes toggle (UI only — saved on form submit)
   const allCocoToggle = document.getElementById('coco-all');
   if (allCocoToggle) {

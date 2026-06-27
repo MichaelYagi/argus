@@ -24,6 +24,12 @@ _loaded_lock = threading.Lock()
 _progress: dict[int, dict] = {}
 
 
+def downloading_ids() -> set[int]:
+    """Model IDs with an in-flight download. In-process state, reset on restart —
+    used so a page reload can re-attach the progress spinner/polling."""
+    return {mid for mid, p in _progress.items() if p.get("status") == "downloading"}
+
+
 # ---------------------------------------------------------------------------
 # Routes
 # ---------------------------------------------------------------------------

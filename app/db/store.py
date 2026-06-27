@@ -1643,52 +1643,118 @@ _MODEL_SEED: list[tuple] = [
 ]
 
 # Default vocabulary for YOLO-World: 80 COCO classes + common extras
-# Curated for general photo tagging: things that actually appear in everyday and
-# family photos and are visually distinct. Deliberately omits security/military,
-# medical, industrial and abstract-event terms (e.g. "weapon", "accident"), which
-# lack crisp visual anchors and are the main source of false positives.
+# Broad common-object vocabulary for general photo tagging, favouring coverage over
+# peak precision: a wide spread of everyday people, animals, vehicles, food,
+# household, tools and outdoor items. Still omits security/military, medical and
+# abstract-event terms ("weapon", "accident"), which lack crisp visual anchors.
+# A vocabulary this size raises false positives and the one-time text-encode cost
+# on a vocab change; per-image latency stays dominated by the backbone. Trim it on
+# the Settings page if precision matters more than breadth for a given deployment.
 _WORLD_CLASSES_DEFAULT = (
-    # People and animals
-    "person,dog,cat,bird,fish,rabbit,hamster,horse,cow,sheep,goat,pig,"
-    "chicken,duck,squirrel,deer,fox,butterfly,bee,elephant,lion,tiger,"
-    "giraffe,zebra,bear,panda,monkey,penguin,dolphin,whale,turtle,frog,snake,"
+    # People
+    "person,"
+    # Animals - mammals
+    "dog,cat,rabbit,hamster,guinea pig,horse,cow,sheep,goat,pig,donkey,llama,"
+    "alpaca,camel,deer,fox,wolf,bear,panda,raccoon,squirrel,hedgehog,bat,koala,"
+    "kangaroo,monkey,gorilla,chimpanzee,elephant,lion,tiger,leopard,cheetah,"
+    "giraffe,zebra,rhinoceros,hippopotamus,buffalo,seal,otter,dolphin,whale,"
+    # Animals - birds
+    "bird,chicken,rooster,duck,goose,turkey,swan,pigeon,seagull,owl,eagle,hawk,"
+    "parrot,peacock,crow,penguin,flamingo,"
+    # Animals - reptiles, fish, marine
+    "fish,turtle,frog,snake,lizard,gecko,crocodile,shark,octopus,crab,lobster,"
+    "starfish,jellyfish,seahorse,"
+    # Animals - insects
+    "butterfly,bee,ant,ladybug,dragonfly,spider,mosquito,snail,caterpillar,"
     # Vehicles
-    "car,truck,pickup truck,suv,van,taxi,bus,motorcycle,bicycle,scooter,"
-    "boat,sailboat,kayak,canoe,airplane,helicopter,hot air balloon,train,"
-    # Food and drink
-    "apple,banana,orange,strawberry,grape,watermelon,lemon,pineapple,peach,"
-    "cherry,avocado,tomato,carrot,corn,broccoli,mushroom,bread,sandwich,"
-    "hamburger,pizza,taco,burrito,sushi,hot dog,french fries,pasta,noodles,"
-    "rice,soup,salad,steak,egg,bacon,cheese,cake,cupcake,donut,cookie,"
-    "ice cream,chocolate,candy,popcorn,pancake,waffle,coffee cup,mug,"
-    "wine glass,beer bottle,bottle,cup,jug,plate,bowl,fork,knife,spoon,chopsticks,"
-    # Nature and outdoors
+    "car,truck,pickup truck,suv,van,taxi,bus,motorcycle,bicycle,scooter,tricycle,"
+    "segway,boat,sailboat,kayak,canoe,ship,ferry,jet ski,airplane,helicopter,"
+    "hot air balloon,drone,train,tram,ambulance,fire truck,police car,"
+    "garbage truck,tractor,forklift,crane,excavator,trailer,golf cart,snowmobile,"
+    "wheelchair,shopping cart,wagon,"
+    # Food - fruit
+    "apple,banana,orange,strawberry,grape,blueberry,raspberry,watermelon,melon,"
+    "lemon,lime,pineapple,peach,pear,plum,cherry,kiwi,coconut,avocado,fig,"
+    # Food - vegetables
+    "tomato,potato,carrot,corn,broccoli,cauliflower,cabbage,lettuce,spinach,celery,"
+    "cucumber,onion,garlic,bell pepper,pumpkin,zucchini,eggplant,peas,green beans,"
+    "mushroom,"
+    # Food - prepared
+    "bread,baguette,croissant,bagel,muffin,sandwich,hamburger,pizza,taco,burrito,"
+    "sushi,hot dog,french fries,pretzel,chips,popcorn,pasta,noodles,rice,soup,"
+    "salad,steak,sausage,bacon,ham,egg,cheese,butter,yogurt,cake,cupcake,"
+    "birthday cake,donut,cookie,pie,brownie,ice cream,chocolate,candy,pancake,"
+    "waffle,"
+    # Drinks and tableware
+    "coffee cup,mug,teapot,kettle,water bottle,wine glass,wine bottle,beer bottle,"
+    "soda can,milk carton,bottle,cup,jug,thermos,plate,bowl,fork,knife,spoon,"
+    "chopsticks,straw,"
+    # Kitchen
+    "pot,pan,frying pan,blender,mixer,coffee maker,cutting board,colander,whisk,"
+    "spatula,ladle,tongs,grater,can opener,rolling pin,measuring cup,jar,can,"
+    "napkin,paper towel,sponge,dish rack,apron,oven mitt,salt shaker,pepper shaker,"
+    "lunchbox,dishwasher,"
+    # Nature
     "tree,flower,rose,sunflower,tulip,potted plant,cactus,palm tree,grass,leaf,"
-    "mountain,hill,cliff,cave,beach,ocean,wave,lake,river,waterfall,pond,"
-    "rock,sand,snow,ice,cloud,rainbow,"
+    "bush,mountain,hill,cliff,cave,beach,ocean,wave,lake,river,waterfall,pond,rock,"
+    "sand,snow,ice,cloud,rainbow,"
     # Buildings and places
-    "house,building,skyscraper,barn,church,castle,tower,lighthouse,windmill,"
-    "bridge,tunnel,fountain,statue,monument,store,restaurant,hotel,door,window,"
-    "stairs,fence,gate,mailbox,bench,street light,"
-    # Home and indoor
-    "chair,couch,armchair,table,dining table,desk,stool,bed,lamp,chandelier,"
-    "mirror,clock,picture frame,painting,vase,candle,rug,pillow,curtain,"
-    "fireplace,bookshelf,refrigerator,oven,microwave,toaster,stove,sink,"
-    "toilet,bathtub,tv,laptop,computer,monitor,keyboard,mouse,cell phone,"
-    "camera,headphones,speaker,game controller,book,newspaper,pen,"
-    # Personal items and clothing
-    "backpack,handbag,suitcase,wallet,umbrella,glasses,sunglasses,watch,hat,"
-    "cap,scarf,tie,shirt,t-shirt,dress,jacket,coat,suit,jeans,shoe,sneaker,"
-    "boot,sandal,high heels,necklace,ring,bracelet,earring,"
+    "house,building,skyscraper,barn,shed,garage,greenhouse,church,castle,tower,"
+    "lighthouse,windmill,silo,water tower,bridge,tunnel,gazebo,pier,fountain,"
+    "statue,monument,store,restaurant,hotel,door,window,roof,chimney,balcony,"
+    "stairs,escalator,elevator,fence,gate,mailbox,bench,picnic table,"
+    # Infrastructure and traffic
+    "street light,traffic light,stop sign,street sign,traffic cone,fire hydrant,"
+    "parking meter,telephone pole,power line,bus stop,billboard,"
+    # Furniture
+    "armchair,ottoman,coffee table,dining table,desk,stool,bed,bunk bed,crib,"
+    "mattress,dresser,wardrobe,cabinet,cupboard,shelf,bookshelf,drawer,nightstand,"
+    "coat rack,hanger,chair,couch,table,"
+    # Home objects
+    "lamp,floor lamp,desk lamp,chandelier,light bulb,flashlight,lampshade,mirror,"
+    "clock,wall clock,alarm clock,picture frame,painting,poster,vase,candle,"
+    "candle holder,rug,pillow,cushion,blanket,comforter,curtain,blinds,fireplace,"
+    "fan,heater,radiator,air conditioner,humidifier,thermostat,smoke detector,"
+    "trash can,recycling bin,laundry basket,basket,bucket,box,crate,barrel,doormat,"
+    "key,keychain,lock,padlock,trophy,"
+    # Appliances and bathroom
+    "refrigerator,oven,microwave,toaster,stove,sink,toilet,bathtub,shower,"
+    "shower head,faucet,toilet paper,toilet brush,plunger,soap,soap dispenser,"
+    "shampoo,toothbrush,toothpaste,razor,comb,hairbrush,hair dryer,tissue,"
+    "tissue box,towel,bath mat,shower curtain,lipstick,perfume,nail polish,scale,"
+    # Electronics
+    "tv,laptop,computer,monitor,tablet,telephone,cell phone,smartwatch,keyboard,"
+    "mouse,camera,webcam,video camera,tripod,headphones,earbuds,speaker,microphone,"
+    "projector,printer,scanner,router,modem,flash drive,battery,charger,cable,"
+    "power strip,remote,game console,game controller,vr headset,radio,calculator,"
+    # Office and stationery
+    "book,newspaper,magazine,pen,pencil,marker,highlighter,crayon,paintbrush,"
+    "eraser,ruler,scissors,stapler,tape,glue,sticky note,notebook,folder,binder,"
+    "clipboard,envelope,paper,push pin,sticker,briefcase,whiteboard,"
+    # Tools and yard
+    "hammer,screwdriver,wrench,pliers,drill,saw,chainsaw,axe,chisel,level,"
+    "tape measure,utility knife,crowbar,clamp,screw,nail,bolt,toolbox,workbench,"
+    "ladder,rope,chain,wire,duct tape,hose,shovel,spade,rake,trowel,lawn mower,"
+    "leaf blower,wheelbarrow,watering can,flower pot,sprinkler,grill,fire pit,"
+    "bird feeder,"
+    # Clothing and accessories
+    "backpack,handbag,suitcase,duffel bag,tote bag,wallet,purse,umbrella,glasses,"
+    "sunglasses,watch,hat,cap,helmet,scarf,tie,shirt,t-shirt,sweater,hoodie,dress,"
+    "skirt,shorts,jacket,coat,blazer,vest,suit,jeans,pajamas,swimsuit,sock,glove,"
+    "belt,shoe,sneaker,boot,sandal,high heels,necklace,ring,bracelet,earring,"
     # Sports and recreation
-    "soccer ball,basketball,football,baseball,tennis racket,baseball bat,"
-    "skateboard,surfboard,skis,snowboard,kite,frisbee,fishing rod,golf club,"
-    "dumbbell,tent,sleeping bag,"
-    # Instruments
-    "guitar,piano,violin,drum,trumpet,flute,"
-    # Toys, baby and events
-    "teddy bear,doll,toy,balloon,baby stroller,baby bottle,christmas tree,"
-    "wreath,fireworks,flag,gift box,birthday cake"
+    "soccer ball,basketball,football,baseball,volleyball,golf ball,tennis racket,"
+    "baseball bat,hockey stick,bowling ball,skateboard,surfboard,skis,snowboard,"
+    "kite,frisbee,fishing rod,golf club,dumbbell,barbell,kettlebell,yoga mat,"
+    "jump rope,treadmill,roller skates,ice skates,paddle,life jacket,tent,"
+    "sleeping bag,cooler,lantern,hammock,"
+    # Musical instruments
+    "guitar,piano,violin,cello,drum,trumpet,trombone,saxophone,clarinet,flute,"
+    "harmonica,accordion,harp,banjo,ukulele,xylophone,tambourine,"
+    # Toys, baby, decor
+    "teddy bear,doll,stuffed animal,toy,toy car,robot,building blocks,puzzle,"
+    "balloon,baby stroller,baby bottle,pacifier,high chair,car seat,christmas tree,"
+    "wreath,fireworks,sparkler,flag,banner,gift box,ribbon"
 )
 
 _SETTINGS_SEED: list[tuple] = [

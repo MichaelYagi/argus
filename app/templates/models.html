@@ -19,7 +19,8 @@
   {% if m.description %}<p class="muted" style="font-size:12px;margin:4px 0 10px">{{ m.description }}</p>{% endif %}
   <div class="m-actions">
     {% if not m.is_downloaded %}
-      <button class="btn btn-primary" data-download="{{ m.id }}">Download</button>
+      <button class="btn btn-primary" data-download="{{ m.id }}"
+        {% if m.id in downloading_ids %}data-status-poll="{{ m.id }}"{% endif %}>Download</button>
     {% elif not m.is_active %}
       <button class="btn btn-ghost" data-activate="{{ m.id }}">Activate</button>
       <button class="btn btn-danger" data-delete-model="{{ m.id }}" style="margin-left:4px" title="Remove weights from disk">Remove</button>
@@ -43,7 +44,8 @@
   {% if m.description %}<p class="muted" style="font-size:12px;margin:4px 0 10px">{{ m.description }}</p>{% endif %}
   <div class="m-actions">
     {% if not m.is_downloaded %}
-      <button class="btn btn-primary" data-download="{{ m.id }}">Download</button>
+      <button class="btn btn-primary" data-download="{{ m.id }}"
+        {% if m.id in downloading_ids %}data-status-poll="{{ m.id }}"{% endif %}>Download</button>
     {% elif not m.is_active %}
       <button class="btn btn-ghost" data-activate="{{ m.id }}">Activate</button>
       <button class="btn btn-danger" data-delete-model="{{ m.id }}" style="margin-left:4px" title="Remove weights from disk">Remove</button>
@@ -54,8 +56,207 @@
 </div>
 {% endif %}{% endfor %}
 </div>
+
+{# COCO classes grid — only when a standard (non-world) object model is active #}
+{% if obj_active and not active_obj_world %}
+<div class="card" style="margin-top:28px">
+  <h2>Object classes</h2>
+  <p class="muted" style="font-size:12px;margin-bottom:8px">
+    Select which of the 80 COCO classes the active object model detects.
+  </p>
+  <form class="settings-form" data-category="coco">
+  {% set cur = settings['object'] | selectattr('key', 'equalto', 'object.classes_enabled') | list %}
+  {% set cur_val = cur[0].value if cur else '*' %}
+  <label style="display:flex;align-items:center;gap:6px;margin-bottom:8px;font-weight:500;font-size:13px">
+    <input type="checkbox" id="coco-all" {% if cur_val == '*' %}checked{% endif %}> All classes (*)
+  </label>
+  <div class="coco-grid">
+    {% for cls in coco_classes %}
+    <label>
+      <input type="checkbox" class="coco-cb" value="{{ cls }}"
+        {% if cur_val == '*' or cls in cur_val.split(',') %}checked{% endif %}>
+      {{ cls }}
+    </label>
+    {% endfor %}
+  </div>
+  <div style="margin-top:16px;text-align:right">
+    <button type="submit" class="btn btn-primary">Save</button>
+  </div>
+  </form>
+</div>
+{% endif %}
+
+{# YOLO-World vocabulary — only when a YOLO-World object model is active #}
+{% if obj_active and active_obj_world %}
+{% set wc = settings['object'] | selectattr('key', 'equalto', 'object.world_classes') | list %}
+{% if wc %}
+<div class="card" style="margin-top:28px">
+  <h2>YOLO-World vocabulary</h2>
+  <p class="muted" style="font-size:12px;margin-bottom:12px">
+    Classes to detect when using a YOLO-World model. Add anything that is a visible,
+    physical thing. Standard YOLO models ignore this.
+  </p>
+
+  <form class="settings-form" data-category="world">
+    <textarea id="world-classes-input" rows="12"
+              style="width:100%;font-size:12px;font-family:monospace;resize:vertical;box-sizing:border-box">{{ wc[0].value }}</textarea>
+    <div style="margin-top:12px;text-align:right">
+      <button type="submit" class="btn btn-primary">Save</button>
+    </div>
+  </form>
+</div>
+{% endif %}
+{% endif %}
 {% endblock %}
 
 {% block scripts %}
 <script src="/static/js/models.js"></script>
+{# settings.js drives the COCO/world Save forms (saveSetting + COCO all-toggle) #}
+<script src="/static/js/settings.js"></script>
+{% if active_obj_world %}
+<script src="/static/js/world-suggestions.js"></script>
+<script>
+(() => {
+  const ta  = document.getElementById('world-classes-input');
+  if (!ta) return;
+
+  const ul = document.createElement('ul');
+  ul.id = 'world-suggestions';
+  ul.style.cssText = [
+    'display:none', 'position:fixed', 'z-index:99999',
+    'list-style:none', 'margin:0', 'padding:0',
+    'background:var(--surface)', 'border:1px solid var(--border)',
+    'border-radius:6px', 'box-shadow:0 6px 20px rgba(0,0,0,.18)',
+    'overflow-y:auto', 'overflow-x:hidden',
+  ].join(';');
+  document.body.appendChild(ul);
+
+  const all = window.YOLO_WORLD_SUGGESTIONS || [];
+  let active = -1;
+
+  function currentSet() {
+    return new Set(ta.value.split(/,/).map(s => s.trim().toLowerCase()).filter(Boolean));
+  }
+
+  function currentWord() {
+    const pos  = ta.selectionStart;
+    const text = ta.value.substring(0, pos);
+    const last = text.lastIndexOf(',');
+    return text.substring(last + 1).trim();
+  }
+
+  function replaceCurrentWord(suggestion) {
+    const pos    = ta.selectionStart;
+    const before = ta.value.substring(0, pos);
+    const after  = ta.value.substring(pos);
+    const last   = before.lastIndexOf(',');
+    const prefix = before.substring(0, last + 1);
+    ta.value = prefix + suggestion + ',' + after.replace(/^\s*,?/, '');
+    const np = (prefix + suggestion + ',').length;
+    ta.selectionStart = ta.selectionEnd = np;
+  }
+
+  function positionDropdown() {
+    const r          = ta.getBoundingClientRect();
+    const spaceBelow = window.innerHeight - r.bottom - 8;
+    const spaceAbove = r.top - 8;
+    const maxH       = 220;
+
+    if (spaceBelow >= 120 || spaceBelow >= spaceAbove) {
+      ul.style.top       = (r.bottom + 4) + 'px';
+      ul.style.bottom    = 'auto';
+      ul.style.maxHeight = Math.min(maxH, spaceBelow) + 'px';
+    } else {
+      ul.style.bottom    = (window.innerHeight - r.top + 4) + 'px';
+      ul.style.top       = 'auto';
+      ul.style.maxHeight = Math.min(maxH, spaceAbove) + 'px';
+    }
+    ul.style.left  = r.left + 'px';
+    ul.style.width = r.width + 'px';
+  }
+
+  function show() {
+    const q   = currentWord();
+    const ql  = q.toLowerCase();
+    const cur = currentSet();
+    if (!ql) { hide(); return; }
+
+    const matches = all
+      .filter(s => s.toLowerCase().includes(ql) && !cur.has(s.toLowerCase()))
+      .slice(0, 10);
+
+    if (!matches.length) { hide(); return; }
+
+    const esc = s => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    ul.innerHTML = matches.map((m, i) =>
+      `<li data-i="${i}"
+           style="padding:8px 14px;cursor:pointer;font-size:13px;font-family:inherit;
+                  border-bottom:1px solid var(--border);background:var(--surface);color:var(--text);
+                  white-space:nowrap;overflow:hidden;text-overflow:ellipsis">
+        ${m.replace(new RegExp('(' + esc(ql) + ')', 'gi'), '<strong style="color:var(--accent)">$1</strong>')}
+       </li>`
+    ).join('');
+    ul.querySelectorAll('li').forEach((li, i) => {
+      li.onmousedown  = e => e.preventDefault();
+      li.onmouseenter = () => { active = i; highlight(); };
+      li.onclick      = () => { replaceCurrentWord(matches[i]); hide(); ta.focus(); };
+    });
+    active = -1;
+    positionDropdown();
+    ul.style.display = 'block';
+    highlight();
+  }
+
+  function hide() { ul.style.display = 'none'; active = -1; }
+
+  function highlight() {
+    ul.querySelectorAll('li').forEach((li, i) => {
+      li.style.background = i === active ? '#f0f4ff' : '#fff';
+    });
+  }
+
+  // Sanitize before save: trim blanks and drop duplicates only. YOLO-World is an
+  // open vocabulary, so any visible thing the user types is valid — the suggestion
+  // list only powers autocomplete and must NOT gate what can be saved.
+  const worldForm = document.querySelector('form[data-category="world"]');
+  if (worldForm) {
+    worldForm.addEventListener('submit', () => {
+      const seen  = new Set();
+      const cleaned = ta.value
+        .split(',')
+        .map(s => s.trim())
+        .filter(Boolean)
+        .filter(s => { const k = s.toLowerCase(); return seen.has(k) ? false : seen.add(k); });
+      ta.value = cleaned.join(',');
+    }, true); // capture phase fires before settings.js
+  }
+
+  ta.addEventListener('input',  show);
+  ta.addEventListener('click',  show);
+  ta.addEventListener('blur',   () => setTimeout(hide, 150));
+  window.addEventListener('scroll', () => { if (ul.style.display !== 'none') positionDropdown(); });
+  window.addEventListener('resize', () => { if (ul.style.display !== 'none') positionDropdown(); });
+
+  ta.addEventListener('keydown', e => {
+    if (ul.style.display === 'none') return;
+    const items = ul.querySelectorAll('li');
+    if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      active = Math.min(active + 1, items.length - 1);
+      highlight();
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      active = Math.max(active - 1, 0);
+      highlight();
+    } else if (e.key === 'Enter') {
+      e.preventDefault(); // always block Enter when dropdown is open
+      if (active >= 0 && items[active]) items[active].click();
+      else if (items.length) items[0].click(); // default to first match
+    } else if (e.key === 'Escape') {
+      hide();
+    }
+  });
+})();
+</script>
+{% endif %}
 {% endblock %}

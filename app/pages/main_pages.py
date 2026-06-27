@@ -190,7 +190,20 @@ async def models_page(request: Request):
         return RedirectResponse("/login")
     if not ctx["is_admin"]:
         return RedirectResponse("/")
+    from app.api.models import downloading_ids
     ctx["models"] = [dict(r) for r in store.list_models()]
+    ctx["downloading_ids"] = downloading_ids()
+    # Object detection scope (COCO class selection / YOLO-World vocabulary) is
+    # configured here because it is about what the active object model detects.
+    obj_rows = [dict(r) for r in store.get_all_settings() if r["category"] == "object"]
+    active_obj = store.get_active_model("object")
+    active_obj_name = active_obj["name"] if active_obj else None
+    ctx["settings"]         = {"object": obj_rows}
+    ctx["coco_classes"]     = COCO_CLASSES
+    # Only surface the detection-scope editors when an object model is actually
+    # active, and pick COCO vs YOLO-World based on which one it is.
+    ctx["obj_active"]       = active_obj is not None
+    ctx["active_obj_world"] = bool(active_obj_name and "world" in active_obj_name.lower())
     return _r(request, "models.html", ctx)
 
 
@@ -219,14 +232,10 @@ async def settings_page(request: Request):
         gpu_available = "CUDAExecutionProvider" in ort.get_available_providers()
     except Exception:
         gpu_available = False
-    active_obj = store.get_active_model("object")
-    active_obj_name = active_obj["name"] if active_obj else None
     ctx["settings"]        = grouped
     ctx["slider_ranges"]   = SLIDER_RANGES
     ctx["setting_choices"] = SETTING_CHOICES
-    ctx["coco_classes"]    = COCO_CLASSES
     ctx["gpu_available"]   = gpu_available
-    ctx["active_obj_world"] = active_obj_name and "world" in active_obj_name.lower()
     ctx["managed_users"]   = [dict(u) for u in store.list_managed_users(ctx["user_id"])]
     return _r(request, "settings.html", ctx)
 
