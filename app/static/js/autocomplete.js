@@ -363,7 +363,15 @@
 
     row.appendChild(applyBtn);
     row.appendChild(cancelBtn);
-    popup.appendChild(input);
+    // Wrap the input in a relative container so makeAutocomplete anchors its
+    // dropdown to THIS wrapper (input.closest('.ra-wrap')) rather than setting
+    // the popup itself to position:relative — which would clobber the popup's
+    // position:fixed and drop it to the bottom of the page.
+    const inputWrap = document.createElement('div');
+    inputWrap.className = 'ra-wrap';
+    inputWrap.style.position = 'relative';
+    inputWrap.appendChild(input);
+    popup.appendChild(inputWrap);
     popup.appendChild(row);
     document.body.appendChild(popup);
 
