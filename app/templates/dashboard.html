@@ -208,7 +208,6 @@ function switchTab(type) {
   ['face', 'object'].forEach(t => {
     document.getElementById('tab-' + t).hidden = (t !== type);
   });
-  localStorage.setItem('dashboard_tab', type);
   if (!state[type].loaded) loadMore(type);
 }
 
@@ -284,7 +283,7 @@ function setTabBadge(type, total) {
 refreshStats();
 setInterval(refreshStats, 30000);
 
-// Restore last active tab (defaults to People)
-switchTab(localStorage.getItem('dashboard_tab') || 'face');
+// Always start on the People tab
+switchTab('face');
 </script>
 {% endblock %}
