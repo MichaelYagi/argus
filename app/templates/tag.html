@@ -132,6 +132,14 @@ function setStatus(msg) { document.getElementById('tag-status').textContent = ms
   const url = new URL(ref);
   const path = url.pathname;
 
+  // Prefer history.back() so the previous gallery is restored from the browser's
+  // bfcache — scroll position AND lazily-loaded rows intact — instead of a fresh
+  // load that resets to the top. Falls through to the href (set below) when there
+  // is no in-app history to return to (opened directly or in a new tab).
+  if (url.origin === location.origin && history.length > 1) {
+    link.addEventListener('click', e => { e.preventDefault(); history.back(); });
+  }
+
   // Identity gallery → fetch the person's name
   const identityMatch = path.match(/^\/identities\/(\d+)/);
   if (identityMatch) {
