@@ -787,12 +787,14 @@ def get_unknown_face_embeddings(
     with _connect() as conn:
         env_id = _resolve_env(conn, user_id, environment_id)
         return conn.execute(
-            """SELECT id, crop_path, confidence, embedding
-               FROM detections
-               WHERE user_id = ? AND environment_id = ? AND type = 'face'
-                 AND identity_id IS NULL AND embedding IS NOT NULL AND model_id = ?
-                 AND ignored = 0
-               ORDER BY id""",
+            """SELECT d.id, d.crop_path, d.confidence, d.embedding,
+                      d.source_image_id, si.file_path AS source_image_path
+               FROM detections d
+               LEFT JOIN source_images si ON si.id = d.source_image_id
+               WHERE d.user_id = ? AND d.environment_id = ? AND d.type = 'face'
+                 AND d.identity_id IS NULL AND d.embedding IS NOT NULL AND d.model_id = ?
+                 AND d.ignored = 0
+               ORDER BY d.id""",
             (user_id, env_id, model_id),
         ).fetchall()
 

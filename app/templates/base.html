@@ -197,6 +197,18 @@ function _updateReviewBadge() {
 _updateReviewBadge();
 setInterval(_updateReviewBadge, 30000);
 
+// Suggested-people notification dot — shows when at least one group exists.
+function _updateSuggestedDot() {
+  const dot = document.getElementById('suggested-dot');
+  if (!dot) return;
+  fetch('/api/clusters/count')
+    .then(r => r.ok ? r.json() : null)
+    .then(data => { dot.style.display = (data && data.count) ? 'inline-block' : 'none'; })
+    .catch(() => {});
+}
+_updateSuggestedDot();
+setInterval(_updateSuggestedDot, 30000);
+
 // ---------------------------------------------------------------------------
 // Readiness banner: the red (no models active) banner is persistent; the amber
 // (one type active) banner is dismissible for the session. The banner itself is
@@ -235,7 +247,11 @@ setInterval(_updateReviewBadge, 30000);
              padding:1px 6px;font-size:10px;font-weight:700;margin-left:3px;
              vertical-align:middle;line-height:16px"></span>
   </a>
-  <a href="/clusters" class="nav-desktop {% if active == 'clusters'  %}active{% endif %}">Suggested</a>
+  <a href="/clusters" class="nav-desktop {% if active == 'clusters'  %}active{% endif %}">
+    Suggested <span id="suggested-dot" title="Suggested people available"
+      style="display:none;width:8px;height:8px;border-radius:50%;background:#e53e3e;
+             margin-left:2px;vertical-align:middle"></span>
+  </a>
   {% endif %}
   <a href="/test"     class="nav-desktop {% if active == 'test'      %}active{% endif %}">Test</a>
   {% if is_admin %}

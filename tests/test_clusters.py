@@ -122,6 +122,37 @@ def test_clusters_endpoint(client):
     assert data["unclustered"] == 1
 
 
+def test_clusters_crops_include_source_image_url(client):
+    user_id, key = _create_user_and_key()
+    mid = _activate_face_model()
+    _insert_unknown_face(user_id, mid, _vec(1.0, 0.0), "a1.jpg")
+    _insert_unknown_face(user_id, mid, _vec(0.99, 0.02), "a2.jpg")
+
+    data = client.get("/api/clusters?threshold=0.9", headers={"X-API-Key": key}).json()
+    crops = data["clusters"][0]["crops"]
+    assert all(c["source_image_url"] and c["source_image_url"].startswith("/media/sources/")
+               for c in crops)
+
+
+def test_clusters_count(client):
+    user_id, key = _create_user_and_key()
+    mid = _activate_face_model()
+    h = {"X-API-Key": key}
+
+    # No groups yet.
+    assert client.get("/api/clusters/count", headers=h).json()["count"] == 0
+
+    # One group of two similar faces (default threshold groups them).
+    _insert_unknown_face(user_id, mid, _vec(1.0, 0.0), "a1.jpg")
+    _insert_unknown_face(user_id, mid, _vec(0.999, 0.001), "a2.jpg")
+    assert client.get("/api/clusters/count", headers=h).json()["count"] == 1
+
+
+def test_clusters_count_no_model(client):
+    _, key = _create_user_and_key()
+    assert client.get("/api/clusters/count", headers={"X-API-Key": key}).json()["count"] == 0
+
+
 def test_clusters_naming_uses_batch_label(client):
     user_id, key = _create_user_and_key()
     mid = _activate_face_model()

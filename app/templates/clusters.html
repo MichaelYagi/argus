@@ -30,9 +30,10 @@
      box-shadow:0 -2px 12px rgba(0,0,0,.25);padding:10px 14px;margin-top:8px;
      align-items:center;gap:10px;flex-wrap:wrap">
   <span id="sel-count" style="font-size:13px;font-weight:500"></span>
-  <input type="text" id="sel-name" placeholder="Name selected faces" maxlength="120"
-         style="flex:1;min-width:160px">
-  <button class="btn btn-primary" id="sel-name-btn">Name &amp; enroll</button>
+  <span class="ra-wrap" style="position:relative;flex:1;min-width:160px">
+    <input type="text" id="sel-name" placeholder="Person's name" maxlength="120" style="width:100%">
+  </span>
+  <button class="btn btn-primary" id="sel-name-btn">Identify</button>
   <button class="btn btn-ghost" id="sel-dismiss" title="Hide from Suggested, keep the record">Dismiss</button>
   <button class="btn btn-danger" id="sel-delete" title="Permanently delete these crops">Delete</button>
   <button class="btn btn-ghost" id="sel-clear">Clear</button>
@@ -58,6 +59,10 @@
   const selErr   = document.getElementById('sel-err');
 
   const selected = new Map();  // detection_id -> face element
+
+  // Suggest already-identified people so a selection can be assigned to an existing
+  // person, not only used to create a new one.
+  if (window.makeAutocomplete) makeAutocomplete(selName);
 
   function esc(s) {
     return String(s).replace(/[&<>"']/g, c => (
@@ -154,7 +159,7 @@
     const items = faces.map(([id]) => ({ detection_id: id, label }));
     (async () => {
       if (!selected.size) return;
-      setBusy(true, 'Enrolling…');
+      setBusy(true, 'Identifying…');
       try {
         const resp = await fetch('/api/detections/label', {
           method: 'POST',
@@ -228,6 +233,20 @@
       `<span class="check" style="display:none;position:absolute;top:2px;right:2px;background:var(--accent);` +
       `color:#fff;border-radius:50%;width:16px;height:16px;font-size:11px;line-height:16px;text-align:center">&check;</span>`;
     d.addEventListener('click', () => setSelected(d, !selected.has(+d.dataset.id)));
+
+    // Magnifier (top-left, on hover) opens the full source photo for context.
+    // stopPropagation so it views the photo without toggling the face's selection.
+    if (cr.source_image_url) {
+      const mag = document.createElement('button');
+      mag.className = 'face-mag';
+      mag.title = 'View full photo';
+      mag.innerHTML =
+        '<svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" ' +
+        'stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' +
+        '<circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg>';
+      mag.addEventListener('click', e => { e.stopPropagation(); openSourceModal(cr.source_image_url); });
+      d.appendChild(mag);
+    }
     return d;
   }
 

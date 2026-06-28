@@ -64,6 +64,14 @@
       const parent = input.closest('.ra-wrap') || input.closest('[style*="position:relative"]') || input.parentElement;
       parent.style.position = 'relative';
       parent.appendChild(drop);
+
+      // Flip the dropdown above the input when there isn't room below — e.g. an
+      // input in a sticky bottom action bar (the Suggested page).
+      const rect = input.getBoundingClientRect();
+      if (rect.bottom + 200 > window.innerHeight && rect.top > 200) {
+        drop.style.top = 'auto';
+        drop.style.bottom = (parent.offsetHeight - input.offsetTop + 2) + 'px';
+      }
     };
 
     input.addEventListener('input', () => {

@@ -16,6 +16,21 @@ from app.db import store
 router = APIRouter()
 
 
+def _compute(user_id: int, environment_id: int, threshold: float | None, min_size: int):
+    """Cluster the user's residual unknown faces. Returns (by_id, rows, clusters,
+    threshold), or None when no face model is active."""
+    model = store.get_active_model("face")
+    if not model:
+        return None
+    if threshold is None:
+        threshold = settings_cache.cache.get_or("face.cluster_threshold", 0.5)
+    rows = store.get_unknown_face_embeddings(user_id, model["id"], environment_id)
+    by_id = {r["id"]: r for r in rows}
+    items = [(r["id"], r["embedding"]) for r in rows]
+    clusters = clustering.cluster_embeddings(items, threshold, min_size=min_size)
+    return by_id, rows, clusters, threshold
+
+
 @router.get("/api/clusters")
 async def get_clusters(
     threshold: float | None = Query(None, ge=0.0, le=1.0),
@@ -26,18 +41,10 @@ async def get_clusters(
     """Group unlabeled face detections into suggested people. Read-only: computes
     clusters on demand, stores nothing. Name a cluster by POSTing its detection_ids
     to /api/detections/label with the same label."""
-    model = store.get_active_model("face")
-    if not model:
+    computed = _compute(user_id, environment_id, threshold, min_size)
+    if computed is None:
         return {"clusters": [], "unclustered": 0, "threshold": None}
-
-    if threshold is None:
-        threshold = settings_cache.cache.get_or("face.cluster_threshold", 0.5)
-
-    rows = store.get_unknown_face_embeddings(user_id, model["id"], environment_id)
-    by_id = {r["id"]: r for r in rows}
-    items = [(r["id"], r["embedding"]) for r in rows]
-
-    clusters = clustering.cluster_embeddings(items, threshold, min_size=min_size)
+    by_id, rows, clusters, threshold = computed
 
     clustered_ids = {did for c in clusters for did in c}
     result = []
@@ -48,7 +55,14 @@ async def get_clusters(
             "detection_ids": c,
             "representative_crop": f"/media/crops/{by_id[rep]['crop_path']}",
             "crops": [
-                {"detection_id": did, "crop_url": f"/media/crops/{by_id[did]['crop_path']}"}
+                {
+                    "detection_id": did,
+                    "crop_url": f"/media/crops/{by_id[did]['crop_path']}",
+                    "source_image_url": (
+                        f"/media/sources/{by_id[did]['source_image_path']}"
+                        if by_id[did]["source_image_path"] else None
+                    ),
+                }
                 for did in c
             ],
         })
@@ -58,3 +72,14 @@ async def get_clusters(
         "unclustered": len(rows) - len(clustered_ids),
         "threshold": round(float(threshold), 4),
     }
+
+
+@router.get("/api/clusters/count")
+async def clusters_count(
+    user_id: int = Depends(require_auth),
+    environment_id: int = Depends(require_env_id),
+):
+    """Number of suggested-people groups, for the nav notification dot. Uses the
+    default grouping threshold."""
+    computed = _compute(user_id, environment_id, None, 2)
+    return {"count": 0 if computed is None else len(computed[2])}
