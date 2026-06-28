@@ -1607,7 +1607,7 @@ def update_setting(key: str, value: str) -> None:
 # (type, name, embedding_dim, description). All object models produce bounding boxes.
 _MODEL_SEED: list[tuple] = [
     # --- Face (InsightFace packs: detection + ArcFace embeddings + age/gender/pose) ---
-    ("face",   "buffalo_l",       512,  "Large pack (RetinaFace + ArcFace). Best accuracy; recommended default."),
+    ("face",   "buffalo_l",       512,  "Large pack (RetinaFace + ArcFace). Best accuracy. Recommended default."),
     ("face",   "buffalo_s",       512,  "Small pack — faster and lighter, slightly lower accuracy than buffalo_l."),
     ("face",   "buffalo_sc",      512,  "Compact pack — detect + recognize only (no age/gender/pose). Lightest."),
     ("face",   "antelopev2",      512,  "Alternative ResNet100/glint360k pack. Accuracy comparable to buffalo_l."),
@@ -1643,7 +1643,8 @@ _MODEL_SEED: list[tuple] = [
 
     # --- Object: Florence-2 (grounded open-vocabulary detector; describes what it finds) ---
     ("object", "florence-2-base", None,
-     "Florence-2 base — grounded open-vocabulary detection; free-form labels, no class list. Heavier than YOLO."),
+     "Florence-2 base — grounded open-vocabulary detection; free-form labels, no class list. "
+     "Heavier than YOLO. Recommended default."),
 ]
 
 # Default vocabulary for YOLO-World: 80 COCO classes + common extras

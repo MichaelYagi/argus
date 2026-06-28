@@ -16,7 +16,7 @@
     {% if m.embedding_dim %}{{ m.embedding_dim }}d &middot; {% endif %}
     {% if m.is_downloaded %}Downloaded{% else %}Not downloaded{% endif %}
   </div>
-  {% if m.description %}<p class="muted" style="font-size:12px;margin:4px 0 10px">{{ m.description }}</p>{% endif %}
+  {% if m.description %}<p class="muted" style="font-size:12px;margin:4px 0 10px">{{ m.description | e | replace('Recommended default', '<strong>Recommended default</strong>') | safe }}</p>{% endif %}
   <div class="m-actions">
     {% if not m.is_downloaded %}
       <button class="btn btn-primary" data-download="{{ m.id }}"
@@ -39,10 +39,9 @@
   <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px">
     <h3>{{ m.name }}</h3>
     {% if m.is_active %}<span class="badge badge-active">Active</span>{% endif %}
-    {% if m.name == 'florence-2-base' %}<span class="badge badge-recommended">Recommended default</span>{% endif %}
   </div>
   <div class="m-meta">{% if m.is_downloaded %}Downloaded{% else %}Not downloaded{% endif %}</div>
-  {% if m.description %}<p class="muted" style="font-size:12px;margin:4px 0 10px">{{ m.description }}</p>{% endif %}
+  {% if m.description %}<p class="muted" style="font-size:12px;margin:4px 0 10px">{{ m.description | e | replace('Recommended default', '<strong>Recommended default</strong>') | safe }}</p>{% endif %}
   <div class="m-actions">
     {% if not m.is_downloaded %}
       <button class="btn btn-primary" data-download="{{ m.id }}"
