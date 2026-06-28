@@ -163,6 +163,7 @@ a:hover { text-decoration: underline; }
 .badge-object  { background: rgba(16,185,129,.15);  color: #10b981; }
 .badge-active  { background: var(--success); color: #fff; }
 .badge-pending { background: var(--warn); color: #fff; }
+.badge-recommended { background: rgba(99,102,241,.15); color: #6366f1; }
 
 /* ---------- Stats ---------- */
 .stat-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 12px; margin-bottom: 24px; }

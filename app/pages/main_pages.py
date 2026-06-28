@@ -192,6 +192,14 @@ async def models_page(request: Request):
         return RedirectResponse("/")
     from app.api.models import downloading_ids
     ctx["models"] = [dict(r) for r in store.list_models()]
+    # Face model display order: buffalo_l first, antelopev2 last; the rest keep
+    # their store (type, name) ordering. Objects are unaffected.
+    _face_rank = {"buffalo_l": 0, "antelopev2": 2}
+    ctx["models"].sort(key=lambda m: (
+        m["type"],
+        _face_rank.get(m["name"], 1) if m["type"] == "face" else 0,
+        m["name"],
+    ))
     ctx["downloading_ids"] = downloading_ids()
     # Object detection scope (COCO class selection / YOLO-World vocabulary) is
     # configured here because it is about what the active object model detects.
@@ -200,9 +208,12 @@ async def models_page(request: Request):
     active_obj_name = active_obj["name"] if active_obj else None
     ctx["settings"]         = {"object": obj_rows}
     ctx["coco_classes"]     = COCO_CLASSES
-    # Only surface the detection-scope editors when an object model is actually
-    # active, and pick COCO vs YOLO-World based on which one it is.
-    ctx["obj_active"]       = active_obj is not None
+    # Surface the class/vocab editors only when an object engine is actually
+    # loaded — the single source of truth for "a detector is live". This covers
+    # nothing-active, a deactivated model, and a model flagged active whose
+    # weights are gone or failed to load on startup.
+    from app.core.engine_registry import registry
+    ctx["obj_active"]       = registry.get_object_engine() is not None
     ctx["active_obj_world"] = bool(active_obj_name and "world" in active_obj_name.lower())
     # Florence-2 is open-vocabulary but not user-promptable: no COCO grid, no
     # world vocabulary editor — there is nothing to configure about its classes.
