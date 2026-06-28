@@ -43,6 +43,56 @@ def _insert_source(user_id: int, filename: str = "photo.jpg") -> int:
         return conn.execute("SELECT last_insert_rowid()").fetchone()[0]
 
 
+# ---------------------------------------------------------------------------
+# GET /api/source-images — justified Images page backend
+# ---------------------------------------------------------------------------
+
+def test_source_images_lists_with_shape(client):
+    user_id, h = _setup(client)
+    _insert_source(user_id, "a.jpg")
+    _insert_source(user_id, "b.jpg")
+
+    r = client.get("/api/source-images", headers=h)
+    assert r.status_code == 200
+    data = r.json()
+    assert {"items", "next_cursor", "has_more"} <= data.keys()
+    assert len(data["items"]) == 2
+    item = data["items"][0]
+    assert {"source_image_id", "image_url", "width", "height",
+            "detection_count", "uploaded_at"} <= item.keys()
+    assert item["image_url"].startswith("/media/sources/")
+
+
+def test_source_images_no_duplicates_on_reprocess(client):
+    user_id, h = _setup(client)
+    # Same content hash (file_path) ingested twice resolves to one row.
+    id1 = store.get_or_create_source_image(user_id, "dup.jpg", 800, 600)
+    id2 = store.get_or_create_source_image(user_id, "dup.jpg", 800, 600)
+    assert id1 == id2
+
+    items = client.get("/api/source-images", headers=h).json()["items"]
+    assert len(items) == 1
+
+
+def test_source_images_pagination_no_overlap(client):
+    user_id, h = _setup(client)
+    for i in range(5):
+        _insert_source(user_id, f"img{i}.jpg")
+
+    p1 = client.get("/api/source-images?limit=2", headers=h).json()
+    assert p1["has_more"] is True and len(p1["items"]) == 2
+
+    p2 = client.get(f"/api/source-images?limit=2&cursor={p1['next_cursor']}", headers=h).json()
+    ids1 = {it["source_image_id"] for it in p1["items"]}
+    ids2 = {it["source_image_id"] for it in p2["items"]}
+    assert ids1.isdisjoint(ids2)  # no repeats across pages despite uploaded_at ties
+
+
+def test_source_images_requires_auth(client):
+    r = client.get("/api/source-images")
+    assert r.status_code in (401, 403)
+
+
 def _insert_face(user_id: int, src_id: int, label: str | None = None,
                  bbox: tuple = (10, 20, 100, 100), conf: float = 0.9) -> int:
     env_id = store.get_default_environment_id(user_id) or 0

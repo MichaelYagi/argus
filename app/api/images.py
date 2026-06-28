@@ -39,6 +39,36 @@ async def list_images_by_ref(
     }
 
 
+@router.get("/api/source-images")
+async def list_source_images(
+    cursor: Optional[str] = Query(None),
+    limit: int = Query(40, ge=1, le=200),
+    user_id: int = Depends(require_auth),
+    environment_id: int = Depends(require_env_id),
+):
+    """Paginated list of all processed source images (one row per image), newest first.
+    Backs the justified Images gallery page."""
+    rows = store.list_source_images(user_id, cursor=cursor, limit=limit, environment_id=environment_id)
+    has_more = len(rows) > limit
+    items = rows[:limit]
+    next_cursor = f"{items[-1]['uploaded_at']}_{items[-1]['id']}" if items and has_more else None
+    return {
+        "items": [
+            {
+                "source_image_id": r["id"],
+                "image_url": f"/media/sources/{r['file_path']}",
+                "width": r["width"],
+                "height": r["height"],
+                "detection_count": r["detection_count"],
+                "uploaded_at": r["uploaded_at"],
+            }
+            for r in items
+        ],
+        "next_cursor": next_cursor,
+        "has_more": has_more,
+    }
+
+
 def _parse_attributes(row) -> dict:
     """Parse the stored attributes JSON into {age, gender, pose}; all None if absent."""
     try:

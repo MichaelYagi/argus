@@ -1,0 +1,123 @@
+{% extends "base.html" %}
+{% block title %}Images — Argus{% endblock %}
+
+{% block content %}
+<div class="page-header" style="margin-bottom:16px">
+  <h1>Images processed</h1>
+  <span class="nav-spacer"></span>
+  <a href="/detect" class="btn btn-ghost">Detect</a>
+</div>
+
+<p class="muted" id="img-empty" hidden style="margin-top:24px">
+  No images processed yet. Run <a href="/detect">detection</a> on some photos first.
+</p>
+
+<div id="gallery"></div>
+<p class="muted loading" id="img-loading">Loading…</p>
+{% endblock %}
+
+{% block scripts %}
+<script>
+(() => {
+  // Same justified packing as the identity galleries (gallery.js). Aspect ratios
+  // come straight from the stored width/height, so no measurement pre-loads.
+  const GAP = 4;
+  const TARGET_H = 200;
+
+  const container = document.getElementById('gallery');
+  const emptyEl   = document.getElementById('img-empty');
+  const loadingEl = document.getElementById('img-loading');
+
+  let items = [], cursor = null, hasMore = true, loading = false;
+
+  async function loadPage() {
+    if (loading || !hasMore) return;
+    loading = true;
+
+    const params = new URLSearchParams({ limit: 40 });
+    if (cursor) params.set('cursor', cursor);
+    const resp = await fetch('/api/source-images?' + params);
+    if (!resp.ok) { loading = false; return; }
+    const data = await resp.json();
+
+    hasMore = data.has_more;
+    cursor  = data.next_cursor;
+    items.push(...data.items);
+
+    if (!items.length) {
+      if (emptyEl) emptyEl.hidden = false;
+      if (loadingEl) loadingEl.hidden = true;
+      loading = false;
+      return;
+    }
+
+    render();
+    loading = false;
+    if (loadingEl) loadingEl.hidden = true;
+    if (!hasMore) sentinel.remove();
+  }
+
+  function packRows(list, W) {
+    const rows = [];
+    let cur = [], sumAR = 0;
+    list.forEach(item => {
+      const ar = (item.width || 1) / (item.height || 1);
+      cur.push({ ...item, ar });
+      sumAR += ar;
+      if (sumAR * TARGET_H + GAP * (cur.length - 1) >= W) {
+        rows.push({ items: cur, height: (W - GAP * (cur.length - 1)) / sumAR });
+        cur = []; sumAR = 0;
+      }
+    });
+    if (cur.length) rows.push({ items: cur, height: TARGET_H });
+    return rows;
+  }
+
+  function render() {
+    container.innerHTML = '';
+    const W = container.clientWidth;
+    packRows(items, W).forEach(({ items: row, height }) => {
+      const rowEl = document.createElement('div');
+      rowEl.className = 'g-row';
+      row.forEach(item => {
+        const w = Math.floor(item.ar * height);
+
+        const a = document.createElement('a');
+        a.className = 'g-item';
+        a.href = '/tag/' + item.source_image_id;
+        a.style.width  = w + 'px';
+        a.style.height = Math.floor(height) + 'px';
+
+        const img = document.createElement('img');
+        img.src = item.image_url;
+        img.loading = 'lazy';
+        img.alt = '';
+        a.appendChild(img);
+
+        if (item.detection_count) {
+          const badge = document.createElement('span');
+          badge.textContent = item.detection_count;
+          badge.title = item.detection_count + ' detection' + (item.detection_count !== 1 ? 's' : '');
+          badge.style.cssText = 'position:absolute;bottom:6px;right:6px;z-index:2;' +
+            'background:rgba(0,0,0,.6);color:#fff;border-radius:99px;padding:1px 7px;' +
+            'font-size:11px;font-weight:600;line-height:16px';
+          a.appendChild(badge);
+        }
+
+        rowEl.appendChild(a);
+      });
+      container.appendChild(rowEl);
+    });
+  }
+
+  const sentinel = document.createElement('div');
+  sentinel.style.height = '1px';
+  container.after(sentinel);
+  new IntersectionObserver(([e]) => { if (e.isIntersecting) loadPage(); },
+    { rootMargin: '300px' }).observe(sentinel);
+
+  loadPage();
+  window.addEventListener('resize', () => { if (items.length) render(); });
+})();
+</script>
+{% endblock %}

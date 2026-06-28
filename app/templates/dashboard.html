@@ -10,10 +10,14 @@
 </div>
 
 <div class="stat-grid" id="stats">
-  <div class="stat"><div class="num" id="s-faces">—</div><div class="lbl">People</div></div>
-  <div class="stat"><div class="num" id="s-objects">—</div><div class="lbl">Objects</div></div>
-  <div class="stat"><div class="num" id="s-images">—</div><div class="lbl">Images processed</div></div>
-  <div class="stat"><div class="num" id="s-review">—</div><div class="lbl">Pending review</div></div>
+  <div class="stat stat-link" onclick="switchTab('face')" title="View people">
+    <div class="num" id="s-faces">—</div><div class="lbl">People</div></div>
+  <div class="stat stat-link" onclick="switchTab('object')" title="View objects">
+    <div class="num" id="s-objects">—</div><div class="lbl">Objects</div></div>
+  <a class="stat stat-link" href="/images" title="View all processed images">
+    <div class="num" id="s-images">—</div><div class="lbl">Images processed</div></a>
+  <a class="stat stat-link" href="/review" title="Go to review queue">
+    <div class="num" id="s-review">—</div><div class="lbl">Pending review</div></a>
 </div>
 
 <div class="tab-bar">

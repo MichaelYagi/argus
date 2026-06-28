@@ -1377,6 +1377,37 @@ def get_face_embeddings_for_model(model_id: int, user_id: int, environment_id: i
         ).fetchall()
 
 
+def list_source_images(
+    user_id: int,
+    cursor: str | None = None,
+    limit: int = 40,
+    environment_id: int | None = None,
+) -> list[sqlite3.Row]:
+    """Processed source images, newest first, with per-image detection count.
+    One row per image (deduped at ingestion by content hash). Cursor = 'uploadedAt_id'
+    so ties on the second-precision uploaded_at don't drop or repeat rows across pages."""
+    with _connect() as conn:
+        env_id = _resolve_env(conn, user_id, environment_id)
+        sql = """SELECT si.id, si.file_path, si.width, si.height, si.uploaded_at,
+                        COUNT(d.id) AS detection_count
+                 FROM source_images si
+                 LEFT JOIN detections d ON d.source_image_id = si.id
+                 WHERE si.user_id = ? AND si.environment_id = ?"""
+        params: list = [user_id, env_id]
+        if cursor:
+            try:
+                c_ts, c_id = cursor.rsplit("_", 1)
+                id_val = int(c_id)
+            except ValueError:
+                c_ts, id_val = cursor, 0
+            sql += " AND (si.uploaded_at < ? OR (si.uploaded_at = ? AND si.id < ?))"
+            params.extend([c_ts, c_ts, id_val])
+        sql += """ GROUP BY si.id
+                   ORDER BY si.uploaded_at DESC, si.id DESC LIMIT ?"""
+        params.append(limit + 1)
+        return conn.execute(sql, params).fetchall()
+
+
 def count_source_images(user_id: int, environment_id: int | None = None) -> int:
     with _connect() as conn:
         env_id = _resolve_env(conn, user_id, environment_id)
