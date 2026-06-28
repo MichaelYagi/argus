@@ -53,7 +53,7 @@ def test_list_models_returns_all(client):
     h = _setup(client)
     r = client.get("/api/models", headers=h)
     assert r.status_code == 200
-    assert len(r.json()) == 23
+    assert len(r.json()) == 25
 
 
 def test_list_models_filter_face(client):

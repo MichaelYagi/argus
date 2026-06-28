@@ -14,7 +14,7 @@ from app.db import store
 router = APIRouter()
 
 _VALID_TYPES = {"float", "int", "bool", "string"}
-_VALID_CATEGORIES = {"face", "object", "system"}
+_VALID_CATEGORIES = {"face", "object", "system", "keywords"}
 
 
 # ---------------------------------------------------------------------------
@@ -62,6 +62,13 @@ async def update_setting(key: str, body: _UpdateBody, user_id: int = Depends(req
     if key == "system.log_buffer_size":
         from app.core import log_buffer
         log_buffer.resize(int(value_str))
+
+    # Changing the prompt template re-renders every vocabulary word, so bump the
+    # vocab version (new text-matrix cache key) and re-tag the library.
+    if key == "clip.prompt_template":
+        store.bump_vocab_version()
+        from app.core import keyword_jobs
+        keyword_jobs.trigger_vocab_change()
 
     return _fmt(store.get_setting(key))
 
@@ -132,6 +139,18 @@ def _validate_value(key: str, raw: str, value_type: str) -> str:
                 f"system.log_buffer_size must be between {log_buffer.MIN_SIZE} and {log_buffer.MAX_SIZE}",
             )
 
+    # Keyword tagging bounds.
+    if key == "clip.tag_top_k" and not (1 <= int(raw) <= 100):
+        raise HTTPException(400, "clip.tag_top_k must be between 1 and 100")
+    if key == "clip.tag_threshold" and not (0.0 <= float(raw) <= 1.0):
+        raise HTTPException(400, "clip.tag_threshold must be between 0 and 1")
+    if key == "clip.tag_diversity" and not (0.0 <= float(raw) <= 1.0):
+        raise HTTPException(400, "clip.tag_diversity must be between 0 and 1")
+    if key == "clip.tag_rel_floor" and not (0.0 <= float(raw) <= 1.0):
+        raise HTTPException(400, "clip.tag_rel_floor must be between 0 and 1")
+    if key == "clip.prompt_template" and "{word}" not in raw:
+        raise HTTPException(400, "clip.prompt_template must contain {word}")
+
     # Face matching method is a fixed choice.
     if key == "face.match_strategy":
         if raw.lower() not in ("average", "best"):
@@ -142,12 +161,9 @@ def _validate_value(key: str, raw: str, value_type: str) -> str:
 
 
 def _require_gpu_available() -> None:
-    try:
-        import onnxruntime as ort
-        if "CUDAExecutionProvider" in ort.get_available_providers():
-            return
-    except ImportError:
-        pass
+    from app.core import accelerator
+    if accelerator.gpu_available():
+        return
     raise HTTPException(400, "GPU is not available on this system. Cannot enable system.use_gpu.")
 
 

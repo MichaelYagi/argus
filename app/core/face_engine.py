@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from app.core import settings_cache
+from app.core import accelerator, settings_cache
 
 
 @dataclass
@@ -21,15 +21,14 @@ class FaceDetection:
     pose: tuple[float, float, float] | None = None  # (pitch, yaw, roll), degrees
 
 
+def _face_providers() -> list[str]:
+    """ONNX providers for InsightFace (capability-selected; CUDA or CPU)."""
+    return accelerator.face_runtime()[0]
+
+
 def _face_ctx_id() -> int:
     """Return InsightFace ctx_id: 0 = GPU, -1 = CPU."""
-    if not settings_cache.cache.get_or("system.use_gpu", True):
-        return -1
-    try:
-        import onnxruntime as ort
-        return 0 if "CUDAExecutionProvider" in ort.get_available_providers() else -1
-    except ImportError:
-        return -1
+    return accelerator.face_runtime()[1]
 
 
 class FaceEngine:
@@ -37,8 +36,11 @@ class FaceEngine:
         from insightface.app import FaceAnalysis
 
         self._model_name = model_name
-        self._app = FaceAnalysis(name=model_name, root=str(model_root))
-        self._app.prepare(ctx_id=_face_ctx_id(), det_size=(640, 640))
+        # Pass providers explicitly so onnxruntime is never handed a provider it can't
+        # use (which it would warn about and ignore), and keep ctx_id consistent.
+        providers, ctx_id = accelerator.face_runtime()
+        self._app = FaceAnalysis(name=model_name, root=str(model_root), providers=providers)
+        self._app.prepare(ctx_id=ctx_id, det_size=(640, 640))
 
     @property
     def model_name(self) -> str:

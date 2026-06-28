@@ -68,7 +68,7 @@ def test_api_keys_hash_index_exists():
 
 def test_models_seeded_count():
     rows = _query("SELECT * FROM models")
-    assert len(rows) == 23
+    assert len(rows) == 25
 
 
 def test_models_seeded_face_entries():
@@ -91,6 +91,12 @@ def test_models_seeded_object_entries():
     assert all(r["embedding_dim"] is None for r in rows)
 
 
+def test_models_seeded_clip_entries():
+    rows = _query("SELECT name, embedding_dim FROM models WHERE type='clip' ORDER BY name")
+    names = {r["name"] for r in rows}
+    assert names == {"ViT-B-32", "ViT-L-14"}
+
+
 def test_no_models_active_by_default():
     rows = _query("SELECT COUNT(*) FROM models WHERE is_active=1")
     assert rows[0][0] == 0
@@ -107,7 +113,7 @@ def test_no_models_downloaded_by_default():
 
 def test_settings_seeded_count():
     rows = _query("SELECT * FROM settings")
-    assert len(rows) == 20
+    assert len(rows) == 26
 
 
 def test_settings_seeded_spot_check():
@@ -134,10 +140,11 @@ def test_settings_categories():
     by_category: dict[str, list] = {}
     for r in _query("SELECT category FROM settings"):
         by_category.setdefault(r["category"], []).append(r)
-    assert set(by_category.keys()) == {"face", "object", "system"}
+    assert set(by_category.keys()) == {"face", "object", "system", "keywords"}
     assert len(by_category["face"]) == 8
     assert len(by_category["object"]) == 4
     assert len(by_category["system"]) == 8
+    assert len(by_category["keywords"]) == 6
 
 
 # ---------------------------------------------------------------------------
@@ -146,5 +153,5 @@ def test_settings_categories():
 
 def test_init_db_idempotent():
     store.init_db()  # second call on same DB
-    assert len(_query("SELECT * FROM models")) == 23
-    assert len(_query("SELECT * FROM settings")) == 20
+    assert len(_query("SELECT * FROM models")) == 25
+    assert len(_query("SELECT * FROM settings")) == 26

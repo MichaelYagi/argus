@@ -264,6 +264,16 @@
       html += `</div>`;
     }
 
+    if (r.keywords && r.keywords.length) {
+      html += `<div style="margin-bottom:8px">
+        <div class="muted" style="font-size:11px;margin-bottom:4px">Keywords</div>
+        <div style="display:flex;flex-wrap:wrap;gap:6px">`;
+      r.keywords.forEach(k => {
+        html += `<span class="badge" style="background:#7c3aed;color:#fff" title="${(k.score * 100).toFixed(0)}%">${esc(k.keyword)}</span>`;
+      });
+      html += `</div></div>`;
+    }
+
     html += `<div class="img-wrap" style="position:relative;display:inline-block;max-width:100%;line-height:0">
       <img class="test-img" src="${esc(displaySrc)}" style="max-width:100%;height:auto;border-radius:4px;display:block"></div>`;
 

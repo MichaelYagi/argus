@@ -107,10 +107,136 @@
 </div>
 {% endif %}
 {% endif %}
+
+<h2 style="margin-top:28px">Keyword tagging (CLIP)</h2>
+<p class="muted" style="font-size:12px;margin-bottom:8px">
+  Optional. Activate a CLIP model to tag images with semantic keywords. Argus runs
+  fully without one. The first download exports the model to ONNX automatically (a few
+  minutes); pre-mount models/clip/&lt;name&gt;/ or set ARGUS_CLIP_ASSET_BASE to skip that.
+</p>
+<div class="card-grid">
+{% for m in models %}{% if m.type == 'clip' %}
+<div class="model-card">
+  <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px">
+    <h3>{{ m.name }}</h3>
+    {% if m.is_active %}<span class="badge badge-active">Active</span>{% endif %}
+  </div>
+  <div class="m-meta">
+    {% if m.embedding_dim %}{{ m.embedding_dim }}d &middot; {% endif %}
+    {% if m.is_downloaded %}Downloaded{% else %}Not downloaded{% endif %}
+  </div>
+  {% if m.description %}<p class="muted" style="font-size:12px;margin:4px 0 10px">{{ m.description }}</p>{% endif %}
+  <div class="m-actions">
+    {% if not m.is_downloaded %}
+      <button class="btn btn-primary" data-download="{{ m.id }}"
+        {% if m.id in downloading_ids %}data-status-poll="{{ m.id }}"{% endif %}>Download</button>
+    {% elif not m.is_active %}
+      <button class="btn btn-ghost" data-activate="{{ m.id }}">Activate</button>
+      <button class="btn btn-danger" data-delete-model="{{ m.id }}" style="margin-left:4px" title="Remove weights from disk">Remove</button>
+    {% else %}
+      <span class="muted" style="font-size:12px">In use</span>
+    {% endif %}
+  </div>
+</div>
+{% endif %}{% endfor %}
+</div>
+
+{# Keyword vocabulary — only when a CLIP model is active #}
+{% if clip_active %}
+<div class="card" style="margin-top:28px">
+  <h2>Keyword vocabulary</h2>
+  <p class="muted" style="font-size:12px;margin-bottom:12px">
+    The global list of words/phrases CLIP can tag images with. Bulk edit: download the
+    current list, edit it, and upload to replace. Duplicates are removed automatically;
+    uploading re-tags the library in the background.
+    <strong id="vocab-count">{{ vocab_count }}</strong> words (version {{ vocab_version }}).
+  </p>
+  <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+    <button class="btn btn-ghost" id="vocab-download" type="button">Download list</button>
+    <button class="btn btn-primary" id="vocab-upload-btn" type="button">Upload list (replace)</button>
+    <input type="file" id="vocab-file" accept=".txt,.csv" style="display:none">
+    <span id="vocab-status" class="muted" style="font-size:12px"></span>
+  </div>
+  <div id="vocab-job" class="muted" style="font-size:12px;margin-top:8px"></div>
+</div>
+{% endif %}
 {% endblock %}
 
 {% block scripts %}
 <script src="/static/js/models.js"></script>
+{% if clip_active %}
+<script>
+(() => {
+  const dlBtn  = document.getElementById('vocab-download');
+  const upBtn  = document.getElementById('vocab-upload-btn');
+  const file   = document.getElementById('vocab-file');
+  const status = document.getElementById('vocab-status');
+  const jobEl  = document.getElementById('vocab-job');
+  const countEl = document.getElementById('vocab-count');
+  if (!dlBtn) return;
+
+  dlBtn.addEventListener('click', async () => {
+    try {
+      const r = await fetch('/api/keywords/vocabulary');
+      if (!r.ok) { showToast('Could not download the vocabulary.', 'error'); return; }
+      const data = await r.json();
+      const blob = new Blob([data.words.join('\n')], { type: 'text/plain' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url; a.download = 'keyword_vocabulary.txt';
+      document.body.appendChild(a); a.click(); a.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 500);
+    } catch (e) { showToast('Could not download the vocabulary.', 'error'); }
+  });
+
+  upBtn.addEventListener('click', () => file.click());
+  file.addEventListener('change', async () => {
+    if (!file.files.length) return;
+    status.textContent = 'Uploading…';
+    const text = await file.files[0].text();
+    const words = text.split(/[\n,]+/).map(s => s.trim()).filter(Boolean);
+    try {
+      const r = await fetch('/api/keywords/vocabulary', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ words }),
+      });
+      const data = await r.json().catch(() => ({}));
+      if (!r.ok) { status.textContent = ''; showToast(data.detail || 'Upload failed.', 'error'); return; }
+      status.textContent = '';
+      if (countEl) countEl.textContent = data.count;
+      showToast('Vocabulary replaced (' + data.count + ' words). Re-tagging…', 'success');
+      pollDelay = 2000;
+      pollJob();
+    } catch (e) { status.textContent = ''; showToast('Upload failed.', 'error'); }
+    file.value = '';
+  });
+
+  // Jobs (esp. the ViT-L-14 index build) can run for many minutes, so back the poll
+  // off after the first few checks instead of hammering the endpoint every 1.5s.
+  let pollDelay = 2000;
+  async function pollJob() {
+    try {
+      const r = await fetch('/api/keywords/jobs/status');
+      if (!r.ok) return;
+      const s = await r.json();
+      if (s.running) {
+        if (s.running === 'index') {
+          jobEl.textContent = 'Building keyword index (this can take several minutes)…';
+        } else {
+          jobEl.textContent = s.running + ': ' + s.progress + ' / ' + s.total;
+        }
+        setTimeout(pollJob, pollDelay);
+        pollDelay = Math.min(pollDelay + 2000, 15000);  // ramp 2s -> 15s
+      } else {
+        jobEl.textContent = '';
+      }
+    } catch (e) { /* ignore */ }
+  }
+  pollJob();
+})();
+</script>
+{% endif %}
 {# settings.js drives the COCO/world Save forms (saveSetting + COCO all-toggle) #}
 <script src="/static/js/settings.js"></script>
 {% if active_obj_world %}

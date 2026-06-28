@@ -85,6 +85,7 @@ async def tag_page(source_image_id: int, request: Request):
         "is_admin": is_admin(user_id),
         "version": __version__,
         "image_url": f"/media/sources/{src['file_path']}",
+        "source_image_id": source_image_id,
         "nat_w": src["width"],
         "nat_h": src["height"],
         "faces_json": json.dumps(face_data),

@@ -16,6 +16,7 @@ class EngineRegistry:
         self._lock = threading.Lock()
         self._face_engine: Any = None
         self._object_engine: Any = None
+        self._tagging_engine: Any = None
 
     def get_face_engine(self) -> Any:
         with self._lock:
@@ -25,6 +26,10 @@ class EngineRegistry:
         with self._lock:
             return self._object_engine
 
+    def get_tagging_engine(self) -> Any:
+        with self._lock:
+            return self._tagging_engine
+
     def swap_face_engine(self, engine: Any) -> None:
         with self._lock:
             self._face_engine = engine
@@ -32,6 +37,10 @@ class EngineRegistry:
     def swap_object_engine(self, engine: Any) -> None:
         with self._lock:
             self._object_engine = engine
+
+    def swap_tagging_engine(self, engine: Any) -> None:
+        with self._lock:
+            self._tagging_engine = engine
 
 
 registry = EngineRegistry()

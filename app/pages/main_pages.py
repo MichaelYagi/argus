@@ -29,6 +29,9 @@ SLIDER_RANGES = {
     "object.detection_confidence": (0.0, 1.0, 0.01),
     "object.iou_threshold":        (0.0, 1.0, 0.01),
     "system.crop_padding":         (0.0, 0.5, 0.01),
+    "clip.tag_threshold":          (0.0, 1.0, 0.01),
+    "clip.tag_diversity":          (0.0, 1.0, 0.01),
+    "clip.tag_rel_floor":          (0.0, 1.0, 0.01),
 }
 
 # Settings rendered as a dropdown: key -> [(value, label), ...]
@@ -204,6 +207,11 @@ async def models_page(request: Request):
     # active, and pick COCO vs YOLO-World based on which one it is.
     ctx["obj_active"]       = active_obj is not None
     ctx["active_obj_world"] = bool(active_obj_name and "world" in active_obj_name.lower())
+    # CLIP keyword tagging is optional; only surface the vocabulary editor when a
+    # CLIP model is active (mirrors the object-class editor gating).
+    ctx["clip_active"]   = store.get_active_model("clip") is not None
+    ctx["vocab_count"]   = store.vocabulary_count()
+    ctx["vocab_version"] = store.get_vocab_version()
     return _r(request, "models.html", ctx)
 
 
@@ -227,15 +235,11 @@ async def settings_page(request: Request):
     grouped: dict[str, list] = {}
     for r in rows:
         grouped.setdefault(r["category"], []).append(dict(r))
-    try:
-        import onnxruntime as ort
-        gpu_available = "CUDAExecutionProvider" in ort.get_available_providers()
-    except Exception:
-        gpu_available = False
+    from app.core import accelerator
     ctx["settings"]        = grouped
     ctx["slider_ranges"]   = SLIDER_RANGES
     ctx["setting_choices"] = SETTING_CHOICES
-    ctx["gpu_available"]   = gpu_available
+    ctx["gpu_available"]   = accelerator.gpu_available()
     ctx["managed_users"]   = [dict(u) for u in store.list_managed_users(ctx["user_id"])]
     return _r(request, "settings.html", ctx)
 
