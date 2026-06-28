@@ -172,6 +172,16 @@ a:hover { text-decoration: underline; }
 .stat-link { cursor: pointer; display: block; text-decoration: none; transition: box-shadow .12s, transform .12s; }
 .stat-link:hover { box-shadow: 0 4px 14px rgba(0,0,0,.16); transform: translateY(-1px); text-decoration: none; }
 
+.scroll-top-btn {
+  position: fixed; bottom: 24px; right: 24px; z-index: 550;
+  width: 42px; height: 42px; border-radius: 50%; border: none; padding: 0; cursor: pointer;
+  background: var(--accent); color: #fff;
+  display: none; align-items: center; justify-content: center;
+  box-shadow: 0 4px 14px rgba(0,0,0,.25);
+  transition: filter .12s, transform .12s;
+}
+.scroll-top-btn:hover { filter: brightness(1.08); transform: translateY(-1px); }
+
 /* ---------- Cards ---------- */
 .card { background: var(--surface); border-radius: var(--radius); box-shadow: var(--shadow); padding: 20px; margin-bottom: 16px; }
 .card-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 16px; margin-bottom: 24px; }
