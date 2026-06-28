@@ -26,6 +26,12 @@
 {% block scripts %}
 <script>
 (() => {
+  // Reloads (and other normal navigations) must land at the top — we restore the
+  // scroll position ourselves only when returning from a tag page (see RESTORE_KEY,
+  // set on photo click). Turning off the browser's automatic per-entry scroll
+  // restoration stops a plain reload from jumping back down.
+  if ('scrollRestoration' in history) history.scrollRestoration = 'manual';
+
   // Justified layout, same math as gallery.js packRows, but laid out INCREMENTALLY.
   // Completed full-width rows are appended once and never rebuilt, so loading a new
   // page never re-renders existing rows (that full rebuild was the scroll jank/jump).
