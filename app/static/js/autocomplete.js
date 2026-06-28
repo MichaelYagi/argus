@@ -331,12 +331,11 @@
     popup.className = 'label-popup';
     Object.assign(popup.style, {
       position: 'fixed',
-      top: '50%', left: '50%',
-      transform: 'translate(-50%, -50%)',
       background: 'var(--surface)', color: 'var(--text)', border: '1px solid var(--border)',
       borderRadius: 'var(--radius)', padding: '16px',
       zIndex: '500', boxShadow: '0 8px 32px rgba(0,0,0,.2)',
       width: '300px', maxWidth: '90vw',
+      visibility: 'hidden',  // positioned after append (needs measured size)
     });
 
     const input = document.createElement('input');
@@ -367,6 +366,29 @@
     popup.appendChild(input);
     popup.appendChild(row);
     document.body.appendChild(popup);
+
+    // Position beside the anchor (the clicked box/button), clamped to the viewport,
+    // so it appears next to what you clicked rather than pinned to the screen centre.
+    // Falls back to centred when no usable anchor is provided.
+    {
+      const pad = 8;
+      const pr = popup.getBoundingClientRect();
+      const r = anchor && anchor.getBoundingClientRect ? anchor.getBoundingClientRect() : null;
+      let left, top;
+      if (r && (r.width || r.height)) {
+        left = r.right + pad;                                    // prefer the box's right
+        if (left + pr.width > window.innerWidth - pad)
+          left = r.left - pr.width - pad;                        // else its left
+        left = Math.max(pad, Math.min(left, window.innerWidth  - pr.width  - pad));
+        top  = Math.max(pad, Math.min(r.top, window.innerHeight - pr.height - pad));
+      } else {
+        left = (window.innerWidth  - pr.width)  / 2;
+        top  = (window.innerHeight - pr.height) / 2;
+      }
+      popup.style.left = left + 'px';
+      popup.style.top  = top + 'px';
+      popup.style.visibility = 'visible';
+    }
 
     makeAutocomplete(input);
     input.focus();
