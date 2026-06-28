@@ -19,8 +19,11 @@
 {% block scripts %}
 <script>
 (() => {
-  // Same justified packing as the identity galleries (gallery.js). Aspect ratios
-  // come straight from the stored width/height, so no measurement pre-loads.
+  // Justified layout, same math as gallery.js packRows, but laid out INCREMENTALLY.
+  // Completed full-width rows are appended once and never rebuilt, so loading a new
+  // page never re-renders existing rows (that full rebuild was the scroll jank/jump).
+  // Only the trailing partial row is re-flowed as more items arrive. A full relayout
+  // happens solely on resize, where every row's width changes anyway.
   const GAP = 4;
   const TARGET_H = 200;
 
@@ -29,6 +32,72 @@
   const loadingEl = document.getElementById('img-loading');
 
   let items = [], cursor = null, hasMore = true, loading = false;
+  let pending = [];   // trailing items not yet forming a complete row
+  let tailEl = null;  // DOM node for the temporary partial last row
+
+  function buildRow(rowItems, height) {
+    const rowEl = document.createElement('div');
+    rowEl.className = 'g-row';
+    rowItems.forEach(item => {
+      const ar = item.ar || (item.width || 1) / (item.height || 1);
+
+      const a = document.createElement('a');
+      a.className = 'g-item';
+      a.href = '/tag/' + item.source_image_id;
+      a.style.width  = Math.floor(ar * height) + 'px';
+      a.style.height = Math.floor(height) + 'px';
+
+      const img = document.createElement('img');
+      img.src = item.image_url;
+      img.loading = 'lazy';
+      img.alt = '';
+      a.appendChild(img);
+
+      if (item.detection_count) {
+        const badge = document.createElement('span');
+        badge.textContent = item.detection_count;
+        badge.title = item.detection_count + ' detection' + (item.detection_count !== 1 ? 's' : '');
+        badge.style.cssText = 'position:absolute;bottom:6px;right:6px;z-index:2;' +
+          'background:rgba(0,0,0,.6);color:#fff;border-radius:99px;padding:1px 7px;' +
+          'font-size:11px;font-weight:600;line-height:16px';
+        a.appendChild(badge);
+      }
+      rowEl.appendChild(a);
+    });
+    return rowEl;
+  }
+
+  // Append complete full-width rows from `work`; return the leftover items that
+  // don't yet fill a row.
+  function flushRows(work) {
+    const W = container.clientWidth;
+    let cur = [], sumAR = 0;
+    work.forEach(raw => {
+      const item = { ...raw, ar: (raw.width || 1) / (raw.height || 1) };
+      cur.push(item);
+      sumAR += item.ar;
+      if (sumAR * TARGET_H + GAP * (cur.length - 1) >= W) {
+        container.appendChild(buildRow(cur, (W - GAP * (cur.length - 1)) / sumAR));
+        cur = []; sumAR = 0;
+      }
+    });
+    return cur;
+  }
+
+  function appendItems(newItems) {
+    if (tailEl) { tailEl.remove(); tailEl = null; }
+    pending = flushRows(pending.concat(newItems));
+    if (pending.length) {
+      tailEl = buildRow(pending, TARGET_H);
+      container.appendChild(tailEl);
+    }
+  }
+
+  function relayout() {
+    container.innerHTML = '';
+    pending = []; tailEl = null;
+    appendItems(items);
+  }
 
   async function loadPage() {
     if (loading || !hasMore) return;
@@ -42,72 +111,20 @@
 
     hasMore = data.has_more;
     cursor  = data.next_cursor;
-    items.push(...data.items);
 
-    if (!items.length) {
+    if (!items.length && !data.items.length) {
       if (emptyEl) emptyEl.hidden = false;
       if (loadingEl) loadingEl.hidden = true;
       loading = false;
       return;
     }
 
-    render();
+    items.push(...data.items);
+    appendItems(data.items);
+
     loading = false;
     if (loadingEl) loadingEl.hidden = true;
     if (!hasMore) sentinel.remove();
-  }
-
-  function packRows(list, W) {
-    const rows = [];
-    let cur = [], sumAR = 0;
-    list.forEach(item => {
-      const ar = (item.width || 1) / (item.height || 1);
-      cur.push({ ...item, ar });
-      sumAR += ar;
-      if (sumAR * TARGET_H + GAP * (cur.length - 1) >= W) {
-        rows.push({ items: cur, height: (W - GAP * (cur.length - 1)) / sumAR });
-        cur = []; sumAR = 0;
-      }
-    });
-    if (cur.length) rows.push({ items: cur, height: TARGET_H });
-    return rows;
-  }
-
-  function render() {
-    container.innerHTML = '';
-    const W = container.clientWidth;
-    packRows(items, W).forEach(({ items: row, height }) => {
-      const rowEl = document.createElement('div');
-      rowEl.className = 'g-row';
-      row.forEach(item => {
-        const w = Math.floor(item.ar * height);
-
-        const a = document.createElement('a');
-        a.className = 'g-item';
-        a.href = '/tag/' + item.source_image_id;
-        a.style.width  = w + 'px';
-        a.style.height = Math.floor(height) + 'px';
-
-        const img = document.createElement('img');
-        img.src = item.image_url;
-        img.loading = 'lazy';
-        img.alt = '';
-        a.appendChild(img);
-
-        if (item.detection_count) {
-          const badge = document.createElement('span');
-          badge.textContent = item.detection_count;
-          badge.title = item.detection_count + ' detection' + (item.detection_count !== 1 ? 's' : '');
-          badge.style.cssText = 'position:absolute;bottom:6px;right:6px;z-index:2;' +
-            'background:rgba(0,0,0,.6);color:#fff;border-radius:99px;padding:1px 7px;' +
-            'font-size:11px;font-weight:600;line-height:16px';
-          a.appendChild(badge);
-        }
-
-        rowEl.appendChild(a);
-      });
-      container.appendChild(rowEl);
-    });
   }
 
   const sentinel = document.createElement('div');
@@ -117,7 +134,13 @@
     { rootMargin: '300px' }).observe(sentinel);
 
   loadPage();
-  window.addEventListener('resize', () => { if (items.length) render(); });
+
+  let resizeT;
+  window.addEventListener('resize', () => {
+    if (!items.length) return;
+    clearTimeout(resizeT);
+    resizeT = setTimeout(relayout, 150);
+  });
 })();
 </script>
 {% endblock %}
