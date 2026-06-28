@@ -147,11 +147,18 @@ def _run_download(model_id: int, model_type: str, model_name: str) -> None:
         _progress[model_id] = {"status": "failed", "error": str(exc)}
 
 
+def _is_florence(model_name: str) -> bool:
+    return model_name.lower().startswith("florence")
+
+
 def _load_engine(model_type: str, model_name: str) -> Any:
     """Load (and if necessary download) an engine. Slow for large models."""
     if model_type == "face":
         from app.core.face_engine import FaceEngine
         return FaceEngine(model_name, models_dir())
+    if _is_florence(model_name):
+        from app.core.florence_engine import FlorenceEngine
+        return FlorenceEngine(models_dir())
     from app.core.object_engine import ObjectEngine
     return ObjectEngine(model_name, models_dir() / f"{model_name}.pt")
 
@@ -159,6 +166,11 @@ def _load_engine(model_type: str, model_name: str) -> Any:
 def _delete_files(model_type: str, model_name: str) -> None:
     if model_type == "face":
         path = models_dir() / "models" / model_name
+        if path.exists():
+            shutil.rmtree(path)
+    elif _is_florence(model_name):
+        from app.core.florence_engine import DIR_NAME
+        path = models_dir() / DIR_NAME
         if path.exists():
             shutil.rmtree(path)
     else:

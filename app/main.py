@@ -68,9 +68,13 @@ def _autoload_engines() -> None:
     obj_row = store.get_active_model("object")
     if obj_row and obj_row["is_downloaded"]:
         try:
-            from app.core.object_engine import ObjectEngine
-            path = models_dir() / f"{obj_row['name']}.pt"
-            registry.swap_object_engine(ObjectEngine(obj_row["name"], path))
+            if obj_row["name"].lower().startswith("florence"):
+                from app.core.florence_engine import FlorenceEngine
+                registry.swap_object_engine(FlorenceEngine(models_dir()))
+            else:
+                from app.core.object_engine import ObjectEngine
+                path = models_dir() / f"{obj_row['name']}.pt"
+                registry.swap_object_engine(ObjectEngine(obj_row["name"], path))
             log.info("Loaded object model: %s", obj_row["name"])
         except Exception as exc:
             log.warning("Failed to load object model %s: %s", obj_row["name"], exc)

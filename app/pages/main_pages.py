@@ -204,6 +204,9 @@ async def models_page(request: Request):
     # active, and pick COCO vs YOLO-World based on which one it is.
     ctx["obj_active"]       = active_obj is not None
     ctx["active_obj_world"] = bool(active_obj_name and "world" in active_obj_name.lower())
+    # Florence-2 is open-vocabulary but not user-promptable: no COCO grid, no
+    # world vocabulary editor — there is nothing to configure about its classes.
+    ctx["active_obj_florence"] = bool(active_obj_name and active_obj_name.lower().startswith("florence"))
     return _r(request, "models.html", ctx)
 
 

@@ -57,8 +57,8 @@
 {% endif %}{% endfor %}
 </div>
 
-{# COCO classes grid — only when a standard (non-world) object model is active #}
-{% if obj_active and not active_obj_world %}
+{# COCO classes grid — only when a standard (non-world, non-Florence) object model is active #}
+{% if obj_active and not active_obj_world and not active_obj_florence %}
 <div class="card" style="margin-top:28px">
   <h2>Object classes</h2>
   <p class="muted" style="font-size:12px;margin-bottom:8px">

@@ -6,6 +6,7 @@ insightface
 onnxruntime-gpu; platform_machine == "x86_64"
 onnxruntime; platform_machine != "x86_64"
 ultralytics
+transformers>=4.57  # Florence-2 object model (native integration; 4.57+ ships Florence2ForConditionalGeneration)
 numpy
 pillow
 pillow-heif

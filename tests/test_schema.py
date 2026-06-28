@@ -68,7 +68,7 @@ def test_api_keys_hash_index_exists():
 
 def test_models_seeded_count():
     rows = _query("SELECT * FROM models")
-    assert len(rows) == 23
+    assert len(rows) == 24
 
 
 def test_models_seeded_face_entries():
@@ -87,6 +87,7 @@ def test_models_seeded_object_entries():
         "yolov10s", "yolov10m", "yolov10l", "yolov10x",
         "rtdetr-l", "rtdetr-x",
         "yolov8s-worldv2", "yolov8m-worldv2", "yolov8l-worldv2",
+        "florence-2-base",
     }
     assert all(r["embedding_dim"] is None for r in rows)
 
@@ -146,5 +147,5 @@ def test_settings_categories():
 
 def test_init_db_idempotent():
     store.init_db()  # second call on same DB
-    assert len(_query("SELECT * FROM models")) == 23
+    assert len(_query("SELECT * FROM models")) == 24
     assert len(_query("SELECT * FROM settings")) == 20

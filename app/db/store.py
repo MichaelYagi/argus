@@ -1640,6 +1640,10 @@ _MODEL_SEED: list[tuple] = [
     ("object", "yolov8s-worldv2", None, "YOLO-World small — open vocabulary; detect any terms you define."),
     ("object", "yolov8m-worldv2", None, "YOLO-World medium — open vocabulary; better accuracy than small."),
     ("object", "yolov8l-worldv2", None, "YOLO-World large — open vocabulary; best open-vocab accuracy, slower."),
+
+    # --- Object: Florence-2 (grounded open-vocabulary detector; describes what it finds) ---
+    ("object", "florence-2-base", None,
+     "Florence-2 base — grounded open-vocabulary detection; free-form labels, no class list. Heavier than YOLO."),
 ]
 
 # Default vocabulary for YOLO-World: 80 COCO classes + common extras
