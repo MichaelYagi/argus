@@ -218,7 +218,12 @@ def _migrate(conn: sqlite3.Connection) -> None:
         "SELECT sql FROM sqlite_master WHERE type='table' AND name='models'"
     ).fetchone()
     if models_sql and "'clip'" not in models_sql[0]:
+        # PRAGMA foreign_keys is a no-op inside a transaction, and earlier migration
+        # statements have one open — commit first so disabling FKs actually takes effect,
+        # otherwise DROP TABLE models fails against face_embeddings' FK reference.
+        conn.commit()
         conn.execute("PRAGMA foreign_keys = OFF")
+        conn.execute("DROP TABLE IF EXISTS models_v2")  # clean up any partial earlier run
         conn.execute("""
             CREATE TABLE models_v2 (
                 id            INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -243,6 +248,7 @@ def _migrate(conn: sqlite3.Connection) -> None:
         """)
         conn.execute("DROP TABLE models")
         conn.execute("ALTER TABLE models_v2 RENAME TO models")
+        conn.commit()  # commit the rebuild before re-enabling FK enforcement
         conn.execute("PRAGMA foreign_keys = ON")
 
     # Keyword tagging: ensure the single vocab-meta row exists (version counter).
