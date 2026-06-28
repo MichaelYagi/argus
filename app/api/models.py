@@ -39,8 +39,8 @@ async def list_models(
     type: Optional[str] = Query(None),
     user_id: int = Depends(require_admin),
 ):
-    if type and type not in ("face", "object", "clip"):
-        raise HTTPException(400, "type must be 'face', 'object', or 'clip'")
+    if type and type not in ("face", "object"):
+        raise HTTPException(400, "type must be 'face' or 'object'")
     return [_fmt(r) for r in store.list_models(model_type=type)]
 
 
@@ -102,14 +102,6 @@ async def activate_model(model_id: int, user_id: int = Depends(require_admin)):
         registry.swap_face_engine(engine)
         from app.core import face_index as _fi
         _fi.build_all(model_id)
-    elif row["type"] == "clip":
-        registry.swap_tagging_engine(engine)
-        from app.core import keyword_jobs
-        # Building the ~21k-word text matrix can take many minutes (especially
-        # ViT-L-14 on CPU), so it runs inside the background job rather than blocking
-        # this request. start_backfill builds the matrix first, then encodes images.
-        # Until the matrix is ready, keyword scoring simply returns empty.
-        keyword_jobs.start_backfill(model_id)
     else:
         registry.swap_object_engine(engine)
 
@@ -128,10 +120,6 @@ async def delete_model(model_id: int, user_id: int = Depends(require_admin)):
     if row["is_active"]:
         if row["type"] == "face":
             registry.swap_face_engine(None)
-        elif row["type"] == "clip":
-            registry.swap_tagging_engine(None)
-            from app.core import keyword_index
-            keyword_index.reset()
         else:
             registry.swap_object_engine(None)
 
@@ -164,61 +152,13 @@ def _load_engine(model_type: str, model_name: str) -> Any:
     if model_type == "face":
         from app.core.face_engine import FaceEngine
         return FaceEngine(model_name, models_dir())
-    if model_type == "clip":
-        from app.core.tagging_engine import TaggingEngine
-        clip_dir = models_dir() / "clip" / model_name
-        _ensure_clip_assets(model_name, clip_dir)
-        return TaggingEngine(model_name, clip_dir)
     from app.core.object_engine import ObjectEngine
     return ObjectEngine(model_name, models_dir() / f"{model_name}.pt")
-
-
-# CLIP assets are the ONNX image/text encoders + shared BPE vocab. They are produced
-# by exporting an OpenCLIP checkpoint to ONNX. When a CLIP model is downloaded and its
-# assets are missing, Argus exports them locally via torch/open_clip (download-time
-# only; inference always runs on onnxruntime). open_clip pulls the checkpoint from its
-# own public host, so the Download button is self-service like YOLO/buffalo weights.
-# ARGUS_CLIP_ASSET_BASE is an optional fast path: if set, the pre-exported ONNX files
-# are fetched over HTTP instead, skipping the torch export (useful for air-gapped or
-# torch-free deployments that pre-host the assets).
-_CLIP_ASSET_FILES = ("image_encoder.onnx", "text_encoder.onnx", "bpe_simple_vocab_16e6.txt.gz")
-
-
-def _ensure_clip_assets(model_name: str, clip_dir) -> None:
-    import os
-
-    missing = [f for f in _CLIP_ASSET_FILES if not (clip_dir / f).exists()]
-    if not missing:
-        return
-    base = os.environ.get("ARGUS_CLIP_ASSET_BASE", "").rstrip("/")
-    if base:
-        _download_clip_assets(model_name, clip_dir, base, missing)
-        return
-    # No pre-hosted assets: export from the OpenCLIP checkpoint. Slow on first run
-    # (downloads the checkpoint, then converts), cached on disk afterward.
-    from app.core.clip_export import export_model
-    export_model(model_name, clip_dir)
-
-
-def _download_clip_assets(model_name: str, clip_dir, base: str, missing) -> None:
-    import httpx
-    clip_dir.mkdir(parents=True, exist_ok=True)
-    for fname in missing:
-        url = f"{base}/{model_name}/{fname}"
-        with httpx.stream("GET", url, timeout=120.0, follow_redirects=True) as r:
-            r.raise_for_status()
-            with open(clip_dir / fname, "wb") as fh:
-                for chunk in r.iter_bytes():
-                    fh.write(chunk)
 
 
 def _delete_files(model_type: str, model_name: str) -> None:
     if model_type == "face":
         path = models_dir() / "models" / model_name
-        if path.exists():
-            shutil.rmtree(path)
-    elif model_type == "clip":
-        path = models_dir() / "clip" / model_name
         if path.exists():
             shutil.rmtree(path)
     else:

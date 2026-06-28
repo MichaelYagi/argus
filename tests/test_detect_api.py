@@ -518,7 +518,7 @@ def test_test_endpoint_happy_path(client):
     assert r.status_code == 200
     data = r.json()
     assert data["counts"] == {"faces": 1, "objects": 2}
-    assert data["available"] == {"faces": True, "objects": True, "keywords": False}
+    assert data["available"] == {"faces": True, "objects": True}
     assert data["faces"][0]["age"] == 30
     assert {o["class_name"] for o in data["objects"]} == {"person", "dog"}
 

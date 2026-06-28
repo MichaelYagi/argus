@@ -23,7 +23,6 @@ from app.api import (
     images,
     jobs,
     keys,
-    keywords,
     logs,
     media,
     models,
@@ -44,29 +43,10 @@ async def lifespan(app: FastAPI):
         log.warning("SECRET_KEY is not set — sessions are insecure.")
     store.init_db()
     settings_cache.cache.load()
-    _prime_cuda_libraries()
     _row = store.get_setting("system.log_buffer_size")
     log_buffer.install(int(_row["value"]) if _row else log_buffer.DEFAULT_SIZE)
     _autoload_engines()
     yield
-
-
-def _prime_cuda_libraries() -> None:
-    """Make onnxruntime-gpu able to find the CUDA runtime libraries.
-
-    onnxruntime-gpu dlopen's CUDA libs by soname from the loader path. torch ships its
-    own CUDA libraries (the nvidia-*-cu* wheels) and loads them when imported, so
-    importing torch before onnxruntime lets onnxruntime reuse those already-loaded libs
-    without needing LD_LIBRARY_PATH set in the environment. No-op when the user has
-    forced CPU, or when torch / a GPU isn't present (insightface, YOLO and CLIP then
-    just run on CPU as before).
-    """
-    if not settings_cache.cache.get_or("system.use_gpu", True):
-        return
-    try:
-        import torch  # noqa: F401
-    except Exception as exc:  # torch absent or broken — fall through to CPU
-        log.debug("torch CUDA preload skipped: %s", exc)
 
 
 def _autoload_engines() -> None:
@@ -95,25 +75,6 @@ def _autoload_engines() -> None:
         except Exception as exc:
             log.warning("Failed to load object model %s: %s", obj_row["name"], exc)
 
-    clip_row = store.get_active_model("clip")
-    if clip_row and clip_row["is_downloaded"]:
-        try:
-            from app.core.tagging_engine import TaggingEngine
-            clip_dir = models_dir() / "clip" / clip_row["name"]
-            registry.swap_tagging_engine(TaggingEngine(clip_row["name"], clip_dir))
-            log.info("Loaded CLIP model: %s", clip_row["name"])
-            # Build the keyword matrix off the startup path: a cached matrix loads
-            # fast, but an un-cached one (e.g. restart mid-build) would otherwise
-            # block boot for minutes. Scoring returns empty until it's ready.
-            import threading
-
-            from app.core import keyword_index
-            threading.Thread(
-                target=keyword_index.build, args=(clip_row["id"],), daemon=True,
-            ).start()
-        except Exception as exc:
-            log.warning("Failed to load CLIP model %s: %s", clip_row["name"], exc)
-
 
 app = FastAPI(title="Argus", version=__version__, lifespan=lifespan, docs_url=None)
 
@@ -138,7 +99,6 @@ app.include_router(identities.router)
 app.include_router(enroll.router)
 app.include_router(models.router)
 app.include_router(settings.router)
-app.include_router(keywords.router)
 app.include_router(logs.router)
 app.include_router(review.router)
 app.include_router(images.router)

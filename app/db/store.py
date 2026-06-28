@@ -52,7 +52,6 @@ def init_db() -> None:
         _migrate(conn)
         _seed_models(conn)
         _seed_settings(conn)
-        _seed_vocabulary(conn)
 
 
 def _migrate(conn: sqlite3.Connection) -> None:
@@ -210,51 +209,6 @@ def _migrate(conn: sqlite3.Connection) -> None:
         )
     if "representative_embedding" not in existing_identity_cols:
         conn.execute("ALTER TABLE identities ADD COLUMN representative_embedding BLOB")
-
-    # Migration v2: widen the models.type CHECK to allow 'clip'. CHECK constraints
-    # cannot be altered in place, so rebuild the table if it still has the old 2-type
-    # constraint. New databases already get the widened CHECK from schema.sql.
-    models_sql = conn.execute(
-        "SELECT sql FROM sqlite_master WHERE type='table' AND name='models'"
-    ).fetchone()
-    if models_sql and "'clip'" not in models_sql[0]:
-        # PRAGMA foreign_keys is a no-op inside a transaction, and earlier migration
-        # statements have one open — commit first so disabling FKs actually takes effect,
-        # otherwise DROP TABLE models fails against face_embeddings' FK reference.
-        conn.commit()
-        conn.execute("PRAGMA foreign_keys = OFF")
-        conn.execute("DROP TABLE IF EXISTS models_v2")  # clean up any partial earlier run
-        conn.execute("""
-            CREATE TABLE models_v2 (
-                id            INTEGER PRIMARY KEY AUTOINCREMENT,
-                type          TEXT    NOT NULL CHECK(type IN ('face', 'object', 'clip')),
-                name          TEXT    NOT NULL,
-                file_path     TEXT,
-                embedding_dim INTEGER,
-                description   TEXT,
-                is_downloaded INTEGER NOT NULL DEFAULT 0,
-                is_active     INTEGER NOT NULL DEFAULT 0,
-                added_at      TEXT    NOT NULL DEFAULT (datetime('now')),
-                UNIQUE(type, name)
-            )
-        """)
-        conn.execute("""
-            INSERT INTO models_v2
-                (id, type, name, file_path, embedding_dim, description,
-                 is_downloaded, is_active, added_at)
-            SELECT id, type, name, file_path, embedding_dim, description,
-                   is_downloaded, is_active, added_at
-            FROM models
-        """)
-        conn.execute("DROP TABLE models")
-        conn.execute("ALTER TABLE models_v2 RENAME TO models")
-        conn.commit()  # commit the rebuild before re-enabling FK enforcement
-        conn.execute("PRAGMA foreign_keys = ON")
-
-    # Keyword tagging: ensure the single vocab-meta row exists (version counter).
-    conn.execute(
-        "INSERT OR IGNORE INTO keyword_vocab_meta (id, version) VALUES (1, 1)"
-    )
 
     # Insert missing seed settings and refresh descriptions on every startup
     existing_keys = {r[0] for r in conn.execute("SELECT key FROM settings")}
@@ -1647,167 +1601,6 @@ def update_setting(key: str, value: str) -> None:
 
 
 # ---------------------------------------------------------------------------
-# Keyword tagging: global vocabulary, version, image embeddings + keywords
-# ---------------------------------------------------------------------------
-
-def get_vocabulary() -> list[str]:
-    """Return the global keyword vocabulary, alphabetically."""
-    with _connect() as conn:
-        return [r[0] for r in conn.execute(
-            "SELECT word FROM keyword_vocabulary ORDER BY word"
-        ).fetchall()]
-
-
-def vocabulary_count() -> int:
-    with _connect() as conn:
-        return int(conn.execute("SELECT COUNT(*) FROM keyword_vocabulary").fetchone()[0])
-
-
-def replace_vocabulary(words: list[str]) -> int:
-    """Replace the entire vocabulary with a deduplicated, trimmed list and bump the
-    vocab version. Returns the number of stored words. Case-insensitive dedup,
-    preserving the first-seen surface form."""
-    seen: set[str] = set()
-    cleaned: list[str] = []
-    for w in words:
-        w = w.strip()
-        if not w:
-            continue
-        k = w.lower()
-        if k in seen:
-            continue
-        seen.add(k)
-        cleaned.append(w)
-    with _connect() as conn:
-        conn.execute("DELETE FROM keyword_vocabulary")
-        conn.executemany(
-            "INSERT INTO keyword_vocabulary (word) VALUES (?)",
-            [(w,) for w in cleaned],
-        )
-        conn.execute(
-            "UPDATE keyword_vocab_meta SET version = version + 1, updated_at = datetime('now') WHERE id = 1"
-        )
-    return len(cleaned)
-
-
-def get_vocab_version() -> int:
-    with _connect() as conn:
-        row = conn.execute("SELECT version FROM keyword_vocab_meta WHERE id = 1").fetchone()
-        return int(row[0]) if row else 1
-
-
-def bump_vocab_version() -> int:
-    """Increment the vocab version (used when the prompt template changes). Returns new value."""
-    with _connect() as conn:
-        conn.execute(
-            "UPDATE keyword_vocab_meta SET version = version + 1, updated_at = datetime('now') WHERE id = 1"
-        )
-        row = conn.execute("SELECT version FROM keyword_vocab_meta WHERE id = 1").fetchone()
-        return int(row[0]) if row else 1
-
-
-def upsert_image_embedding(
-    source_image_id: int, user_id: int, model_id: int, embedding: bytes, dim: int,
-    environment_id: int | None = None,
-) -> None:
-    with _connect() as conn:
-        env_id = _resolve_env(conn, user_id, environment_id)
-        conn.execute(
-            """INSERT INTO image_embeddings
-                   (source_image_id, user_id, environment_id, model_id, embedding, dim)
-               VALUES (?, ?, ?, ?, ?, ?)
-               ON CONFLICT(source_image_id, model_id)
-               DO UPDATE SET embedding = excluded.embedding, dim = excluded.dim""",
-            (source_image_id, user_id, env_id, model_id, embedding, dim),
-        )
-
-
-def get_image_embedding(source_image_id: int, model_id: int) -> bytes | None:
-    with _connect() as conn:
-        row = conn.execute(
-            "SELECT embedding FROM image_embeddings WHERE source_image_id = ? AND model_id = ?",
-            (source_image_id, model_id),
-        ).fetchone()
-        return bytes(row[0]) if row else None
-
-
-def all_image_embeddings(model_id: int) -> list[sqlite3.Row]:
-    """Every stored image vector for a model — used by re-tag/backfill jobs."""
-    with _connect() as conn:
-        return conn.execute(
-            """SELECT source_image_id, user_id, environment_id, embedding, dim
-               FROM image_embeddings WHERE model_id = ?""",
-            (model_id,),
-        ).fetchall()
-
-
-def source_images_missing_embedding(model_id: int) -> list[sqlite3.Row]:
-    """Stored images with no CLIP vector yet for this model — used by the backfill job."""
-    with _connect() as conn:
-        return conn.execute(
-            """SELECT si.id, si.user_id, si.environment_id, si.file_path
-               FROM source_images si
-               LEFT JOIN image_embeddings ie
-                   ON ie.source_image_id = si.id AND ie.model_id = ?
-               WHERE ie.id IS NULL""",
-            (model_id,),
-        ).fetchall()
-
-
-def set_image_keywords(
-    source_image_id: int, user_id: int, model_id: int, vocab_version: int,
-    keywords: list[tuple[str, float]], environment_id: int | None = None,
-) -> None:
-    """Replace the cached keywords for one image (model-scoped)."""
-    with _connect() as conn:
-        env_id = _resolve_env(conn, user_id, environment_id)
-        conn.execute(
-            "DELETE FROM image_keywords WHERE source_image_id = ? AND model_id = ?",
-            (source_image_id, model_id),
-        )
-        conn.executemany(
-            """INSERT INTO image_keywords
-                   (source_image_id, user_id, environment_id, model_id, vocab_version, keyword, score)
-               VALUES (?, ?, ?, ?, ?, ?, ?)""",
-            [(source_image_id, user_id, env_id, model_id, vocab_version, kw, float(sc))
-             for kw, sc in keywords],
-        )
-
-
-def get_image_keywords(source_image_id: int, model_id: int) -> list[sqlite3.Row]:
-    with _connect() as conn:
-        return conn.execute(
-            """SELECT keyword, score, vocab_version FROM image_keywords
-               WHERE source_image_id = ? AND model_id = ?
-               ORDER BY score DESC""",
-            (source_image_id, model_id),
-        ).fetchall()
-
-
-def search_images_by_keyword(
-    user_id: int, keyword: str, model_id: int, environment_id: int | None = None,
-    cursor: str | None = None, limit: int = 30,
-) -> list[sqlite3.Row]:
-    """Stored source images tagged with a keyword (case-insensitive exact match),
-    newest first, cursor-paginated on detected/keyword id."""
-    with _connect() as conn:
-        env_id = _resolve_env(conn, user_id, environment_id)
-        params: list = [user_id, env_id, model_id, keyword.strip().lower()]
-        sql = """SELECT ik.source_image_id, ik.keyword, ik.score, ik.id AS cursor_id,
-                        si.file_path, si.width, si.height
-                 FROM image_keywords ik
-                 JOIN source_images si ON si.id = ik.source_image_id
-                 WHERE ik.user_id = ? AND ik.environment_id = ? AND ik.model_id = ?
-                   AND LOWER(ik.keyword) = ?"""
-        if cursor:
-            sql += " AND ik.id < ?"
-            params.append(int(cursor))
-        sql += " ORDER BY ik.id DESC LIMIT ?"
-        params.append(limit + 1)
-        return conn.execute(sql, params).fetchall()
-
-
-# ---------------------------------------------------------------------------
 # Seed data
 # ---------------------------------------------------------------------------
 
@@ -1847,10 +1640,6 @@ _MODEL_SEED: list[tuple] = [
     ("object", "yolov8s-worldv2", None, "YOLO-World small — open vocabulary; detect any terms you define."),
     ("object", "yolov8m-worldv2", None, "YOLO-World medium — open vocabulary; better accuracy than small."),
     ("object", "yolov8l-worldv2", None, "YOLO-World large — open vocabulary; best open-vocab accuracy, slower."),
-
-    # --- CLIP (semantic keyword tagging; optional, not required to operate) ---
-    ("clip",   "ViT-B-32",         512,  "OpenCLIP ViT-B/32 — fast, CPU-friendly. Recommended default for tagging."),
-    ("clip",   "ViT-L-14",         768,  "OpenCLIP ViT-L/14 — higher quality keywords, GPU preferred. Slower."),
 ]
 
 # Default vocabulary for YOLO-World: 80 COCO classes + common extras
@@ -2034,30 +1823,6 @@ _SETTINGS_SEED: list[tuple] = [
     ("system.log_buffer_size",
      "500",   "int",    "system",
      "Log Buffer Size | Number of recent log lines kept in memory and replayed in the log viewer (100–100000)"),
-    # --- Keywords (CLIP semantic tagging) ---
-    ("clip.tag_top_k",
-     "6",     "int",    "keywords",
-     "Keywords per Image | Maximum number of keywords returned for an image (1–100)"),
-    ("clip.tag_threshold",
-     "0.20",  "float",  "keywords",
-     "Keyword Threshold | Hard minimum similarity (0–1) for a keyword. Prompt-ensembled "
-     "scores sit lower, so this is a floor; per-image selection uses the relative floor"),
-    ("clip.tag_diversity",
-     "0.4",   "float",  "keywords",
-     "Keyword Diversity | 0 = most relevant (may repeat near-synonyms), 1 = most varied. "
-     "Spreads keywords across different things in the image instead of one concept"),
-    ("clip.tag_rel_floor",
-     "0.82",  "float",  "keywords",
-     "Keyword Relative Floor | Keep only keywords scoring within this fraction of the "
-     "image's top match (0-1). Adapts to each image; 0 disables (use fixed threshold only)"),
-    ("clip.tag_regions",
-     "false", "bool",   "keywords",
-     "Per-region Keywords | Also tag each detected face/object crop, not just the whole "
-     "image. Helps single-subject photos but can mis-tag busy scenes from blurry "
-     "background people. Off by default"),
-    ("clip.prompt_template",
-     "a photo of {word}", "string", "keywords",
-     "Prompt Template | Wraps each word before embedding; must contain {word}. Changing it re-tags images."),
 ]
 
 
@@ -2233,33 +1998,6 @@ def _seed_models(conn: sqlite3.Connection) -> None:
            ON CONFLICT(type, name) DO UPDATE SET description = excluded.description""",
         _MODEL_SEED,
     )
-
-
-_VOCAB_SEED_PATH = Path(__file__).parent / "default_vocabulary.txt"
-
-
-def _seed_vocabulary(conn: sqlite3.Connection) -> None:
-    """Seed the curated default keyword vocabulary only when the table is empty, so a
-    deliberately-edited/cleared vocabulary is never resurrected on restart. Keeps the
-    vocab version at its initial value (seeded content is version 1)."""
-    existing = conn.execute("SELECT COUNT(*) FROM keyword_vocabulary").fetchone()[0]
-    if existing:
-        return
-    if not _VOCAB_SEED_PATH.exists():
-        return
-    seen: set[str] = set()
-    words: list[tuple[str]] = []
-    for line in _VOCAB_SEED_PATH.read_text(encoding="utf-8").splitlines():
-        w = line.strip()
-        if not w or w.startswith("#"):
-            continue
-        k = w.lower()
-        if k in seen:
-            continue
-        seen.add(k)
-        words.append((w,))
-    if words:
-        conn.executemany("INSERT INTO keyword_vocabulary (word) VALUES (?)", words)
 
 
 def _seed_settings(conn: sqlite3.Connection) -> None:

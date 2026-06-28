@@ -101,10 +101,10 @@ CREATE INDEX IF NOT EXISTS idx_detections_review
 CREATE INDEX IF NOT EXISTS idx_detections_source_image
     ON detections(source_image_id);
 
--- models: shared registry of available face/object/clip models (admin-managed)
+-- models: shared registry of available face/object models (admin-managed)
 CREATE TABLE IF NOT EXISTS models (
     id            INTEGER PRIMARY KEY AUTOINCREMENT,
-    type          TEXT    NOT NULL CHECK(type IN ('face', 'object', 'clip')),
+    type          TEXT    NOT NULL CHECK(type IN ('face', 'object')),
     name          TEXT    NOT NULL,
     file_path     TEXT,
     embedding_dim INTEGER,
@@ -166,57 +166,3 @@ CREATE TABLE IF NOT EXISTS changes (
 );
 
 CREATE INDEX IF NOT EXISTS idx_changes_user_env ON changes(user_id, environment_id, id);
-
--- keyword_vocabulary: the single global, admin-managed CLIP tagging vocabulary.
--- One row per word/phrase. Bulk-replaced via upload; deduplicated on write.
-CREATE TABLE IF NOT EXISTS keyword_vocabulary (
-    id         INTEGER PRIMARY KEY AUTOINCREMENT,
-    word       TEXT    NOT NULL UNIQUE,
-    created_at TEXT    NOT NULL DEFAULT (datetime('now'))
-);
-
--- keyword_vocab_meta: single-row table holding the monotonic vocabulary version.
--- Bumped whenever the vocabulary or prompt template changes, so cached text
--- matrices and stored image_keywords can be detected as stale and re-tagged.
-CREATE TABLE IF NOT EXISTS keyword_vocab_meta (
-    id         INTEGER PRIMARY KEY CHECK(id = 1),
-    version    INTEGER NOT NULL DEFAULT 1,
-    updated_at TEXT    NOT NULL DEFAULT (datetime('now'))
-);
-
--- image_embeddings: one CLIP image vector per stored source image, tagged by the
--- CLIP model that produced it. Keystone for cheap re-tagging (re-score, no re-encode)
--- and a future semantic image search.
-CREATE TABLE IF NOT EXISTS image_embeddings (
-    id              INTEGER PRIMARY KEY AUTOINCREMENT,
-    source_image_id INTEGER NOT NULL REFERENCES source_images(id) ON DELETE CASCADE,
-    user_id         INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-    environment_id  INTEGER NOT NULL DEFAULT 0,
-    model_id        INTEGER          REFERENCES models(id),
-    embedding       BLOB    NOT NULL,
-    dim             INTEGER NOT NULL,
-    created_at      TEXT    NOT NULL DEFAULT (datetime('now')),
-    UNIQUE(source_image_id, model_id)
-);
-
-CREATE INDEX IF NOT EXISTS idx_image_embeddings_model
-    ON image_embeddings(model_id, source_image_id);
-
--- image_keywords: normalized one-row-per-(image, keyword) cached tags, stamped with
--- the vocab_version they were computed against. Indexed for fast search-by-keyword.
-CREATE TABLE IF NOT EXISTS image_keywords (
-    id              INTEGER PRIMARY KEY AUTOINCREMENT,
-    source_image_id INTEGER NOT NULL REFERENCES source_images(id) ON DELETE CASCADE,
-    user_id         INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-    environment_id  INTEGER NOT NULL DEFAULT 0,
-    model_id        INTEGER          REFERENCES models(id),
-    vocab_version   INTEGER NOT NULL,
-    keyword         TEXT    NOT NULL,
-    score           REAL    NOT NULL,
-    created_at      TEXT    NOT NULL DEFAULT (datetime('now'))
-);
-
-CREATE INDEX IF NOT EXISTS idx_image_keywords_search
-    ON image_keywords(user_id, environment_id, keyword);
-CREATE INDEX IF NOT EXISTS idx_image_keywords_image
-    ON image_keywords(source_image_id);

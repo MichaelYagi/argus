@@ -14,9 +14,3 @@ httpx2
 faiss-cpu          # fast face similarity search; imported as `faiss`
 python-dotenv
 itsdangerous
-# CLIP keyword tagging. open_clip exports CLIP checkpoints to ONNX (CLIP inference then
-# runs on onnxruntime, never torch). torch itself is already required by ultralytics for
-# YOLO inference, so this adds little beyond open_clip. Do NOT pin a CPU-only torch here:
-# that would also force YOLO onto the CPU. Let the default (CUDA) torch wheel install so
-# YOLO keeps its GPU; the one-time CLIP export runs fine on either.
-open_clip_torch

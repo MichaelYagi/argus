@@ -54,10 +54,8 @@ async def detect_faces(
     source_filename, source_id = _save_source_image(user_id, environment_id, raw, img, external_ref)
     if replace:
         _clear_detections(user_id, environment_id, source_id, "face")
-    resp = {"source_image_id": source_id, "external_ref": external_ref,
+    return {"source_image_id": source_id, "external_ref": external_ref,
             "faces": _run_faces(user_id, environment_id, img, source_id, label=label)}
-    _attach_keywords(resp, request, background_tasks, user_id, environment_id, source_id, img)
-    return resp
 
 
 @router.post("/api/detect/objects")
@@ -80,10 +78,8 @@ async def detect_objects(
     source_filename, source_id = _save_source_image(user_id, environment_id, raw, img, external_ref)
     if replace:
         _clear_detections(user_id, environment_id, source_id, "object")
-    resp = {"source_image_id": source_id, "external_ref": external_ref,
+    return {"source_image_id": source_id, "external_ref": external_ref,
             "objects": _run_objects(user_id, environment_id, img, source_id)}
-    _attach_keywords(resp, request, background_tasks, user_id, environment_id, source_id, img)
-    return resp
 
 
 @router.post("/api/detect/all")
@@ -107,14 +103,12 @@ async def detect_all(
     source_filename, source_id = _save_source_image(user_id, environment_id, raw, img, external_ref)
     if replace:
         _clear_detections(user_id, environment_id, source_id, None)  # both faces and objects
-    resp = {
+    return {
         "source_image_id": source_id,
         "external_ref": external_ref,
         "faces": _run_faces(user_id, environment_id, img, source_id, label=label),
         "objects": _run_objects(user_id, environment_id, img, source_id),
     }
-    _attach_keywords(resp, request, background_tasks, user_id, environment_id, source_id, img)
-    return resp
 
 
 @router.post("/api/detect/bulk")
@@ -351,35 +345,11 @@ def _stateless_detect(
                     "class_id": det.class_id,
                 })
 
-    # Semantic keywords (read-only, compute-and-return). Only when a CLIP model is
-    # active; absent otherwise so the response shape stays the same as before.
-    keywords: list[dict] = []
-    keyword_available = False
-    if type_param in ("faces", "all", "objects"):
-        clip_engine = registry.get_tagging_engine()
-        clip_model = store.get_active_model("clip") if clip_engine is not None else None
-        if clip_engine is not None and clip_model is not None:
-            from app.core import keyword_index, keyword_jobs
-            keyword_index.build(clip_model["id"])
-            keyword_available = True
-            # Per-region tagging (opt-in): pool the whole image with each detected
-            # face/object crop. Off by default — it can mis-tag busy scenes.
-            if settings_cache.cache.get_or("clip.tag_regions", False):
-                boxes = [(d["bbox"]["x"], d["bbox"]["y"], d["bbox"]["w"], d["bbox"]["h"])
-                         for d in (faces + objects)]
-                pairs = keyword_index.score_pooled(
-                    keyword_jobs.region_vectors(clip_engine, img, boxes))
-            else:
-                pairs = keyword_index.score(clip_engine.embed_image(img))
-            keywords = [{"keyword": kw, "score": round(float(sc), 4)} for kw, sc in pairs]
-
     return {
         "faces": faces,
         "objects": objects,
-        "keywords": keywords,
         "counts": {"faces": len(faces), "objects": len(objects)},
-        "available": {"faces": face_available, "objects": object_available,
-                      "keywords": keyword_available},
+        "available": {"faces": face_available, "objects": object_available},
     }
 
 
@@ -699,31 +669,6 @@ def _run_objects(user_id: int, environment_id: int, img: Any, source_id: int) ->
 # ---------------------------------------------------------------------------
 # Private helpers
 # ---------------------------------------------------------------------------
-
-def _attach_keywords(
-    resp: dict, request: Any, background_tasks: Any, user_id: int, environment_id: int,
-    source_id: int, img: Any,
-) -> None:
-    """Add CLIP keywords to a stored-image detect response per the ?keywords flag:
-    sync (default) computes inline, async stores in the background, off skips. No-op
-    when no CLIP model is active."""
-    mode = (request.query_params.get("keywords") or "sync").lower()
-    if mode == "off" or store.get_active_model("clip") is None:
-        return
-    from app.core import keyword_jobs
-    # Region boxes from this response's detections, for per-region pooling (opt-in).
-    boxes = None
-    if settings_cache.cache.get_or("clip.tag_regions", False):
-        boxes = [(d["bbox"]["x"], d["bbox"]["y"], d["bbox"]["w"], d["bbox"]["h"])
-                 for d in (resp.get("faces", []) + resp.get("objects", []))
-                 if isinstance(d, dict) and "bbox" in d]
-    if mode == "async":
-        background_tasks.add_task(
-            keyword_jobs.tag_image, source_id, user_id, environment_id, img, boxes)
-        resp["keywords"] = None  # UI fetches via GET /api/images/{id}/keywords
-    else:
-        resp["keywords"] = keyword_jobs.tag_image(source_id, user_id, environment_id, img, boxes)
-
 
 def _save_source_image(
     user_id: int, environment_id: int, raw_bytes: bytes, img: Any, external_ref: str | None = None,

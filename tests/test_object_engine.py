@@ -37,17 +37,9 @@ def test_device_cuda_when_available():
         assert _object_device() == "cuda:0"
 
 
-def test_device_mps_when_cuda_unavailable():
+def test_device_cpu_when_cuda_unavailable():
     settings_cache.cache.set("system.use_gpu", "true", "bool")
-    with patch("torch.cuda.is_available", return_value=False), \
-         patch("torch.backends.mps.is_available", return_value=True):
-        assert _object_device() == "mps"
-
-
-def test_device_cpu_when_no_accelerator():
-    settings_cache.cache.set("system.use_gpu", "true", "bool")
-    with patch("torch.cuda.is_available", return_value=False), \
-         patch("torch.backends.mps.is_available", return_value=False):
+    with patch("torch.cuda.is_available", return_value=False):
         assert _object_device() == "cpu"
 
 

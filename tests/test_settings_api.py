@@ -41,11 +41,10 @@ def test_list_settings_grouped(client):
     r = client.get("/api/settings", headers=h)
     assert r.status_code == 200
     data = r.json()
-    assert set(data.keys()) == {"face", "object", "system", "keywords"}
+    assert set(data.keys()) == {"face", "object", "system"}
     assert len(data["face"]) == 8
     assert len(data["object"]) == 4
     assert len(data["system"]) == 8
-    assert len(data["keywords"]) == 6
 
 
 def test_list_settings_values_are_typed(client):
@@ -126,10 +125,7 @@ def test_update_rejects_invalid_bool(client):
 
 def test_update_use_gpu_true_rejects_when_no_gpu(client):
     h = _setup(client)
-    # No accelerator on either runtime: onnxruntime CPU-only AND torch without cuda/mps.
-    with patch("onnxruntime.get_available_providers", return_value=["CPUExecutionProvider"]), \
-         patch("torch.cuda.is_available", return_value=False), \
-         patch("torch.backends.mps.is_available", return_value=False):
+    with patch("onnxruntime.get_available_providers", return_value=["CPUExecutionProvider"]):
         r = client.put("/api/settings/system.use_gpu", json={"value": "true"}, headers=h)
     assert r.status_code == 400
 

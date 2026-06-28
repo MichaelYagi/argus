@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from app.core import accelerator, settings_cache
+from app.core import settings_cache
 
 
 @dataclass
@@ -18,8 +18,14 @@ class ObjectDetection:
 
 
 def _object_device() -> str:
-    """Return torch device string: 'cuda:0', 'mps', or 'cpu' (capability-selected)."""
-    return accelerator.select_device()
+    """Return torch device string: 'cuda:0' or 'cpu'."""
+    if not settings_cache.cache.get_or("system.use_gpu", True):
+        return "cpu"
+    try:
+        import torch
+        return "cuda:0" if torch.cuda.is_available() else "cpu"
+    except ImportError:
+        return "cpu"
 
 
 class ObjectEngine:
