@@ -271,7 +271,7 @@ async function _pool(items, concurrency, fn) {
       fetch(`/api/images/${srcId}/faces`)
         .then(r => r.json())
         .then(srcData => {
-          img.src = srcData.image_url;
+          img.src = srcData.source_image_url;
           img.onload = () => {
             const sx = img.clientWidth  / img.naturalWidth;
             const sy = img.clientHeight / img.naturalHeight;
