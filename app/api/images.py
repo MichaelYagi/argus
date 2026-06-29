@@ -199,8 +199,8 @@ async def reprocess_source_image(
         )
         return {"job_id": job_id, "status": "pending", "source_image_id": source_image_id}
 
+    from app.api.detect import _clear_detections, _run_faces, _run_objects
     from app.core.image_input import open_and_validate
-    from app.api.detect import _run_faces, _run_objects, _clear_detections
 
     img = open_and_validate(raw)
     if replace:
