@@ -262,6 +262,7 @@ async def identity_gallery(
     identity_id: int,
     cursor: Optional[str] = Query(None),
     limit: Optional[int] = Query(None),
+    enrolled: Optional[bool] = Query(None),
     user_id: int = Depends(require_auth),
     environment_id: int = Depends(require_env_id),
 ):
@@ -269,7 +270,8 @@ async def identity_gallery(
         raise HTTPException(404, "Identity not found")
     page_size = limit or settings_cache.cache.get_or("system.gallery_page_size", 30)
     rows = store.get_identity_gallery(
-        identity_id, user_id, cursor=cursor, limit=page_size, environment_id=environment_id
+        identity_id, user_id, cursor=cursor, limit=page_size,
+        environment_id=environment_id, enrolled=enrolled,
     )
 
     # Similarity shown per crop follows the active matching method.

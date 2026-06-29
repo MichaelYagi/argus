@@ -756,7 +756,7 @@ def set_identity_cover(identity_id: int, user_id: int, detection_id: int, enviro
 
 def get_identity_gallery(
     identity_id: int, user_id: int, cursor: str | None = None, limit: int = 30,
-    environment_id: int | None = None,
+    environment_id: int | None = None, enrolled: bool | None = None,
 ) -> list[sqlite3.Row]:
     with _connect() as conn:
         env_id = _resolve_env(conn, user_id, environment_id)
@@ -771,6 +771,10 @@ def get_identity_gallery(
                  LEFT JOIN source_images si ON si.id = d.source_image_id
                  WHERE d.identity_id = ? AND d.user_id = ? AND d.environment_id = ?"""
         params: list = [identity_id, user_id, env_id]
+        if enrolled is True:
+            sql += " AND fe.id IS NOT NULL"
+        elif enrolled is False:
+            sql += " AND fe.id IS NULL"
         if cursor:
             sql += " AND d.detected_at < ?"
             params.append(cursor)
