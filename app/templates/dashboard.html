@@ -68,6 +68,7 @@ const state = {
   object: { cursor: null, hasMore: true, loading: false, loaded: false, selected: new Set() },
 };
 const sentinels = {};
+const sentinelVisible = { face: false, object: false };
 let activeTab = 'face';
 
 // ---------------------------------------------------------------------------
@@ -245,6 +246,8 @@ async function loadMore(type) {
   if (!s.hasMore && sentinels[type]) {
     sentinels[type].remove();
     delete sentinels[type];
+  } else if (s.hasMore && sentinelVisible[type]) {
+    loadMore(type);
   }
 }
 
@@ -255,6 +258,7 @@ async function loadMore(type) {
   document.getElementById('tab-' + type).appendChild(sentinel);
   sentinels[type] = sentinel;
   new IntersectionObserver(([e]) => {
+    sentinelVisible[type] = e.isIntersecting;
     if (e.isIntersecting) loadMore(type);
   }, { rootMargin: '300px' }).observe(sentinel);
 });

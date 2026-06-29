@@ -87,7 +87,7 @@
   const emptyEl   = document.getElementById('img-empty');
   const loadingEl = document.getElementById('img-loading');
 
-  let items = [], cursor = null, hasMore = true, loading = false;
+  let items = [], cursor = null, hasMore = true, loading = false, sentinelVisible = false;
   let pending = [];   // trailing items not yet forming a complete row
   let tailEl = null;  // DOM node for the temporary partial last row
 
@@ -191,6 +191,7 @@
     loading = false;
     if (loadingEl) loadingEl.hidden = true;
     if (!hasMore) sentinel.remove();
+    else if (sentinelVisible) loadPage();
   }
 
   window.resetGallery = function resetGallery() {
@@ -210,8 +211,10 @@
   container.after(sentinel);
 
   function observe() {
-    new IntersectionObserver(([e]) => { if (e.isIntersecting) loadPage(); },
-      { rootMargin: '300px' }).observe(sentinel);
+    new IntersectionObserver(([e]) => {
+      sentinelVisible = e.isIntersecting;
+      if (e.isIntersecting) loadPage();
+    }, { rootMargin: '300px' }).observe(sentinel);
   }
 
   // Scroll restoration (bfcache-independent). Clicking a photo records the scroll
