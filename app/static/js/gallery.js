@@ -153,6 +153,7 @@
     loading = false;
     if (loadingEl) loadingEl.hidden = true;
     if (!hasMore) sentinel.remove();
+    else if (sentinelVisible) loadPage();
   }
 
   // ---------------------------------------------------------------------------
@@ -369,10 +370,14 @@
     return rows;
   }
 
+  let sentinelVisible = false;
   const sentinel = document.createElement('div');
   sentinel.style.height = '1px';
   container.after(sentinel);
-  new IntersectionObserver(([e]) => { if (e.isIntersecting) loadPage(); }, { rootMargin: '300px' }).observe(sentinel);
+  new IntersectionObserver(([e]) => {
+    sentinelVisible = e.isIntersecting;
+    if (e.isIntersecting) loadPage();
+  }, { rootMargin: '300px' }).observe(sentinel);
 
   loadPage();
   window.addEventListener('resize', () => { if (allItems.length) render(); });
