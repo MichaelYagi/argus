@@ -16,7 +16,7 @@
 
   fetch('/api/identities?type=face')
     .then(r => r.json())
-    .then(data => { faceLabels = data.map(i => i.label); })
+    .then(data => { faceLabels = (data.items || data).map(i => i.label); })
     .catch(() => {});
 
   window.getFaceLabels = () => faceLabels;
