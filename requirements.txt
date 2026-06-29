@@ -17,3 +17,4 @@ python-dotenv
 itsdangerous
 pynvml         # GPU name on NVIDIA hardware; optional, graceful fallback
 py-cpuinfo     # reliable CPU name cross-platform
+psutil         # system memory reporting

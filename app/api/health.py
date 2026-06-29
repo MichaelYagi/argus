@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import platform
+
 from fastapi import APIRouter
 
 from app import __version__
@@ -24,6 +25,18 @@ def _gpu_name() -> str | None:
         name = pynvml.nvmlDeviceGetName(handle)
         pynvml.nvmlShutdown()
         return name if isinstance(name, str) else name.decode()
+    except Exception:
+        return None
+
+
+def _memory_info() -> dict | None:
+    try:
+        import psutil
+        vm = psutil.virtual_memory()
+        return {
+            "total_gb": round(vm.total / 1024 ** 3, 1),
+            "available_gb": round(vm.available / 1024 ** 3, 1),
+        }
     except Exception:
         return None
 
@@ -91,6 +104,7 @@ async def capabilities():
         "version": __version__,
         "os": _os_info(),
         "cpu": _cpu_name(),
+        "memory": _memory_info(),
         "gpu_available": gpu_available,
         "gpu_name": _gpu_name() if gpu_available else None,
         "active_provider": active_provider,
