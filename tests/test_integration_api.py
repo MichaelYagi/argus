@@ -51,7 +51,7 @@ def test_create_identity_with_external_ref_and_lookup(client):
     # Lookup by ref
     r = client.get("/api/identities?external_ref=shashin-4826", headers=_h(key))
     assert r.status_code == 200
-    items = r.json()
+    items = r.json()["items"]
     assert len(items) == 1 and items[0]["label"] == "Noah"
     assert items[0]["external_ref"] == "shashin-4826"
 
@@ -64,7 +64,7 @@ def test_set_external_ref_endpoint(client):
                    json={"external_ref": "person-99"}, headers=_h(key))
     assert r.status_code == 200 and r.json()["external_ref"] == "person-99"
 
-    got = client.get("/api/identities?external_ref=person-99", headers=_h(key)).json()
+    got = client.get("/api/identities?external_ref=person-99", headers=_h(key)).json()["items"]
     assert len(got) == 1 and got[0]["id"] == iid
 
 
@@ -93,14 +93,14 @@ def test_change_feed_records_identity_events(client):
     _, key = _create_user_and_key()
     # Empty initially
     r = client.get("/api/changes", headers=_h(key))
-    assert r.status_code == 200 and r.json()["changes"] == []
+    assert r.status_code == 200 and r.json()["items"] == []
 
     iid = client.post("/api/identities", json={"label": "Ana", "type": "face", "external_ref": "a1"},
                       headers=_h(key)).json()["id"]
 
     data = client.get("/api/changes", headers=_h(key)).json()
-    assert len(data["changes"]) == 1
-    ev = data["changes"][0]
+    assert len(data["items"]) == 1
+    ev = data["items"][0]
     assert ev["entity_type"] == "identity" and ev["action"] == "created"
     assert ev["entity_id"] == iid and ev["external_ref"] == "a1"
 
@@ -108,8 +108,8 @@ def test_change_feed_records_identity_events(client):
     # Rename → relabeled event after the cursor
     client.put(f"/api/identities/{iid}", json={"label": "Ana B"}, headers=_h(key))
     data2 = client.get(f"/api/changes?since={cursor}", headers=_h(key)).json()
-    assert len(data2["changes"]) == 1
-    assert data2["changes"][0]["action"] == "relabeled"
+    assert len(data2["items"]) == 1
+    assert data2["items"][0]["action"] == "relabeled"
 
 
 def test_change_feed_pagination(client):
@@ -117,9 +117,9 @@ def test_change_feed_pagination(client):
     for i in range(3):
         client.post("/api/identities", json={"label": f"P{i}", "type": "object"}, headers=_h(key))
     data = client.get("/api/changes?limit=2", headers=_h(key)).json()
-    assert len(data["changes"]) == 2 and data["has_more"] is True
+    assert len(data["items"]) == 2 and data["has_more"] is True
     rest = client.get(f"/api/changes?since={data['next_cursor']}&limit=2", headers=_h(key)).json()
-    assert len(rest["changes"]) == 1 and rest["has_more"] is False
+    assert len(rest["items"]) == 1 and rest["has_more"] is False
 
 
 def test_change_feed_requires_api_key(client):
@@ -143,13 +143,13 @@ def test_change_feed_covers_relabel_and_delete(client):
 
     # Relabel via the casual-correction endpoint.
     client.put(f"/api/detections/{det}/label", json={"label": "other"}, headers=_h(key))
-    evs = client.get(f"/api/changes?since={cursor}", headers=_h(key)).json()["changes"]
+    evs = client.get(f"/api/changes?since={cursor}", headers=_h(key)).json()["items"]
     assert any(e["entity_type"] == "detection" and e["action"] == "relabeled" for e in evs)
 
     cursor = evs[-1]["id"]
     # Delete it.
     client.delete(f"/api/detections/{det}", headers=_h(key))
-    evs = client.get(f"/api/changes?since={cursor}", headers=_h(key)).json()["changes"]
+    evs = client.get(f"/api/changes?since={cursor}", headers=_h(key)).json()["items"]
     assert any(e["entity_type"] == "detection" and e["action"] == "deleted" for e in evs)
 
 

@@ -58,9 +58,9 @@ def test_source_images_lists_with_shape(client):
     assert {"items", "next_cursor", "has_more"} <= data.keys()
     assert len(data["items"]) == 2
     item = data["items"][0]
-    assert {"source_image_id", "image_url", "width", "height",
+    assert {"source_image_id", "source_image_url", "width", "height",
             "detection_count", "uploaded_at"} <= item.keys()
-    assert item["image_url"].startswith("/media/sources/")
+    assert item["source_image_url"].startswith("/media/sources/")
 
 
 def test_source_images_no_duplicates_on_reprocess(client):
@@ -264,7 +264,7 @@ def test_tag_creates_identity_from_label(client):
         {"detection_id": d1, "label": "BrandNew"},
     ], headers=h)
 
-    identities = client.get("/api/identities", headers=h).json()
+    identities = client.get("/api/identities", headers=h).json()["items"]
     assert any(i["label"] == "BrandNew" for i in identities)
 
 

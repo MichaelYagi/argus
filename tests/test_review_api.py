@@ -156,7 +156,7 @@ def test_reassign_by_label_creates_identity(client):
     assert r.status_code == 200
     assert r.json()["review_status"] == "reassigned"
 
-    identities = client.get("/api/identities", headers=h).json()
+    identities = client.get("/api/identities", headers=h).json()["items"]
     assert any(i["label"] == "NewPerson" for i in identities)
 
 
@@ -214,7 +214,7 @@ def test_label_detection_creates_new_identity(client):
     did = _insert_detection(user_id)
 
     client.put(f"/api/detections/{did}/label", json={"label": "BrandNew"}, headers=h)
-    identities = client.get("/api/identities", headers=h).json()
+    identities = client.get("/api/identities", headers=h).json()["items"]
     assert any(i["label"] == "BrandNew" for i in identities)
 
 

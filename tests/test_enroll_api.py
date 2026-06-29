@@ -77,7 +77,7 @@ def test_enroll_new_creates_identity(client):
     assert data["label"] == "Mike"
     assert data["embeddings"] == 1
 
-    identities = client.get("/api/identities", headers=h).json()
+    identities = client.get("/api/identities", headers=h).json()["items"]
     assert len(identities) == 1
     assert identities[0]["label"] == "Mike"
 

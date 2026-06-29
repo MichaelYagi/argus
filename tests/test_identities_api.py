@@ -43,7 +43,7 @@ def test_list_identities_empty(client):
     _, h = _setup(client)
     r = client.get("/api/identities", headers=h)
     assert r.status_code == 200
-    assert r.json() == []
+    assert r.json() == {"items": []}
 
 
 def test_create_and_list_identity(client):
@@ -55,7 +55,7 @@ def test_create_and_list_identity(client):
     assert data["type"] == "face"
 
     r2 = client.get("/api/identities", headers=h)
-    assert len(r2.json()) == 1
+    assert len(r2.json()["items"]) == 1
 
 
 def test_create_duplicate_returns_409(client):
@@ -71,8 +71,8 @@ def test_list_filter_by_type(client):
     client.post("/api/identities", json={"label": "dog", "type": "object"}, headers=h)
 
     r = client.get("/api/identities?type=face", headers=h)
-    assert len(r.json()) == 1
-    assert r.json()[0]["label"] == "Mike"
+    assert len(r.json()["items"]) == 1
+    assert r.json()["items"][0]["label"] == "Mike"
 
 
 def test_list_search(client):
@@ -81,8 +81,8 @@ def test_list_search(client):
     client.post("/api/identities", json={"label": "Sarah", "type": "face"}, headers=h)
 
     r = client.get("/api/identities?q=mich", headers=h)
-    assert len(r.json()) == 1
-    assert r.json()[0]["label"] == "Michael"
+    assert len(r.json()["items"]) == 1
+    assert r.json()["items"][0]["label"] == "Michael"
 
 
 def test_get_identity_detail(client):
@@ -110,7 +110,7 @@ def test_delete_identity(client):
     assert r.status_code == 204
 
     r2 = client.get("/api/identities", headers=h)
-    assert r2.json() == []
+    assert r2.json() == {"items": []}
 
 
 def test_delete_identity_not_found(client):
@@ -130,7 +130,7 @@ def test_users_cannot_see_each_others_identities(client):
     client.post("/api/identities", json={"label": "Alice identity", "type": "face"}, headers=h1)
 
     r = client.get("/api/identities", headers=h2)
-    assert r.json() == []
+    assert r.json() == {"items": []}
 
 
 # ---------------------------------------------------------------------------
