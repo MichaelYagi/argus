@@ -90,7 +90,7 @@ async def list_identities(
     )
 
     if limit is None:
-        return [_fmt(r) for r in rows]
+        return {"items": [_fmt(r) for r in rows]}
 
     has_more = len(rows) > limit
     items = rows[:limit]
@@ -379,7 +379,7 @@ async def search_images(
         "items": [
             {
                 "source_image_id": r["source_image_id"],
-                "image_url": f"/media/sources/{r['file_path']}",
+                "source_image_url": f"/media/sources/{r['file_path']}",
                 "external_ref": r["external_ref"],
                 "width": r["width"],
                 "height": r["height"],

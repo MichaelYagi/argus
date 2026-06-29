@@ -31,7 +31,7 @@ async def list_images_by_ref(
                 "external_ref": r["external_ref"],
                 "width": r["width"],
                 "height": r["height"],
-                "image_url": f"/media/sources/{r['file_path']}",
+                "source_image_url": f"/media/sources/{r['file_path']}",
                 "uploaded_at": r["uploaded_at"],
             }
             for r in rows
@@ -65,7 +65,7 @@ async def list_source_images(
         "items": [
             {
                 "source_image_id": r["id"],
-                "image_url": f"/media/sources/{r['file_path']}",
+                "source_image_url": f"/media/sources/{r['file_path']}",
                 "width": r["width"],
                 "height": r["height"],
                 "detection_count": r["detection_count"],
@@ -108,7 +108,7 @@ async def image_faces(
         "source_image_id": source_image_id,
         "width": src["width"],
         "height": src["height"],
-        "image_url": f"/media/sources/{src['file_path']}",
+        "source_image_url": f"/media/sources/{src['file_path']}",
         "faces": [
             {
                 "detection_id": r["id"],

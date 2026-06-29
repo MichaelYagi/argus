@@ -103,7 +103,7 @@ async def capabilities():
     return {
         "version": __version__,
         "os": _os_info(),
-        "cpu": _cpu_name(),
+        "cpu_name": _cpu_name(),
         "memory": _memory_info(),
         "gpu_available": gpu_available,
         "gpu_name": _gpu_name() if gpu_available else None,
@@ -119,8 +119,8 @@ async def capabilities():
         "limits": {
             "identities_list_max": 200,
             "identities_summary_max": 1000,
-            "changes_max": 1000,
-            "batch_max": 500,
+            "changes_list_max": 1000,
+            "batch_detect_max": 500,
         },
         "features": {
             "external_ref": True,

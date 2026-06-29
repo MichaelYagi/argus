@@ -459,8 +459,8 @@ def _run_detection_job(
             result["faces"] = _run_faces(user_id, environment_id, img, source_id, label=label)
         if det_type in ("object", "all"):
             result["objects"] = _run_objects(user_id, environment_id, img, source_id)
-        store.update_job(job_id, "done", result)
-        webhook.fire(user_id, environment_id, "job.done", {"job_id": job_id, "status": "done", **result})
+        store.update_job(job_id, "complete", result)
+        webhook.fire(user_id, environment_id, "job.done", {"job_id": job_id, "status": "complete", **result})
     except HTTPException as exc:
         store.update_job(job_id, "failed", {"error": exc.detail})
         webhook.fire(user_id, environment_id, "job.done", {"job_id": job_id, "status": "failed", "error": exc.detail})
@@ -500,8 +500,8 @@ def _run_bulk_job(
         results.append(base)
         store.update_job(job_id, "running", {"processed": i + 1, "total": len(jobs)})
     result = {"total": len(results), "type": detect_type, "results": results}
-    store.update_job(job_id, "done", result)
-    webhook.fire(user_id, environment_id, "job.done", {"job_id": job_id, "status": "done", **result})
+    store.update_job(job_id, "complete", result)
+    webhook.fire(user_id, environment_id, "job.done", {"job_id": job_id, "status": "complete", **result})
 
 
 # ---------------------------------------------------------------------------

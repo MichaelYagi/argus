@@ -27,7 +27,7 @@ async def get_changes(
     items = rows[:limit]
     next_cursor = items[-1]["id"] if items else since
     return {
-        "changes": [
+        "items": [
             {
                 "id": r["id"],
                 "entity_type": r["entity_type"],

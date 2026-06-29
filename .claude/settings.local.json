@@ -173,7 +173,9 @@
       "Bash(grep -n \"text-decoration\\\\|a:hover\\\\|^a \\\\|^a{\\\\|a, \\\\|cursor\" app/static/css/style.css)",
       "Bash(gh release *)",
       "Skill(update-config)",
-      "Bash(python3 *)"
+      "Bash(python3 *)",
+      "Bash(/mnt/c/Users/Michael/Documents/development/argus/.venv/bin/ruff check *)",
+      "Read(//mnt/c/Users/Michael/**)"
     ]
   }
 }
