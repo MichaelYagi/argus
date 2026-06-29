@@ -2,10 +2,53 @@
 {% block title %}Images — Argus{% endblock %}
 
 {% block content %}
-<div class="page-header" style="margin-bottom:16px">
+<div class="page-header" style="margin-bottom:12px">
   <h1>Images processed</h1>
   <span class="nav-spacer"></span>
   <a href="/" class="btn btn-ghost">Dashboard</a>
+</div>
+
+<!-- Filter bar -->
+<div id="filter-bar" style="display:flex;flex-wrap:wrap;gap:8px;align-items:flex-end;
+     margin-bottom:16px;padding:12px 16px;background:var(--surface);
+     border-radius:var(--radius);box-shadow:var(--shadow)">
+  <div style="position:relative;flex:1;min-width:160px">
+    <label class="lbl" style="display:block;margin-bottom:4px;font-size:12px">Identity</label>
+    <input type="text" id="filter-identity" placeholder="Any identity…" autocomplete="off"
+           style="width:100%;box-sizing:border-box;padding:6px 10px;font-size:13px;
+                  border:1px solid var(--border);border-radius:var(--radius)">
+    <input type="hidden" id="filter-identity-id">
+    <div id="filter-identity-drop" style="display:none;position:absolute;left:0;right:0;
+         background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);
+         z-index:50;max-height:180px;overflow-y:auto;
+         box-shadow:0 4px 12px rgba(0,0,0,.15)"></div>
+  </div>
+  <div style="min-width:120px">
+    <label class="lbl" style="display:block;margin-bottom:4px;font-size:12px">Type</label>
+    <select id="filter-type" style="padding:6px 10px;font-size:13px;
+            border:1px solid var(--border);border-radius:var(--radius);
+            background:var(--surface);color:var(--text);width:100%">
+      <option value="">All types</option>
+      <option value="face">Faces</option>
+      <option value="object">Objects</option>
+    </select>
+  </div>
+  <div>
+    <label class="lbl" style="display:block;margin-bottom:4px;font-size:12px">From</label>
+    <input type="date" id="filter-since" style="padding:6px 10px;font-size:13px;
+           border:1px solid var(--border);border-radius:var(--radius);
+           background:var(--surface);color:var(--text)">
+  </div>
+  <div>
+    <label class="lbl" style="display:block;margin-bottom:4px;font-size:12px">To</label>
+    <input type="date" id="filter-until" style="padding:6px 10px;font-size:13px;
+           border:1px solid var(--border);border-radius:var(--radius);
+           background:var(--surface);color:var(--text)">
+  </div>
+  <div style="display:flex;gap:6px;align-items:flex-end">
+    <button id="filter-apply" class="btn btn-primary" style="padding:6px 14px;font-size:13px">Apply</button>
+    <button id="filter-clear" class="btn btn-ghost" style="padding:6px 14px;font-size:13px">Clear</button>
+  </div>
 </div>
 
 <p class="muted" id="img-empty" hidden style="margin-top:24px">
@@ -47,6 +90,12 @@
   let items = [], cursor = null, hasMore = true, loading = false;
   let pending = [];   // trailing items not yet forming a complete row
   let tailEl = null;  // DOM node for the temporary partial last row
+
+  // Active filter state — on window so the filter bar IIFE can read/write them
+  window.filterIdentityId = null;
+  window.filterType  = '';
+  window.filterSince = '';
+  window.filterUntil = '';
 
   function buildRow(rowItems, height) {
     const rowEl = document.createElement('div');
@@ -117,7 +166,11 @@
     loading = true;
 
     const params = new URLSearchParams({ limit: 40 });
-    if (cursor) params.set('cursor', cursor);
+    if (cursor)                      params.set('cursor', cursor);
+    if (window.filterIdentityId)     params.set('identity_id', window.filterIdentityId);
+    if (window.filterType)           params.set('type', window.filterType);
+    if (window.filterSince)          params.set('since', window.filterSince + 'T00:00:00');
+    if (window.filterUntil)          params.set('until', window.filterUntil + 'T23:59:59');
     const resp = await fetch('/api/source-images?' + params);
     if (!resp.ok) { loading = false; return; }
     const data = await resp.json();
@@ -139,6 +192,18 @@
     if (loadingEl) loadingEl.hidden = true;
     if (!hasMore) sentinel.remove();
   }
+
+  window.resetGallery = function resetGallery() {
+    cursor = null; hasMore = true; loading = false;
+    items = []; pending = [];
+    if (tailEl) { tailEl.remove(); tailEl = null; }
+    container.innerHTML = '';
+    if (loadingEl) loadingEl.hidden = false;
+    if (emptyEl)   emptyEl.hidden = true;
+    // Re-attach sentinel if a previous load had exhausted all items and removed it.
+    if (!sentinel.parentNode) container.after(sentinel);
+    loadPage();
+  };
 
   const sentinel = document.createElement('div');
   sentinel.style.height = '1px';
@@ -197,6 +262,77 @@
   window.addEventListener('scroll', updateToTop, { passive: true });
   toTop.addEventListener('click', () => window.scrollTo({ top: 0, behavior: 'smooth' }));
   updateToTop();  // reflect initial position (e.g. after scroll restore)
+})();
+
+// Filter bar
+(function() {
+  const identityInput = document.getElementById('filter-identity');
+  const identityIdEl  = document.getElementById('filter-identity-id');
+  const identityDrop  = document.getElementById('filter-identity-drop');
+  const typeEl        = document.getElementById('filter-type');
+  const sinceEl       = document.getElementById('filter-since');
+  const untilEl       = document.getElementById('filter-until');
+
+  // Identity search-as-you-type
+  let searchTimer;
+  identityInput.addEventListener('input', () => {
+    clearTimeout(searchTimer);
+    identityIdEl.value = '';
+    const q = identityInput.value.trim();
+    if (!q) { identityDrop.style.display = 'none'; return; }
+    searchTimer = setTimeout(async () => {
+      const params = new URLSearchParams({ q, limit: 10 });
+      const resp = await fetch('/api/identities?' + params);
+      if (!resp.ok) return;
+      const data = await resp.json();
+      const rows = Array.isArray(data) ? data : (data.items || []);
+      identityDrop.innerHTML = '';
+      if (!rows.length) { identityDrop.style.display = 'none'; return; }
+      rows.forEach(i => {
+        const item = document.createElement('div');
+        item.textContent = i.label + (i.type === 'object' ? ' (object)' : '');
+        item.style.cssText = 'padding:7px 12px;cursor:pointer;font-size:13px';
+        item.addEventListener('mouseenter', () => { item.style.background = 'var(--hover,#f0f0f0)'; });
+        item.addEventListener('mouseleave', () => { item.style.background = ''; });
+        item.addEventListener('mousedown', e => {
+          e.preventDefault();
+          identityInput.value = i.label;
+          identityIdEl.value  = i.id;
+          identityDrop.style.display = 'none';
+        });
+        identityDrop.appendChild(item);
+      });
+      identityDrop.style.display = 'block';
+    }, 200);
+  });
+  identityInput.addEventListener('blur', () => {
+    setTimeout(() => { identityDrop.style.display = 'none'; }, 200);
+  });
+  identityInput.addEventListener('focus', () => {
+    if (identityInput.value.trim()) identityInput.dispatchEvent(new Event('input'));
+  });
+
+  // Allow clearing the typed text to also clear the hidden id
+  identityInput.addEventListener('change', () => {
+    if (!identityInput.value.trim()) identityIdEl.value = '';
+  });
+
+  document.getElementById('filter-apply').addEventListener('click', () => {
+    // Typed text without a dropdown selection is ignored — identity_id is required.
+    window.filterIdentityId = identityIdEl.value ? parseInt(identityIdEl.value) : null;
+    window.filterType  = typeEl.value;
+    window.filterSince = sinceEl.value;
+    window.filterUntil = untilEl.value;
+    window.resetGallery();
+  });
+
+  document.getElementById('filter-clear').addEventListener('click', () => {
+    identityInput.value = ''; identityIdEl.value = '';
+    typeEl.value = ''; sinceEl.value = ''; untilEl.value = '';
+    window.filterIdentityId = null;
+    window.filterType = ''; window.filterSince = ''; window.filterUntil = '';
+    window.resetGallery();
+  });
 })();
 </script>
 {% endblock %}

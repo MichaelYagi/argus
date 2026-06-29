@@ -9,7 +9,40 @@
   </span>
   <span class="nav-spacer"></span>
   <span id="tag-status" class="muted" style="font-size:12px"></span>
+  <button class="btn btn-ghost" id="reprocess-btn" style="margin-left:8px">Reprocess</button>
 </div>
+
+<!-- Reprocess modal -->
+<div id="reprocess-overlay" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);
+     z-index:500;align-items:center;justify-content:center">
+  <div style="background:var(--surface);border-radius:10px;padding:24px;
+              min-width:300px;max-width:90vw;box-shadow:0 8px 32px rgba(0,0,0,.4)">
+    <h2 style="margin-bottom:16px;font-size:16px">Reprocess image</h2>
+    <div class="form-group" style="margin-bottom:12px">
+      <label class="lbl">Detection type</label>
+      <select id="reprocess-type" style="width:100%;padding:7px 10px;
+              border:1px solid var(--border);border-radius:var(--radius);
+              background:var(--surface);color:var(--text);font-size:13px">
+        <option value="all">All (faces + objects)</option>
+        <option value="faces">Faces only</option>
+        <option value="objects">Objects only</option>
+      </select>
+    </div>
+    <div style="display:flex;align-items:center;gap:8px;margin-bottom:16px">
+      <input type="checkbox" id="reprocess-replace" style="cursor:pointer">
+      <label for="reprocess-replace" style="font-size:13px;cursor:pointer">
+        Replace existing detections (clears prior results for this type)
+      </label>
+    </div>
+    <div style="display:flex;gap:8px">
+      <button id="reprocess-save-btn" class="btn btn-primary">Run</button>
+      <button class="btn btn-ghost"
+              onclick="document.getElementById('reprocess-overlay').style.display='none'">Cancel</button>
+    </div>
+    <p id="reprocess-error" style="color:#e53e3e;font-size:12px;margin-top:8px;display:none"></p>
+  </div>
+</div>
+
 <div id="tag-wrap">
   <img id="tag-photo" src="{{ image_url }}" alt="" onload="renderBoxes()">
 </div>
@@ -122,6 +155,39 @@ function labelBox(div, tip) {
 }
 
 function setStatus(msg) { document.getElementById('tag-status').textContent = msg; }
+
+// Reprocess
+document.getElementById('reprocess-btn').addEventListener('click', () => {
+  document.getElementById('reprocess-error').style.display = 'none';
+  document.getElementById('reprocess-overlay').style.display = 'flex';
+});
+document.getElementById('reprocess-overlay').addEventListener('click', function(e) {
+  if (e.target === this) this.style.display = 'none';
+});
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape') document.getElementById('reprocess-overlay').style.display = 'none';
+});
+document.getElementById('reprocess-save-btn').addEventListener('click', async () => {
+  const type    = document.getElementById('reprocess-type').value;
+  const replace = document.getElementById('reprocess-replace').checked;
+  const err     = document.getElementById('reprocess-error');
+  err.style.display = 'none';
+  const btn = document.getElementById('reprocess-save-btn');
+  btn.disabled = true;
+  btn.textContent = 'Running…';
+  const params = new URLSearchParams({ type, replace: replace ? 'true' : 'false' });
+  const resp = await fetch('/api/images/{{ source_image_id }}/reprocess?' + params, { method: 'POST' });
+  btn.disabled = false;
+  btn.textContent = 'Run';
+  if (resp.ok) {
+    flashToast('Reprocess complete — reloading…', 'success');
+    setTimeout(() => location.reload(), 800);
+  } else {
+    const data = await resp.json().catch(() => ({}));
+    err.textContent = data.detail || 'Reprocess failed';
+    err.style.display = 'block';
+  }
+});
 
 // Set breadcrumb from referrer so it always reflects where the user came from
 (function() {

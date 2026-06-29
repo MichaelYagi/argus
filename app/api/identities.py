@@ -213,6 +213,29 @@ async def delete_identity(
     _fi.rebuild_user(user_id, environment_id)
 
 
+class _MergeBody(BaseModel):
+    into: int  # target identity_id
+
+
+@router.post("/api/identities/{identity_id}/merge", status_code=200)
+async def merge_identity(
+    identity_id: int,
+    body: _MergeBody,
+    user_id: int = Depends(require_auth),
+    environment_id: int = Depends(require_env_id),
+):
+    """Merge identity {identity_id} into {body.into}: all detections and embeddings are
+    reassigned to the target, then the source identity is deleted."""
+    if identity_id == body.into:
+        raise HTTPException(400, "Source and target identity must differ")
+    ok = store.merge_identities(identity_id, body.into, user_id, environment_id)
+    if not ok:
+        raise HTTPException(404, "One or both identities not found")
+    from app.core import face_index as _fi
+    _fi.rebuild_user(user_id, environment_id)
+    return {"merged_into": body.into, "deleted": identity_id}
+
+
 @router.delete("/api/identities", status_code=200)
 async def delete_all_identities(
     user_id: int = Depends(require_auth),
@@ -306,6 +329,66 @@ async def query_detections(
             }
             for r in rows
         ],
+    }
+
+
+class _SearchBody(BaseModel):
+    identity_ids: Optional[list[int]] = None
+    type: Optional[str] = None
+    since: Optional[str] = None
+    until: Optional[str] = None
+    confidence_min: Optional[float] = None
+    cursor: Optional[str] = None
+    limit: int = 40
+
+
+@router.post("/api/images/search", status_code=200)
+async def search_images(
+    body: _SearchBody,
+    user_id: int = Depends(require_auth),
+    environment_id: int = Depends(require_env_id),
+):
+    """Find source images matching all supplied filters.
+
+    identity_ids uses AND semantics — every listed identity must appear in the image.
+    type filters by detection type (face/object). since/until are ISO timestamps.
+    confidence_min filters by minimum detection confidence.
+    """
+    if body.type and body.type not in ("face", "object"):
+        raise HTTPException(400, "type must be face or object")
+    if body.limit < 1 or body.limit > 200:
+        raise HTTPException(400, "limit must be 1–200")
+    rows = store.search_source_images(
+        user_id,
+        environment_id=environment_id,
+        identity_ids=body.identity_ids or None,
+        detection_type=body.type,
+        since=body.since,
+        until=body.until,
+        confidence_min=body.confidence_min,
+        cursor=body.cursor,
+        limit=body.limit,
+    )
+    has_more = len(rows) > body.limit
+    items = rows[:body.limit]
+    next_cursor = (
+        f"{items[-1]['uploaded_at']}_{items[-1]['source_image_id']}"
+        if items and has_more else None
+    )
+    return {
+        "items": [
+            {
+                "source_image_id": r["source_image_id"],
+                "image_url": f"/media/sources/{r['file_path']}",
+                "external_ref": r["external_ref"],
+                "width": r["width"],
+                "height": r["height"],
+                "uploaded_at": r["uploaded_at"],
+            }
+            for r in items
+        ],
+        "next_cursor": next_cursor,
+        "has_more": has_more,
     }
 
 

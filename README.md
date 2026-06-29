@@ -13,12 +13,16 @@ Self-hosted face and object recognition you can both **use and build on** — a 
 - Justified infinite-scroll galleries per identity with cover photo selection and bulk operations
 - Tag page — full source image with clickable face and object bbox overlays for labelling
 - Test page — check whether an image contains people or objects, and who each face looks like, without storing or enrolling anything (read-only)
-- Integration helpers — opaque `external_ref` correlation ids, a change feed for delta sync, a capabilities manifest, and batch label/read endpoints
+- Integration helpers — opaque `external_ref` correlation ids, a change feed for delta sync, webhooks, a capabilities manifest with hardware reporting, and batch label/read endpoints
+- Bulk detection with optional async mode — submit many images in one call; fire-and-forget with a job id and webhook notification on completion
+- Identity merge — combine two identities, moving all detections and enrolled references to the target; available via API and the gallery UI
+- Reprocess — re-run detection on any stored image with the current active models, with optional replace to clear prior results; available via API and the tag page UI
+- Source image filtering — filter the image browser by identity, detection type, and date range
 - Export and import with merge — move recognition data between instances
 - Live settings (thresholds, GPU, crop padding) — no restart needed
 - Hot-swap models without restarting
 - Embedding averaging + faiss index for fast, accurate matching at scale
-- GPU auto-detected at startup; manual override available in Settings
+- GPU auto-detected at startup; manual override available in Settings; hardware info (CPU, GPU, RAM, OS) reported in `/api/capabilities`
 - REST API — everything the UI does is available via API, fully paginated
 - Mobile-responsive browser UI
 
@@ -32,7 +36,7 @@ Self-hosted face and object recognition you can both **use and build on** — a 
 
 **Concepts:** [Review queue](#review-queue) · [Suggested people](#suggested-people-face-clustering) · [Object detection models](#object-detection-models) · [Environments](#environments)
 
-**API:** [API](#api) · [Export and import](#export-and-import) · [Integrating another system](#integrating-another-system)
+**API:** [API](#api) · [Webhooks](#webhooks) · [Bulk detection](#bulk-detection) · [Identity merge](#identity-merge) · [Reprocess](#reprocess) · [Image filtering](#image-filtering) · [Export and import](#export-and-import) · [Integrating another system](#integrating-another-system)
 
 **Operations:** [Troubleshooting](#troubleshooting) · [Development](#development) · [Releasing a new version](#releasing-a-new-version)
 
@@ -393,6 +397,139 @@ curl -X PUT \
   -d '{"label": "Sarah"}' \
   http://localhost:8100/api/detections/42/label
 ```
+
+---
+
+## Webhooks
+
+Register HTTP callbacks to be notified when async jobs finish or new detections are created. Webhooks are per-environment and can filter on specific events.
+
+**Supported events:** `job.done` · `detection.created`
+
+```bash
+# Register a webhook
+curl -X POST \
+  -H "X-API-Key: argus_..." \
+  -H "Content-Type: application/json" \
+  -d '{"url": "https://my-server.local/hooks/argus", "events": ["job.done"], "label": "job alerts", "secret": "mysecret"}' \
+  http://localhost:8100/api/webhooks
+
+# List webhooks
+curl -H "X-API-Key: argus_..." http://localhost:8100/api/webhooks
+
+# Disable a webhook temporarily
+curl -X PUT \
+  -H "X-API-Key: argus_..." \
+  -H "Content-Type: application/json" \
+  -d '{"is_active": false}' \
+  http://localhost:8100/api/webhooks/1
+```
+
+When a `secret` is set, each request carries an `X-Argus-Signature: sha256=<hmac>` header computed over the JSON body. Verify it on your server to confirm the call is from Argus.
+
+---
+
+## Bulk detection
+
+Detect faces and/or objects across many images in a single API call. Each image can be a URL, file upload, or base64. One bad image never fails the others — per-image errors are reported inline.
+
+**Sync mode** — waits for all images to complete and returns results directly. Good for small batches (under 20 images or so).
+
+**Async mode** — returns a `job_id` immediately and processes in the background. Poll `GET /api/jobs/{job_id}` for status or register a `job.done` webhook to be notified.
+
+```bash
+# Sync bulk detect (URLs)
+curl -X POST \
+  -H "X-API-Key: argus_..." \
+  -H "Content-Type: application/json" \
+  -d '{"image_urls": ["http://cam1/snap.jpg", "http://cam2/snap.jpg"], "type": "faces"}' \
+  http://localhost:8100/api/detect/bulk
+
+# Async bulk detect — returns immediately with job_id
+curl -X POST \
+  -H "X-API-Key: argus_..." \
+  -H "Content-Type: application/json" \
+  -d '{"image_urls": ["http://cam1/snap.jpg", ...], "type": "all"}' \
+  "http://localhost:8100/api/detect/bulk?async=true"
+# → {"job_id": 7, "status": "pending", "total": 50}
+
+# Check job status
+curl -H "X-API-Key: argus_..." http://localhost:8100/api/jobs/7
+```
+
+---
+
+## Identity merge
+
+Combine two identities when the same person or object class was enrolled under different names. All detections and enrolled face references are moved to the target identity and the source is deleted.
+
+```bash
+# Merge identity 12 into identity 5 — all of 12's detections go to 5, identity 12 is deleted
+curl -X POST \
+  -H "X-API-Key: argus_..." \
+  -H "Content-Type: application/json" \
+  -d '{"into": 5}' \
+  http://localhost:8100/api/identities/12/merge
+# → {"merged_into": 5, "deleted": 12}
+```
+
+From the UI: open an identity's gallery and click **Merge into** in the page header. Type to search for the target identity, select it, and confirm.
+
+---
+
+## Reprocess
+
+Re-run detection on a previously stored image using the currently active models. Useful when you switch to a better model and want to update results for existing photos.
+
+```bash
+# Re-detect all faces and objects in image 42 (keeps existing detections)
+curl -X POST \
+  -H "X-API-Key: argus_..." \
+  "http://localhost:8100/api/images/42/reprocess?type=all"
+
+# Replace existing face detections (clear and re-detect)
+curl -X POST \
+  -H "X-API-Key: argus_..." \
+  "http://localhost:8100/api/images/42/reprocess?type=faces&replace=true"
+
+# Async — process in background (same ?async=true as bulk detect)
+curl -X POST \
+  -H "X-API-Key: argus_..." \
+  "http://localhost:8100/api/images/42/reprocess?type=all&replace=true&async=true"
+```
+
+Query params: `type=all|faces|objects` (default `all`), `replace=true` (clear prior results first), `async=true` (background job).
+
+From the UI: open any image's tag page and click **Reprocess** in the header.
+
+---
+
+## Image filtering
+
+Query the source image list with filters. All params are optional and combinable.
+
+```bash
+# Images containing identity 5 (face or object)
+curl -H "X-API-Key: argus_..." \
+  "http://localhost:8100/api/source-images?identity_id=5"
+
+# Face-detection images from a date range
+curl -H "X-API-Key: argus_..." \
+  "http://localhost:8100/api/source-images?type=face&since=2025-01-01T00:00:00&until=2025-12-31T23:59:59"
+```
+
+For cross-identity search with AND semantics (images that contain *all* of the listed identities), use `POST /api/images/search`:
+
+```bash
+curl -X POST \
+  -H "X-API-Key: argus_..." \
+  -H "Content-Type: application/json" \
+  -d '{"identity_ids": [3, 7], "type": "face", "since": "2025-06-01T00:00:00"}' \
+  http://localhost:8100/api/images/search
+# → images where BOTH identity 3 AND identity 7 appear
+```
+
+From the UI: the **Images** page has a filter bar — search for an identity by name, pick a type, set a date range, then click Apply.
 
 ---
 

@@ -114,6 +114,7 @@ async def detect_all(
 @router.post("/api/detect/bulk")
 async def detect_bulk(
     request: Request,
+    background_tasks: BackgroundTasks,
     user_id: int = Depends(require_auth),
     environment_id: int = Depends(require_env_id),
 ):
@@ -153,6 +154,11 @@ async def detect_bulk(
 
     if detect_type not in ("faces", "objects", "all"):
         raise HTTPException(400, "type must be faces, objects, or all")
+
+    if _is_truthy(request.query_params.get("async", "")):
+        job_id = store.create_job(user_id, "detect_bulk", environment_id)
+        background_tasks.add_task(_run_bulk_job, job_id, user_id, environment_id, jobs, detect_type)
+        return {"job_id": job_id, "status": "pending", "total": len(jobs)}
 
     results = []
     for i, (label, raw) in enumerate(jobs):
@@ -441,6 +447,7 @@ def _run_detection_job(
     det_type: str,  # 'face' | 'object' | 'all'
     external_ref: str | None = None,
 ) -> None:
+    from app.core import webhook
     try:
         store.update_job(job_id, "running")
         img = open_and_validate(raw)
@@ -453,10 +460,48 @@ def _run_detection_job(
         if det_type in ("object", "all"):
             result["objects"] = _run_objects(user_id, environment_id, img, source_id)
         store.update_job(job_id, "done", result)
+        webhook.fire(user_id, environment_id, "job.done", {"job_id": job_id, "status": "done", **result})
     except HTTPException as exc:
         store.update_job(job_id, "failed", {"error": exc.detail})
+        webhook.fire(user_id, environment_id, "job.done", {"job_id": job_id, "status": "failed", "error": exc.detail})
     except Exception as exc:
         store.update_job(job_id, "failed", {"error": str(exc)})
+        webhook.fire(user_id, environment_id, "job.done", {"job_id": job_id, "status": "failed", "error": str(exc)})
+
+
+def _run_bulk_job(
+    job_id: str,
+    user_id: int,
+    environment_id: int,
+    jobs: list[tuple[str, bytes]],
+    detect_type: str,
+) -> None:
+    from app.core import webhook
+    results = []
+    store.update_job(job_id, "running")
+    for i, (label, raw) in enumerate(jobs):
+        base: dict = {"index": i, "filename": label}
+        if raw.startswith(b"__error__:"):
+            base["error"] = raw[len(b"__error__:"):].decode()
+            results.append(base)
+            continue
+        try:
+            img = open_and_validate(raw)
+            _, src_id = _save_source_image(user_id, environment_id, raw, img)
+            base["source_image_id"] = src_id
+            if detect_type in ("faces", "all"):
+                base["faces"] = _run_faces(user_id, environment_id, img, src_id)
+            if detect_type in ("objects", "all"):
+                base["objects"] = _run_objects(user_id, environment_id, img, src_id)
+        except HTTPException as exc:
+            base["error"] = exc.detail
+        except Exception as exc:
+            base["error"] = str(exc)
+        results.append(base)
+        store.update_job(job_id, "running", {"processed": i + 1, "total": len(jobs)})
+    result = {"total": len(results), "type": detect_type, "results": results}
+    store.update_job(job_id, "done", result)
+    webhook.fire(user_id, environment_id, "job.done", {"job_id": job_id, "status": "done", **result})
 
 
 # ---------------------------------------------------------------------------

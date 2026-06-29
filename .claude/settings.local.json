@@ -171,7 +171,9 @@
       "Bash(sed -i 's/    assert len\\(data\\\\[\"keywords\"\\\\]\\) == 5/    assert len\\(data[\"keywords\"]\\) == 6/' tests/test_settings_api.py)",
       "WebSearch",
       "Bash(grep -n \"text-decoration\\\\|a:hover\\\\|^a \\\\|^a{\\\\|a, \\\\|cursor\" app/static/css/style.css)",
-      "Bash(gh release *)"
+      "Bash(gh release *)",
+      "Skill(update-config)",
+      "Bash(python3 *)"
     ]
   }
 }

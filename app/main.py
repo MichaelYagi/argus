@@ -28,6 +28,7 @@ from app.api import (
     models,
     review,
     settings,
+    webhooks,
 )
 from app.core import log_buffer, settings_cache
 from app.db import store
@@ -109,6 +110,7 @@ app.include_router(images.router)
 app.include_router(changes.router)
 app.include_router(clusters.router)
 app.include_router(export_import.router)
+app.include_router(webhooks.router)
 
 # Page routes
 app.include_router(main_pages.router)

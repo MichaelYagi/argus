@@ -1,15 +1,15 @@
-"""Per-image face detection list and batch-tag endpoints."""
+"""Per-image face detection list, batch-tag, and reprocess endpoints."""
 
 from __future__ import annotations
 
 import json
 from typing import Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, Request
 from pydantic import BaseModel
 
 from app.core.auth import require_auth, require_env_id
-from app.core.paths import crops_dir
+from app.core.paths import crops_dir, sources_dir
 from app.db import store
 
 router = APIRouter()
@@ -43,12 +43,21 @@ async def list_images_by_ref(
 async def list_source_images(
     cursor: Optional[str] = Query(None),
     limit: int = Query(40, ge=1, le=200),
+    identity_id: Optional[int] = Query(None),
+    type: Optional[str] = Query(None, description="Filter by detection type: face or object"),
+    since: Optional[str] = Query(None, description="ISO timestamp — images uploaded at or after"),
+    until: Optional[str] = Query(None, description="ISO timestamp — images uploaded at or before"),
     user_id: int = Depends(require_auth),
     environment_id: int = Depends(require_env_id),
 ):
     """Paginated list of all processed source images (one row per image), newest first.
-    Backs the justified Images gallery page."""
-    rows = store.list_source_images(user_id, cursor=cursor, limit=limit, environment_id=environment_id)
+    Optional filters: identity_id, type (face/object), since, until."""
+    if type and type not in ("face", "object"):
+        raise HTTPException(400, "type must be face or object")
+    rows = store.list_source_images(
+        user_id, cursor=cursor, limit=limit, environment_id=environment_id,
+        identity_id=identity_id, detection_type=type, since=since, until=until,
+    )
     has_more = len(rows) > limit
     items = rows[:limit]
     next_cursor = f"{items[-1]['uploaded_at']}_{items[-1]['id']}" if items and has_more else None
@@ -145,6 +154,63 @@ async def delete_source_image(
 
     return {"source_image_id": source_image_id, "detections_deleted": len(crops),
             "crops_removed": removed}
+
+
+def _is_truthy(val: str) -> bool:
+    return val.lower() in ("1", "true", "yes")
+
+
+@router.post("/api/images/{source_image_id}/reprocess", status_code=200)
+async def reprocess_source_image(
+    source_image_id: int,
+    request: Request,
+    background_tasks: BackgroundTasks,
+    user_id: int = Depends(require_auth),
+    environment_id: int = Depends(require_env_id),
+):
+    """Re-run detection on an already-stored source image using the currently active models.
+
+    Query params:
+      type=faces|objects|all  (default: all)
+      replace=true            (clear existing detections of that type first; default: false)
+      async=true              (return a job_id and process in background; default: false)
+    """
+    src = store.get_source_image(source_image_id, user_id, environment_id)
+    if not src:
+        raise HTTPException(404, "Source image not found")
+
+    det_type = request.query_params.get("type", "all")
+    if det_type not in ("faces", "objects", "all"):
+        raise HTTPException(400, "type must be faces, objects, or all")
+    replace = _is_truthy(request.query_params.get("replace", "false"))
+    run_async = _is_truthy(request.query_params.get("async", "false"))
+
+    source_path = sources_dir() / src["file_path"]
+    if not source_path.exists():
+        raise HTTPException(409, "Source file no longer on disk — cannot reprocess")
+    raw = source_path.read_bytes()
+
+    if run_async:
+        from app.api.detect import _run_detection_job
+        job_id = store.create_job(user_id, "reprocess", environment_id)
+        background_tasks.add_task(
+            _run_detection_job, job_id, user_id, environment_id,
+            raw, None, replace, det_type, src["external_ref"],
+        )
+        return {"job_id": job_id, "status": "pending", "source_image_id": source_image_id}
+
+    from app.core.image_input import open_and_validate
+    from app.api.detect import _run_faces, _run_objects, _clear_detections
+
+    img = open_and_validate(raw)
+    if replace:
+        _clear_detections(user_id, environment_id, source_image_id, None if det_type == "all" else det_type)
+    result: dict = {"source_image_id": source_image_id}
+    if det_type in ("faces", "all"):
+        result["faces"] = _run_faces(user_id, environment_id, img, source_image_id)
+    if det_type in ("objects", "all"):
+        result["objects"] = _run_objects(user_id, environment_id, img, source_image_id)
+    return result
 
 
 class _TagItem(BaseModel):

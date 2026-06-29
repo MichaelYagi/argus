@@ -1384,18 +1384,41 @@ def list_source_images(
     cursor: str | None = None,
     limit: int = 40,
     environment_id: int | None = None,
+    identity_id: int | None = None,
+    detection_type: str | None = None,
+    since: str | None = None,
+    until: str | None = None,
 ) -> list[sqlite3.Row]:
     """Processed source images, newest first, with per-image detection count.
     One row per image (deduped at ingestion by content hash). Cursor = 'uploadedAt_id'
-    so ties on the second-precision uploaded_at don't drop or repeat rows across pages."""
+    so ties on the second-precision uploaded_at don't drop or repeat rows across pages.
+    Optional filters: identity_id (images containing that identity), detection_type,
+    since/until (ISO timestamps, inclusive)."""
     with _connect() as conn:
         env_id = _resolve_env(conn, user_id, environment_id)
-        sql = """SELECT si.id, si.file_path, si.width, si.height, si.uploaded_at,
-                        COUNT(d.id) AS detection_count
-                 FROM source_images si
-                 LEFT JOIN detections d ON d.source_image_id = si.id
-                 WHERE si.user_id = ? AND si.environment_id = ?"""
-        params: list = [user_id, env_id]
+        join = ""
+        if identity_id is not None:
+            join = """JOIN detections _id_f
+                        ON _id_f.source_image_id = si.id AND _id_f.identity_id = ?"""
+        sql = f"""SELECT si.id, si.file_path, si.width, si.height, si.uploaded_at,
+                         COUNT(DISTINCT d.id) AS detection_count
+                  FROM source_images si
+                  {join}
+                  LEFT JOIN detections d ON d.source_image_id = si.id
+                  WHERE si.user_id = ? AND si.environment_id = ?"""
+        params: list = []
+        if identity_id is not None:
+            params.append(identity_id)
+        params.extend([user_id, env_id])
+        if detection_type:
+            sql += " AND d.type = ?"
+            params.append(detection_type)
+        if since:
+            sql += " AND si.uploaded_at >= ?"
+            params.append(since)
+        if until:
+            sql += " AND si.uploaded_at <= ?"
+            params.append(until)
         if cursor:
             try:
                 c_ts, c_id = cursor.rsplit("_", 1)
@@ -1404,8 +1427,7 @@ def list_source_images(
                 c_ts, id_val = cursor, 0
             sql += " AND (si.uploaded_at < ? OR (si.uploaded_at = ? AND si.id < ?))"
             params.extend([c_ts, c_ts, id_val])
-        sql += """ GROUP BY si.id
-                   ORDER BY si.uploaded_at DESC, si.id DESC LIMIT ?"""
+        sql += " GROUP BY si.id ORDER BY si.uploaded_at DESC, si.id DESC LIMIT ?"
         params.append(limit + 1)
         return conn.execute(sql, params).fetchall()
 
@@ -2026,6 +2048,185 @@ def get_environment_stats(env_id: int, user_id: int) -> dict:
             (env_id, user_id),
         ).fetchone()[0]
         return {"identities": identities, "detections": detections}
+
+
+# ---------------------------------------------------------------------------
+# Identity merge
+# ---------------------------------------------------------------------------
+
+def merge_identities(
+    source_id: int, target_id: int, user_id: int, environment_id: int | None = None,
+) -> bool:
+    """Reassign all detections and embeddings from source to target identity, then delete
+    source. Returns False if either identity doesn't belong to this user/env."""
+    with _connect() as conn:
+        env_id = _resolve_env(conn, user_id, environment_id)
+        src = conn.execute(
+            "SELECT id FROM identities WHERE id = ? AND user_id = ? AND environment_id = ?",
+            (source_id, user_id, env_id),
+        ).fetchone()
+        tgt = conn.execute(
+            "SELECT id FROM identities WHERE id = ? AND user_id = ? AND environment_id = ?",
+            (target_id, user_id, env_id),
+        ).fetchone()
+        if not src or not tgt:
+            return False
+        conn.execute(
+            """UPDATE detections SET identity_id = ?
+               WHERE identity_id = ? AND user_id = ? AND environment_id = ?""",
+            (target_id, source_id, user_id, env_id),
+        )
+        conn.execute(
+            "UPDATE face_embeddings SET identity_id = ? WHERE identity_id = ?",
+            (target_id, source_id),
+        )
+        conn.execute(
+            "DELETE FROM identities WHERE id = ? AND user_id = ? AND environment_id = ?",
+            (source_id, user_id, env_id),
+        )
+        record_change(conn, user_id, env_id, "identity", target_id, "relabeled")
+        record_change(conn, user_id, env_id, "identity", source_id, "deleted")
+        return True
+
+
+# ---------------------------------------------------------------------------
+# Detection search (cross-entity)
+# ---------------------------------------------------------------------------
+
+def search_source_images(
+    user_id: int,
+    environment_id: int | None = None,
+    identity_ids: list[int] | None = None,
+    detection_type: str | None = None,
+    since: str | None = None,
+    until: str | None = None,
+    confidence_min: float | None = None,
+    cursor: str | None = None,
+    limit: int = 40,
+) -> list[sqlite3.Row]:
+    """Return source images matching all supplied filters.
+
+    identity_ids uses AND semantics — every listed identity must appear in the image.
+    Other filters (type, since, until, confidence_min) apply to detections in the image.
+    """
+    with _connect() as conn:
+        env_id = _resolve_env(conn, user_id, environment_id)
+        params: list = [user_id, env_id]
+        extra_where: list[str] = []
+
+        if identity_ids:
+            placeholders = ",".join("?" * len(identity_ids))
+            extra_where.append(f"""si.id IN (
+                SELECT source_image_id FROM detections
+                WHERE user_id = ? AND environment_id = ? AND identity_id IN ({placeholders})
+                GROUP BY source_image_id
+                HAVING COUNT(DISTINCT identity_id) = ?
+            )""")
+            params.extend([user_id, env_id, *identity_ids, len(identity_ids)])
+
+        if detection_type:
+            extra_where.append("""EXISTS (
+                SELECT 1 FROM detections _dt
+                WHERE _dt.source_image_id = si.id AND _dt.type = ?
+            )""")
+            params.append(detection_type)
+
+        if confidence_min is not None:
+            extra_where.append("""EXISTS (
+                SELECT 1 FROM detections _cf
+                WHERE _cf.source_image_id = si.id AND _cf.confidence >= ?
+            )""")
+            params.append(confidence_min)
+
+        if since:
+            extra_where.append("si.uploaded_at >= ?")
+            params.append(since)
+        if until:
+            extra_where.append("si.uploaded_at <= ?")
+            params.append(until)
+        if cursor:
+            try:
+                c_ts, c_id = cursor.rsplit("_", 1)
+                id_val = int(c_id)
+            except ValueError:
+                c_ts, id_val = cursor, 0
+            extra_where.append("(si.uploaded_at < ? OR (si.uploaded_at = ? AND si.id < ?))")
+            params.extend([c_ts, c_ts, id_val])
+
+        where_clause = ""
+        if extra_where:
+            where_clause = " AND " + " AND ".join(extra_where)
+
+        sql = f"""SELECT si.id AS source_image_id, si.file_path, si.external_ref,
+                         si.width, si.height, si.uploaded_at
+                  FROM source_images si
+                  WHERE si.user_id = ? AND si.environment_id = ?{where_clause}
+                  ORDER BY si.uploaded_at DESC, si.id DESC LIMIT ?"""
+        params.append(limit + 1)
+        return conn.execute(sql, params).fetchall()
+
+
+# ---------------------------------------------------------------------------
+# Webhooks
+# ---------------------------------------------------------------------------
+
+def list_webhooks(
+    user_id: int, environment_id: int | None = None, event: str | None = None,
+) -> list[sqlite3.Row]:
+    with _connect() as conn:
+        env_id = _resolve_env(conn, user_id, environment_id)
+        sql = """SELECT * FROM webhooks
+                 WHERE user_id = ? AND environment_id = ? AND is_active = 1"""
+        params: list = [user_id, env_id]
+        if event:
+            sql += " AND (',' || events || ',') LIKE ('%,' || ? || ',%')"
+            params.append(event)
+        return conn.execute(sql, params).fetchall()
+
+
+def create_webhook(
+    user_id: int, url: str, events: str, label: str,
+    secret: str | None = None, environment_id: int | None = None,
+) -> int:
+    with _connect() as conn:
+        env_id = _resolve_env(conn, user_id, environment_id)
+        conn.execute(
+            """INSERT INTO webhooks (user_id, environment_id, url, events, label, secret)
+               VALUES (?, ?, ?, ?, ?, ?)""",
+            (user_id, env_id, url, events, label, secret),
+        )
+        return conn.execute("SELECT last_insert_rowid()").fetchone()[0]
+
+
+def get_webhook(webhook_id: int, user_id: int) -> sqlite3.Row | None:
+    with _connect() as conn:
+        return conn.execute(
+            "SELECT * FROM webhooks WHERE id = ? AND user_id = ?",
+            (webhook_id, user_id),
+        ).fetchone()
+
+
+def update_webhook(webhook_id: int, user_id: int, **kwargs) -> bool:
+    allowed = {"url", "events", "label", "secret", "is_active"}
+    fields = {k: v for k, v in kwargs.items() if k in allowed}
+    if not fields:
+        return False
+    with _connect() as conn:
+        sets = ", ".join(f"{k} = ?" for k in fields)
+        cur = conn.execute(
+            f"UPDATE webhooks SET {sets} WHERE id = ? AND user_id = ?",
+            (*fields.values(), webhook_id, user_id),
+        )
+        return cur.rowcount > 0
+
+
+def delete_webhook(webhook_id: int, user_id: int) -> bool:
+    with _connect() as conn:
+        conn.execute(
+            "DELETE FROM webhooks WHERE id = ? AND user_id = ?",
+            (webhook_id, user_id),
+        )
+        return conn.execute("SELECT changes()").fetchone()[0] > 0
 
 
 def _seed_models(conn: sqlite3.Connection) -> None:

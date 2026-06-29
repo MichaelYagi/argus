@@ -13,7 +13,37 @@
   <span class="nav-spacer"></span>
   <a href="/enroll" class="btn btn-ghost">Enroll more</a>
   <button class="btn btn-ghost" id="rename-identity-btn" style="margin-left:6px">Rename</button>
+  <button class="btn btn-ghost" id="merge-identity-btn" style="margin-left:4px">Merge into</button>
   <button class="btn btn-danger" id="delete-identity-btn" style="margin-left:4px">Delete identity</button>
+</div>
+
+<!-- Merge modal -->
+<div id="merge-overlay" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);
+     z-index:500;align-items:center;justify-content:center">
+  <div style="background:var(--surface);border-radius:10px;padding:24px;
+              min-width:320px;max-width:90vw;box-shadow:0 8px 32px rgba(0,0,0,.4)">
+    <h2 style="margin-bottom:8px;font-size:16px">Merge "{{ identity.label }}" into another identity</h2>
+    <p style="font-size:13px;color:var(--muted);margin-bottom:16px">
+      All detections and enrolled references are moved to the target and this identity is deleted.
+    </p>
+    <div class="form-group" style="position:relative;margin-bottom:0">
+      <label class="lbl">Target identity</label>
+      <input type="text" id="merge-search" placeholder="Search by name…"
+             style="width:100%;box-sizing:border-box" autocomplete="off">
+      <div id="merge-drop" style="display:none;position:absolute;left:0;right:0;
+           background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);
+           z-index:10;max-height:200px;overflow-y:auto;
+           box-shadow:0 4px 12px rgba(0,0,0,.15)"></div>
+    </div>
+    <input type="hidden" id="merge-target-id">
+    <p id="merge-selected" style="font-size:12px;color:var(--muted);margin-top:6px;min-height:18px"></p>
+    <div style="display:flex;gap:8px;margin-top:4px">
+      <button id="merge-save-btn" class="btn btn-danger" disabled>Merge</button>
+      <button class="btn btn-ghost"
+              onclick="document.getElementById('merge-overlay').style.display='none'">Cancel</button>
+    </div>
+    <p id="merge-error" style="color:#e53e3e;font-size:12px;margin-top:8px;display:none"></p>
+  </div>
 </div>
 
 <!-- Rename modal -->
@@ -84,6 +114,96 @@ document.getElementById('rename-save-btn').addEventListener('click', async () =>
     err.style.display = 'block';
   }
 });
+
+// Merge identity
+(function() {
+  const overlay   = document.getElementById('merge-overlay');
+  const searchEl  = document.getElementById('merge-search');
+  const drop      = document.getElementById('merge-drop');
+  const targetId  = document.getElementById('merge-target-id');
+  const selected  = document.getElementById('merge-selected');
+  const saveBtn   = document.getElementById('merge-save-btn');
+  const errEl     = document.getElementById('merge-error');
+
+  document.getElementById('merge-identity-btn').addEventListener('click', () => {
+    targetId.value = '';
+    searchEl.value = '';
+    selected.textContent = '';
+    saveBtn.disabled = true;
+    errEl.style.display = 'none';
+    drop.style.display = 'none';
+    overlay.style.display = 'flex';
+    searchEl.focus();
+  });
+  overlay.addEventListener('click', e => { if (e.target === overlay) overlay.style.display = 'none'; });
+  document.addEventListener('keydown', e => {
+    if (e.key === 'Escape' && overlay.style.display === 'flex') overlay.style.display = 'none';
+  });
+
+  let timer;
+  searchEl.addEventListener('input', () => {
+    clearTimeout(timer);
+    targetId.value = '';
+    saveBtn.disabled = true;
+    selected.textContent = '';
+    const q = searchEl.value.trim();
+    if (!q) { drop.style.display = 'none'; return; }
+    timer = setTimeout(async () => {
+      const resp = await fetch('/api/identities?type={{ identity.type }}&q=' + encodeURIComponent(q) + '&limit=10');
+      if (!resp.ok) return;
+      const data = await resp.json();
+      const rows = Array.isArray(data) ? data : (data.items || []);
+      const filtered = rows.filter(i => i.id !== {{ identity.id }});
+      drop.innerHTML = '';
+      if (!filtered.length) { drop.style.display = 'none'; return; }
+      filtered.forEach(i => {
+        const item = document.createElement('div');
+        item.textContent = i.label;
+        item.style.cssText = 'padding:8px 12px;cursor:pointer;font-size:13px';
+        item.addEventListener('mouseenter', () => { item.style.background = 'var(--hover,#f0f0f0)'; });
+        item.addEventListener('mouseleave', () => { item.style.background = ''; });
+        item.addEventListener('mousedown', e => {
+          e.preventDefault();
+          targetId.value = i.id;
+          searchEl.value = i.label;
+          selected.textContent = 'Will merge into: ' + i.label;
+          saveBtn.disabled = false;
+          drop.style.display = 'none';
+        });
+        drop.appendChild(item);
+      });
+      drop.style.display = 'block';
+    }, 200);
+  });
+  searchEl.addEventListener('blur', () => setTimeout(() => { drop.style.display = 'none'; }, 200));
+
+  saveBtn.addEventListener('click', () => {
+    const tid   = parseInt(targetId.value);
+    const tname = searchEl.value.trim();
+    if (!tid) return;
+    errEl.style.display = 'none';
+    showConfirm(
+      'Merge "{{ identity.label }}" into "' + tname + '"?\n\nAll detections and enrolled references will be moved to "' + tname + '". This identity will be deleted and cannot be recovered.',
+      async () => {
+        const resp = await fetch('/api/identities/{{ identity.id }}/merge', {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({into: tid}),
+        });
+        if (resp.ok) {
+          flashToast('Merged into "' + tname + '"', 'success');
+          location.href = '/identities/' + tid;
+        } else {
+          const d = await resp.json().catch(() => ({}));
+          errEl.textContent = d.detail || 'Merge failed';
+          errEl.style.display = 'block';
+          overlay.style.display = 'flex';
+        }
+      },
+      { confirmText: 'Merge', danger: true }
+    );
+  });
+})();
 
 document.getElementById('delete-identity-btn').addEventListener('click', () => {
   showConfirm(

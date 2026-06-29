@@ -166,3 +166,18 @@ CREATE TABLE IF NOT EXISTS changes (
 );
 
 CREATE INDEX IF NOT EXISTS idx_changes_user_env ON changes(user_id, environment_id, id);
+
+-- webhooks: per-environment HTTP callbacks fired when jobs complete or detections are created
+CREATE TABLE IF NOT EXISTS webhooks (
+    id             INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id        INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    environment_id INTEGER NOT NULL DEFAULT 0,
+    url            TEXT    NOT NULL,
+    events         TEXT    NOT NULL DEFAULT 'job.done',  -- comma-separated: job.done, detection.created
+    secret         TEXT,   -- optional HMAC-SHA256 signing secret; header X-Argus-Signature
+    label          TEXT    NOT NULL DEFAULT '',
+    is_active      INTEGER NOT NULL DEFAULT 1,
+    created_at     TEXT    NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE INDEX IF NOT EXISTS idx_webhooks_user_env ON webhooks(user_id, environment_id);
