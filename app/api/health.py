@@ -1,10 +1,41 @@
 from __future__ import annotations
 
+import platform
 from fastapi import APIRouter
 
 from app import __version__
 from app.core.engine_registry import registry
 from app.db import store
+
+
+def _cpu_name() -> str:
+    try:
+        import cpuinfo
+        return cpuinfo.get_cpu_info().get("brand_raw", "") or platform.processor()
+    except Exception:
+        return platform.processor()
+
+
+def _gpu_name() -> str | None:
+    try:
+        import pynvml
+        pynvml.nvmlInit()
+        handle = pynvml.nvmlDeviceGetHandleByIndex(0)
+        name = pynvml.nvmlDeviceGetName(handle)
+        pynvml.nvmlShutdown()
+        return name if isinstance(name, str) else name.decode()
+    except Exception:
+        return None
+
+
+def _os_info() -> dict:
+    system = platform.system()
+    if system == "Darwin":
+        ver, _, _ = platform.mac_ver()
+        return {"name": "macOS", "version": ver}
+    if system == "Windows":
+        return {"name": "Windows", "version": platform.version()}
+    return {"name": system, "version": platform.version()}
 
 router = APIRouter()
 
@@ -58,7 +89,10 @@ async def capabilities():
 
     return {
         "version": __version__,
+        "os": _os_info(),
+        "cpu": _cpu_name(),
         "gpu_available": gpu_available,
+        "gpu_name": _gpu_name() if gpu_available else None,
         "active_provider": active_provider,
         "detection": {
             "faces":   {"available": face_ready,   "downloaded": store.has_downloaded_model("face"),
