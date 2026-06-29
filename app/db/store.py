@@ -2029,6 +2029,7 @@ def get_environment_stats(env_id: int, user_id: int) -> dict:
 
 
 def _seed_models(conn: sqlite3.Connection) -> None:
+    conn.execute("DELETE FROM models WHERE type NOT IN ('face', 'object')")
     # Insert new models; refresh the description on existing ones (leave embedding_dim
     # and download/active state untouched).
     conn.executemany(
