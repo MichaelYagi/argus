@@ -78,6 +78,11 @@
         selected.clear();
         updateBulkBar();
         render();
+        if (allItems.length === 0 && !hasMore) {
+          await fetch(`/api/identities/${identityId}`, { method: 'DELETE' });
+          location.href = '/?tab=' + identityType;
+          return;
+        }
         if (window.showToast) showToast(n + ' detection' + (n === 1 ? '' : 's') + ' removed', 'success');
       },
       { confirmText: 'Delete', danger: true }
@@ -108,6 +113,11 @@
       selected.clear();
       updateBulkBar();
       render();
+      if (allItems.length === 0 && !hasMore) {
+        await fetch(`/api/identities/${identityId}`, { method: 'DELETE' });
+        location.href = '/?tab=' + identityType;
+        return;
+      }
       if (window.showToast) showToast(n + ' moved to ' + label, 'success');
     });
   };
