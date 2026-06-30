@@ -91,7 +91,7 @@ nav form button:hover { border-color: rgba(255,255,255,.4); color: #fff; }
 .nav-group.group-active .nav-group-label { color: #fff; border-bottom-color: var(--accent); }
 .nav-group-chevron {
   background: none; border: none; padding: 2px 2px 0; cursor: pointer;
-  color: var(--nav-text); font-size: 9px; line-height: 1;
+  color: var(--nav-text); font-size: 14px; line-height: 1;
   display: flex; align-items: center;
 }
 .nav-group-chevron:hover, .nav-group.open .nav-group-chevron { color: #fff; }
