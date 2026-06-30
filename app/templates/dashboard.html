@@ -287,7 +287,7 @@ function setTabBadge(type, total) {
 refreshStats();
 setInterval(refreshStats, 30000);
 
-// Always start on the People tab
-switchTab('face');
+const _initTab = new URLSearchParams(location.search).get('tab');
+switchTab(_initTab === 'object' ? 'object' : 'face');
 </script>
 {% endblock %}
