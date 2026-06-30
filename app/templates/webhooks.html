@@ -83,11 +83,6 @@
       </label>
       {% endfor %}
     </div>
-    <div id="modal-active-row" style="display:none;margin-bottom:16px">
-      <label style="display:flex;align-items:center;gap:8px;cursor:pointer">
-        <input type="checkbox" id="wh-modal-active" checked> Active
-      </label>
-    </div>
     <div id="modal-err" style="color:var(--danger,#e53e3e);font-size:13px;margin-bottom:10px;display:none"></div>
     <div style="display:flex;gap:8px;justify-content:flex-end">
       <button class="btn btn-ghost" id="modal-cancel">Cancel</button>
@@ -113,9 +108,6 @@
     document.querySelectorAll('.wh-evt').forEach(cb => {
       cb.checked = wh ? wh.event_list.includes(cb.value) : false;
     });
-    const activeRow = document.getElementById('modal-active-row');
-    activeRow.style.display = wh ? '' : 'none';
-    document.getElementById('wh-modal-active').checked = wh ? wh.is_active : true;
     document.getElementById('modal-err').style.display = 'none';
     document.getElementById('wh-modal').style.display = 'flex';
   }
@@ -137,16 +129,14 @@
     const label  = document.getElementById('wh-label').value.trim();
     const secret = document.getElementById('wh-secret').value.trim();
     const events = [...document.querySelectorAll('.wh-evt:checked')].map(cb => cb.value);
-    const active = document.getElementById('wh-modal-active').checked;
-    const errEl  = document.getElementById('modal-err');
+    const errEl = document.getElementById('modal-err');
 
-    if (!url)         { errEl.textContent = 'URL is required.';               errEl.style.display = ''; return; }
+    if (!url)           { errEl.textContent = 'URL is required.';             errEl.style.display = ''; return; }
     if (!events.length) { errEl.textContent = 'Select at least one event.';   errEl.style.display = ''; return; }
     errEl.style.display = 'none';
 
     const body = { url, events, label };
     if (secret) body.secret = secret;
-    if (editId !== null) body.is_active = active;
 
     let resp;
     try {
