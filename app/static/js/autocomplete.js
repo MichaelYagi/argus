@@ -324,7 +324,7 @@
     document.querySelectorAll('[data-camera-btn]').forEach(b => { b.style.display = 'none'; });
   });
 
-  window.showLabelPopup = (anchor, onConfirm, placeholder = 'Name (blank to clear)') => {
+  window.showLabelPopup = (anchor, onConfirm, placeholder = 'Name (blank to clear)', onUnidentify = null) => {
     document.querySelectorAll('.label-popup, .label-backdrop').forEach(p => p.remove());
 
     // Backdrop — clicking it dismisses the popup
@@ -371,6 +371,17 @@
 
     row.appendChild(applyBtn);
     row.appendChild(cancelBtn);
+    if (onUnidentify) {
+      const spacer = document.createElement('span');
+      spacer.style.marginLeft = 'auto';
+      row.appendChild(spacer);
+      const unBtn = document.createElement('button');
+      unBtn.textContent = 'Unidentify';
+      unBtn.className = 'btn btn-ghost';
+      Object.assign(unBtn.style, { padding: '4px 10px', fontSize: '12px', color: 'var(--danger)' });
+      unBtn.addEventListener('click', () => { close(); onUnidentify(); });
+      row.appendChild(unBtn);
+    }
     // Wrap the input in a relative container so makeAutocomplete anchors its
     // dropdown to THIS wrapper (input.closest('.ra-wrap')) rather than setting
     // the popup itself to position:relative — which would clobber the popup's

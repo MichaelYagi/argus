@@ -94,8 +94,19 @@ function renderBoxes() {
 }
 
 function labelObjectBox(div, tip) {
+  const onUnidentify = div.dataset.label ? async () => {
+    const r = await fetch('/api/review/' + div.dataset.id + '/reject', { method: 'POST' });
+    if (r.ok) {
+      div.dataset.label = '';
+      tip.textContent = 'object';
+      div.classList.remove('labeled');
+      setStatus('Cleared label.');
+    } else {
+      setStatus('Error clearing label.');
+    }
+  } : null;
   showLabelPopup(div, async label => {
-    if (!label) return;  // objects have no review/clear flow — relabel only
+    if (!label) return;
     const resp = await fetch('/api/detections/' + div.dataset.id + '/label', {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
@@ -109,21 +120,26 @@ function labelObjectBox(div, tip) {
     } else {
       setStatus('Error saving label.');
     }
-  }, div.dataset.label ? `Rename "${div.dataset.label}"` : 'Assign label');
+  }, div.dataset.label ? `Rename "${div.dataset.label}"` : 'Assign label', onUnidentify);
+}
+
+async function unidentifyBox(div, tip) {
+  const r = await fetch('/api/review/' + div.dataset.id + '/reject', { method: 'POST' });
+  if (r.ok) {
+    div.dataset.label = '';
+    tip.textContent = 'Unknown';
+    div.classList.remove('labeled');
+    setStatus('Cleared label.');
+  } else {
+    setStatus('Error clearing label.');
+  }
 }
 
 function labelBox(div, tip) {
+  const onUnidentify = div.dataset.label ? () => unidentifyBox(div, tip) : null;
   showLabelPopup(div, async label => {
     if (!label) {
-      const r = await fetch('/api/review/' + div.dataset.id + '/reject', { method: 'POST' });
-      if (r.ok) {
-        div.dataset.label = '';
-        tip.textContent = 'Unknown';
-        div.classList.remove('labeled');
-        setStatus('Cleared label.');
-      } else {
-        setStatus('Error clearing label.');
-      }
+      await unidentifyBox(div, tip);
       return;
     }
     const resp = await fetch('/api/detections/' + div.dataset.id + '/label', {
@@ -141,7 +157,7 @@ function labelBox(div, tip) {
     } else {
       setStatus('Error saving label.');
     }
-  }, div.dataset.label ? `Rename "${div.dataset.label}" (blank to clear)` : 'Assign name (blank to clear)');
+  }, div.dataset.label ? `Rename "${div.dataset.label}"` : 'Assign name', onUnidentify);
 }
 
 function setStatus(msg) { document.getElementById('tag-status').textContent = msg; }
