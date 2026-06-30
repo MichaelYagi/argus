@@ -858,16 +858,19 @@ def get_unknown_detections(
 ) -> list[sqlite3.Row]:
     with _connect() as conn:
         env_id = _resolve_env(conn, user_id, environment_id)
-        sql = """SELECT id, type, crop_path, confidence, detected_at, source_image_id
-                 FROM detections WHERE user_id = ? AND environment_id = ? AND identity_id IS NULL"""
+        sql = """SELECT d.id, d.type, d.crop_path, d.confidence, d.detected_at,
+                        d.source_image_id, si.file_path AS source_image_path
+                 FROM detections d
+                 LEFT JOIN source_images si ON si.id = d.source_image_id
+                 WHERE d.user_id = ? AND d.environment_id = ? AND d.identity_id IS NULL"""
         params: list = [user_id, env_id]
         if detection_type:
-            sql += " AND type = ?"
+            sql += " AND d.type = ?"
             params.append(detection_type)
         if cursor:
-            sql += " AND detected_at < ?"
+            sql += " AND d.detected_at < ?"
             params.append(cursor)
-        sql += " ORDER BY detected_at DESC, id DESC LIMIT ?"
+        sql += " ORDER BY d.detected_at DESC, d.id DESC LIMIT ?"
         params.append(limit + 1)
         return conn.execute(sql, params).fetchall()
 

@@ -415,6 +415,7 @@ async def unknown_detections(
         "confidence": r["confidence"],
         "detected_at": r["detected_at"],
         "source_image_id": r["source_image_id"],
+        "source_image_url": f"/media/sources/{r['source_image_path']}" if r["source_image_path"] else None,
     })
 
 
