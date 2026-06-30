@@ -195,16 +195,16 @@
         // Match-similarity badge (bottom-left, hover only): how strongly this crop
         // matches the person's reference set. Null when there are no references yet.
         if (item.similarity != null) {
-          const badge = document.createElement(‘div’);
-          badge.className = ‘g-badge’;
-          badge.textContent = (item.similarity * 100).toFixed(0) + ‘%’;
-          badge.title = "Similarity to this person’s reference set";
+          const badge = document.createElement('div');
+          badge.className = 'g-badge';
+          badge.textContent = (item.similarity * 100).toFixed(0) + '%';
+          badge.title = "Similarity to this person's reference set";
           el.appendChild(badge);
-        } else if (identityType === ‘object’ && item.confidence != null) {
-          const badge = document.createElement(‘div’);
-          badge.className = ‘g-badge’;
-          badge.textContent = (item.confidence * 100).toFixed(0) + ‘%’;
-          badge.title = ‘Detection confidence’;
+        } else if (identityType === 'object' && item.confidence != null) {
+          const badge = document.createElement('div');
+          badge.className = 'g-badge';
+          badge.textContent = (item.confidence * 100).toFixed(0) + '%';
+          badge.title = 'Detection confidence';
           el.appendChild(badge);
         }
 
