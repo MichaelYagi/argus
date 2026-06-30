@@ -5,6 +5,19 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [Unreleased]
+
+### Added
+
+- **Webhooks management UI (`/webhooks`).** A dedicated page (listed as a submenu under Account, parallel to how Models sits under Settings) for managing webhooks without the API. Each webhook card shows the label, URL, event chips, and an inline Active toggle; per-card buttons for Test, Edit, and Delete. Create or edit via a modal form (URL, label, optional HMAC secret, event checkboxes).
+- **Test ping.** The Test button on each webhook card sends a synchronous test delivery to the endpoint and shows the HTTP status code and round-trip latency inline for 6 seconds — green on 2xx, red otherwise. Works regardless of the webhook's active state.
+- **Delivery log.** An expandable panel on each webhook card shows the last 50 deliveries (newest first): relative timestamp, event, HTTP status, and duration. Lazy-loaded on first expand with a Refresh button. Test pings appear tagged `(test)`. Capped at 100 rows per webhook in the database.
+- **`GET /api/webhooks/{id}/deliveries`** — returns the 50 most recent delivery records for a webhook, including `status_code`, `duration_ms`, `error`, `is_test`, and `delivered_at`.
+- **`POST /api/webhooks/{id}/test`** — fires a synchronous test delivery to the webhook URL and returns `{ok, status_code, duration_ms, error}`.
+- **`detection.created` now fires** from all three synchronous detect endpoints (`/api/detect/faces`, `/api/detect/objects`, `/api/detect/all`). Previously listed as a supported event but never triggered from the sync paths.
+
+---
+
 ## [0.1.0-alpha.7] — 2026-06-30
 
 ### Added
@@ -269,6 +282,7 @@ Initial alpha release.
 
 ---
 
+[Unreleased]: https://github.com/MichaelYagi/argus/compare/v0.1.0-alpha.7...HEAD
 [0.1.0-alpha.7]: https://github.com/MichaelYagi/argus/compare/v0.1.0-alpha.6...v0.1.0-alpha.7
 [0.1.0-alpha.6]: https://github.com/MichaelYagi/argus/compare/v0.1.0-alpha.5...v0.1.0-alpha.6
 [0.1.0-alpha.5]: https://github.com/MichaelYagi/argus/compare/v0.1.0-alpha.4...v0.1.0-alpha.5

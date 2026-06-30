@@ -406,6 +406,8 @@ Register HTTP callbacks to be notified when async jobs finish or new detections 
 
 **Supported events:** `job.done` · `detection.created`
 
+**Managing webhooks from the UI:** go to **Account → Webhooks** (or navigate to `/webhooks`). Each webhook card shows its label, URL, event chips, and an Active toggle. From there you can create, edit, and delete webhooks via a modal form. The **Test** button sends a synchronous test ping and shows the HTTP status code and latency inline. Each card has an expandable **delivery log** showing the last 50 deliveries — timestamp, event, HTTP status, and round-trip duration — lazy-loaded on first expand with a Refresh button.
+
 ```bash
 # Register a webhook
 curl -X POST \
@@ -423,9 +425,19 @@ curl -X PUT \
   -H "Content-Type: application/json" \
   -d '{"is_active": false}' \
   http://localhost:8100/api/webhooks/1
+
+# Send a test ping — returns {ok, status_code, duration_ms, error}
+curl -X POST \
+  -H "X-API-Key: argus_..." \
+  http://localhost:8100/api/webhooks/1/test
+
+# View delivery history (last 50, newest first)
+curl -H "X-API-Key: argus_..." http://localhost:8100/api/webhooks/1/deliveries
 ```
 
-When a `secret` is set, each request carries an `X-Argus-Signature: sha256=<hmac>` header computed over the JSON body. Verify it on your server to confirm the call is from Argus.
+When a `secret` is set, each request carries an `X-Argus-Signature: sha256=<hmac>` header computed over the JSON body. Verify it on your server to confirm the call is from Argus. Test pings are included in the delivery log (tagged `is_test: true`) and are signed the same way.
+
+The `detection.created` event fires from all three synchronous detect endpoints (`/api/detect/faces`, `/api/detect/objects`, `/api/detect/all`). `job.done` fires when an async bulk detect or reprocess job completes.
 
 ---
 
