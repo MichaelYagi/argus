@@ -237,9 +237,12 @@
 
   window.addEventListener('pageshow', e => { if (e.persisted) reset(); });
 
-  let resizeT;
+  let resizeT, lastW = 0;
   window.addEventListener('resize', () => {
     if (!items.length) return;
+    const w = container.clientWidth;
+    if (w === lastW) return;
+    lastW = w;
     clearTimeout(resizeT);
     resizeT = setTimeout(relayout, 150);
   });

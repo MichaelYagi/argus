@@ -22,8 +22,6 @@
     const n = Math.max(0, cur + delta);
     el.textContent = `${n} detection${n !== 1 ? 's' : ''}`;
   }
-  // Drop one or more items from the local model and update both header counts
-  // (a removed detection also removes its reference if it was enrolled).
   function removeItems(ids) {
     ids.forEach(id => {
       const idx = allItems.findIndex(i => i.detection_id === id);
@@ -34,11 +32,18 @@
       if (wasEnrolled) adjustRefCount(-1);
     });
   }
+
   const GAP = 4;
   const TARGET_H = 200;
   let cursor = null, hasMore = true, loading = false;
   const allItems = [];
-  const selected = new Set(); // detection_ids
+  const selected = new Set();
+
+  // Incremental layout state — avoids full DOM rebuild on each page load
+  let pending = [];
+  let tailEl = null;
+  let lastW = 0;
+  let resizeTimer;
 
   const loadingEl = document.getElementById('gallery-loading');
   const emptyEl   = document.getElementById('gallery-empty');
@@ -48,7 +53,6 @@
   function updateBulkBar() {
     if (bulkBar) bulkBar.style.display = selected.size === 0 ? 'none' : 'flex';
     if (bulkCount) bulkCount.textContent = selected.size;
-    // When anything is selected, show all checkboxes; clear on deselect-all
     container.classList.toggle('has-selection', selected.size > 0);
   }
 
@@ -77,7 +81,7 @@
         removeItems([...selected]);
         selected.clear();
         updateBulkBar();
-        render();
+        relayout();
         if (allItems.length === 0 && !hasMore) {
           await fetch(`/api/identities/${identityId}`, { method: 'DELETE' });
           location.href = '/?tab=' + identityType;
@@ -112,7 +116,7 @@
       removeItems([...selected]);
       selected.clear();
       updateBulkBar();
-      render();
+      relayout();
       if (allItems.length === 0 && !hasMore) {
         await fetch(`/api/identities/${identityId}`, { method: 'DELETE' });
         location.href = '/?tab=' + identityType;
@@ -125,8 +129,247 @@
   window.clearSelection = () => {
     selected.clear();
     updateBulkBar();
-    render();
+    // Update in-place — no relayout needed just to clear selection state
+    container.querySelectorAll('.g-item.selected').forEach(el => el.classList.remove('selected'));
+    container.querySelectorAll('.g-check').forEach(cb => { cb.checked = false; });
   };
+
+  // ---------------------------------------------------------------------------
+  // Per-item DOM builder (extracted so both appendItems and relayout share it)
+  // ---------------------------------------------------------------------------
+  function makeItemEl(item, height) {
+    const ar = item.nw / (item.nh || 1);
+    const w = Math.floor(ar * height);
+    const isSelected = selected.has(item.detection_id);
+
+    const el = document.createElement('div');
+    el.className = 'g-item' + (isSelected ? ' selected' : '');
+    el.style.width  = w + 'px';
+    el.style.height = Math.floor(height) + 'px';
+
+    const img = document.createElement('img');
+    img.src = item.crop_url;
+    img.loading = 'lazy';
+    img.alt = '';
+    if (item.source_image_url) {
+      img.style.cursor = 'zoom-in';
+      img.addEventListener('click', e => {
+        e.stopPropagation();
+        if (selected.size > 0) {
+          toggleItem();
+        } else {
+          openSourceModal(item.source_image_url);
+        }
+      });
+    }
+    el.appendChild(img);
+
+    if (item.similarity != null) {
+      const badge = document.createElement('div');
+      badge.className = 'g-badge';
+      badge.textContent = (item.similarity * 100).toFixed(0) + '%';
+      badge.title = "Similarity to this person's reference set";
+      el.appendChild(badge);
+    } else if (identityType === 'object' && item.confidence != null) {
+      const badge = document.createElement('div');
+      badge.className = 'g-badge';
+      badge.textContent = (item.confidence * 100).toFixed(0) + '%';
+      badge.title = 'Detection confidence';
+      el.appendChild(badge);
+    }
+
+    const tagLink = document.createElement('a');
+    tagLink.className = 'g-tag-link';
+    tagLink.href = '/tag/' + item.source_image_id;
+    tagLink.textContent = 'Tag';
+    tagLink.addEventListener('click', e => e.stopPropagation());
+    el.appendChild(tagLink);
+
+    const delBtn = document.createElement('button');
+    delBtn.title = 'Delete this detection';
+    delBtn.className = 'g-del-btn';
+    delBtn.textContent = '✕';
+    delBtn.addEventListener('click', async e => {
+      e.stopPropagation();
+      showConfirm('Delete this detection permanently?', async () => {
+        let resp;
+        try {
+          resp = await fetch(`/api/detections/${item.detection_id}`, { method: 'DELETE' });
+        } catch (err) {
+          if (window.showToast) showToast('Could not delete the detection (network error).', 'error');
+          return;
+        }
+        if (resp.ok || resp.status === 204) {
+          removeItems([item.detection_id]);
+          selected.delete(item.detection_id);
+          updateBulkBar();
+          relayout();
+          if (window.showToast) showToast('Detection deleted', 'success');
+        } else if (window.showToast) {
+          showToast('Could not delete the detection.', 'error');
+        }
+      }, { confirmText: 'Delete', danger: true });
+    });
+    el.appendChild(delBtn);
+
+    if (identityType === 'face') {
+      const enrollBtn = document.createElement('button');
+      enrollBtn.className = 'g-enroll-btn';
+      let enrolled = !!item.enrolled;
+      const renderEnroll = () => {
+        enrollBtn.textContent = enrolled ? '✓' : '+';
+        enrollBtn.classList.toggle('enrolled', enrolled);
+        enrollBtn.title = enrolled
+          ? 'In reference set — click to remove'
+          : 'Add to reference set';
+      };
+      renderEnroll();
+      enrollBtn.addEventListener('click', async e => {
+        e.stopPropagation();
+        enrollBtn.disabled = true;
+        try {
+          if (!enrolled) {
+            const resp = await fetch(`/api/detections/${item.detection_id}/enroll`, { method: 'POST' });
+            if (resp.ok) {
+              const d = await resp.json();
+              if (d.added) adjustRefCount(1);
+              enrolled = true;
+            } else if (window.showToast) {
+              showToast('Could not add to reference set.', 'error');
+            }
+          } else {
+            const resp = await fetch(`/api/detections/${item.detection_id}/enroll`, { method: 'DELETE' });
+            if (resp.ok) {
+              const d = await resp.json();
+              if (d.removed) adjustRefCount(-1);
+              enrolled = false;
+            } else if (window.showToast) {
+              showToast('Could not remove from reference set.', 'error');
+            }
+          }
+          item.enrolled = enrolled;
+          renderEnroll();
+        } catch (err) {
+          if (window.showToast) showToast('Reference update failed (network error).', 'error');
+        } finally {
+          enrollBtn.disabled = false;
+        }
+      });
+      el.appendChild(enrollBtn);
+    }
+
+    const coverBtn = document.createElement('button');
+    coverBtn.className = 'g-cover-btn';
+    coverBtn.textContent = '★';
+    const isCover = coverId && String(item.detection_id) === String(coverId);
+    coverBtn.classList.toggle('is-cover', !!isCover);
+    coverBtn.title = isCover ? 'Current cover photo' : 'Set as cover photo';
+    coverBtn.addEventListener('click', async e => {
+      e.stopPropagation();
+      let resp;
+      try {
+        resp = await fetch(`/api/identities/${identityId}/cover`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ detection_id: item.detection_id }),
+        });
+      } catch (err) {
+        if (window.showToast) showToast('Could not set the cover photo (network error).', 'error');
+        return;
+      }
+      if (resp.ok) {
+        container.querySelectorAll('.g-cover-btn.is-cover').forEach(b => {
+          b.classList.remove('is-cover');
+          b.title = 'Set as cover photo';
+        });
+        coverBtn.classList.add('is-cover');
+        coverBtn.title = 'Current cover photo';
+        coverId = String(item.detection_id);
+        if (window.showToast) showToast('Cover photo updated', 'success');
+      } else if (window.showToast) {
+        showToast('Could not set the cover photo.', 'error');
+      }
+    });
+    el.appendChild(coverBtn);
+
+    const cb = document.createElement('input');
+    cb.type = 'checkbox';
+    cb.className = 'g-check';
+    cb.checked = isSelected;
+    el.appendChild(cb);
+
+    function toggleItem(force) {
+      const next = force !== undefined ? force : !selected.has(item.detection_id);
+      cb.checked = next;
+      if (next) selected.add(item.detection_id);
+      else selected.delete(item.detection_id);
+      el.classList.toggle('selected', next);
+      updateBulkBar();
+    }
+
+    cb.addEventListener('click', e => {
+      e.stopPropagation();
+      toggleItem(cb.checked);
+    });
+
+    el.addEventListener('click', () => toggleItem());
+
+    return el;
+  }
+
+  function buildRowEl(rowItems, height) {
+    const row = document.createElement('div');
+    row.className = 'g-row';
+    rowItems.forEach(item => row.appendChild(makeItemEl(item, height)));
+    return row;
+  }
+
+  // ---------------------------------------------------------------------------
+  // Incremental layout — only appends new rows, never rebuilds existing ones
+  // ---------------------------------------------------------------------------
+  function appendItems(newItems) {
+    if (tailEl) { tailEl.remove(); tailEl = null; }
+    const W = container.clientWidth || lastW;
+    if (W) lastW = W;
+
+    let cur = [...pending];
+    let sumAR = cur.reduce((s, item) => s + item.nw / (item.nh || 1), 0);
+
+    newItems.forEach(item => {
+      cur.push(item);
+      sumAR += item.nw / (item.nh || 1);
+      if (sumAR * TARGET_H + GAP * (cur.length - 1) >= W) {
+        container.appendChild(buildRowEl(cur, (W - GAP * (cur.length - 1)) / sumAR));
+        cur = []; sumAR = 0;
+      }
+    });
+    pending = cur;
+    if (pending.length) {
+      tailEl = buildRowEl(pending, TARGET_H);
+      container.appendChild(tailEl);
+    }
+  }
+
+  // Full rebuild — only used after item deletion/bulk ops or viewport width change
+  function relayout() {
+    container.innerHTML = '';
+    tailEl = null;
+    pending = [];
+    const W = container.clientWidth || lastW;
+    if (W) lastW = W;
+    const rows = packRows(allItems, W);
+    if (!rows.length) return;
+    const last = rows[rows.length - 1];
+    const lastIsPartial = last.height === TARGET_H;
+    (lastIsPartial ? rows.slice(0, -1) : rows).forEach(({ items: ri, height }) => {
+      container.appendChild(buildRowEl(ri, height));
+    });
+    if (lastIsPartial) {
+      pending = last.items;
+      tailEl = buildRowEl(last.items, TARGET_H);
+      container.appendChild(tailEl);
+    }
+  }
 
   // ---------------------------------------------------------------------------
   // Load
@@ -159,215 +402,11 @@
     })));
 
     allItems.push(...loaded);
-    render();
+    appendItems(loaded);
     loading = false;
     if (loadingEl) loadingEl.hidden = true;
     if (!hasMore) sentinel.remove();
     else if (sentinelVisible) loadPage();
-  }
-
-  // ---------------------------------------------------------------------------
-  // Render
-  // ---------------------------------------------------------------------------
-  function render() {
-    container.innerHTML = '';
-    const W = container.clientWidth;
-    packRows(allItems, W).forEach(({ items, height }) => {
-      const row = document.createElement('div');
-      row.className = 'g-row';
-      items.forEach(item => {
-        const ar = item.nw / (item.nh || 1);
-        const w = Math.floor(ar * height);
-        const isSelected = selected.has(item.detection_id);
-
-        const el = document.createElement('div');
-        el.className = 'g-item' + (isSelected ? ' selected' : '');
-        el.style.width  = w + 'px';
-        el.style.height = Math.floor(height) + 'px';
-
-        const img = document.createElement('img');
-        img.src = item.crop_url;
-        img.loading = 'lazy';
-        img.alt = '';
-        if (item.source_image_url) {
-          img.style.cursor = 'zoom-in';
-          img.addEventListener('click', e => {
-            e.stopPropagation();
-            if (selected.size > 0) {
-              toggleItem();
-            } else {
-              openSourceModal(item.source_image_url);
-            }
-          });
-        }
-        el.appendChild(img);
-
-        // Match-similarity badge (bottom-left, hover only): how strongly this crop
-        // matches the person's reference set. Null when there are no references yet.
-        if (item.similarity != null) {
-          const badge = document.createElement('div');
-          badge.className = 'g-badge';
-          badge.textContent = (item.similarity * 100).toFixed(0) + '%';
-          badge.title = "Similarity to this person's reference set";
-          el.appendChild(badge);
-        } else if (identityType === 'object' && item.confidence != null) {
-          const badge = document.createElement('div');
-          badge.className = 'g-badge';
-          badge.textContent = (item.confidence * 100).toFixed(0) + '%';
-          badge.title = 'Detection confidence';
-          el.appendChild(badge);
-        }
-
-        // Tag link (top-right, hover only)
-        const tagLink = document.createElement('a');
-        tagLink.className = 'g-tag-link';
-        tagLink.href = '/tag/' + item.source_image_id;
-        tagLink.textContent = 'Tag';
-        tagLink.addEventListener('click', e => e.stopPropagation());
-        el.appendChild(tagLink);
-
-        // Delete button (bottom-left alongside badge, hover only)
-        const delBtn = document.createElement('button');
-        delBtn.title = 'Delete this detection';
-        delBtn.className = 'g-del-btn';
-        delBtn.textContent = '✕';
-        delBtn.addEventListener('click', async e => {
-          e.stopPropagation();
-          showConfirm('Delete this detection permanently?', async () => {
-            let resp;
-            try {
-              resp = await fetch(`/api/detections/${item.detection_id}`, { method: 'DELETE' });
-            } catch (err) {
-              if (window.showToast) showToast('Could not delete the detection (network error).', 'error');
-              return;
-            }
-            if (resp.ok || resp.status === 204) {
-              removeItems([item.detection_id]);
-              selected.delete(item.detection_id);
-              updateBulkBar();
-              render();
-              if (window.showToast) showToast('Detection deleted', 'success');
-            } else if (window.showToast) {
-              showToast('Could not delete the detection.', 'error');
-            }
-          }, { confirmText: 'Delete', danger: true });
-        });
-        el.appendChild(delBtn);
-
-        // Reference toggle (bottom-right, face identities only).
-        // Shows "+" to add, "✓" (persistent, blue) when the crop is a reference.
-        if (identityType === 'face') {
-          const enrollBtn = document.createElement('button');
-          enrollBtn.className = 'g-enroll-btn';
-          let enrolled = !!item.enrolled;
-          const renderEnroll = () => {
-            enrollBtn.textContent = enrolled ? '✓' : '+';
-            enrollBtn.classList.toggle('enrolled', enrolled);
-            enrollBtn.title = enrolled
-              ? 'In reference set — click to remove'
-              : 'Add to reference set';
-          };
-          renderEnroll();
-          enrollBtn.addEventListener('click', async e => {
-            e.stopPropagation();
-            enrollBtn.disabled = true;
-            try {
-              if (!enrolled) {
-                const resp = await fetch(`/api/detections/${item.detection_id}/enroll`, { method: 'POST' });
-                if (resp.ok) {
-                  const d = await resp.json();
-                  if (d.added) adjustRefCount(1);
-                  enrolled = true;
-                } else if (window.showToast) {
-                  showToast('Could not add to reference set.', 'error');
-                }
-              } else {
-                const resp = await fetch(`/api/detections/${item.detection_id}/enroll`, { method: 'DELETE' });
-                if (resp.ok) {
-                  const d = await resp.json();
-                  if (d.removed) adjustRefCount(-1);
-                  enrolled = false;
-                } else if (window.showToast) {
-                  showToast('Could not remove from reference set.', 'error');
-                }
-              }
-              item.enrolled = enrolled;
-              renderEnroll();
-            } catch (err) {
-              if (window.showToast) showToast('Reference update failed (network error).', 'error');
-            } finally {
-              enrollBtn.disabled = false;
-            }
-          });
-          el.appendChild(enrollBtn);
-        }
-
-        // Set-cover button (bottom-right). Gold + persistent when this is the cover.
-        const coverBtn = document.createElement('button');
-        coverBtn.className = 'g-cover-btn';
-        coverBtn.textContent = '★';
-        // Cover is resolved server-side (explicit choice, else the oldest photo) and
-        // passed in, so the star is stable as new detections arrive.
-        const isCover = coverId && String(item.detection_id) === String(coverId);
-        coverBtn.classList.toggle('is-cover', !!isCover);
-        coverBtn.title = isCover ? 'Current cover photo' : 'Set as cover photo';
-        coverBtn.addEventListener('click', async e => {
-          e.stopPropagation();
-          let resp;
-          try {
-            resp = await fetch(`/api/identities/${identityId}/cover`, {
-              method: 'PUT',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ detection_id: item.detection_id }),
-            });
-          } catch (err) {
-            if (window.showToast) showToast('Could not set the cover photo (network error).', 'error');
-            return;
-          }
-          if (resp.ok) {
-            container.querySelectorAll('.g-cover-btn.is-cover').forEach(b => {
-              b.classList.remove('is-cover');
-              b.title = 'Set as cover photo';
-            });
-            coverBtn.classList.add('is-cover');
-            coverBtn.title = 'Current cover photo';
-            coverId = String(item.detection_id);
-            if (window.showToast) showToast('Cover photo updated', 'success');
-          } else if (window.showToast) {
-            showToast('Could not set the cover photo.', 'error');
-          }
-        });
-        el.appendChild(coverBtn);
-
-        // Checkbox (top-left, hover + selected)
-        const cb = document.createElement('input');
-        cb.type = 'checkbox';
-        cb.className = 'g-check';
-        cb.checked = isSelected;
-        el.appendChild(cb);
-
-        function toggleItem(force) {
-          const next = force !== undefined ? force : !selected.has(item.detection_id);
-          cb.checked = next;
-          if (next) selected.add(item.detection_id);
-          else selected.delete(item.detection_id);
-          el.classList.toggle('selected', next);
-          updateBulkBar();
-        }
-
-        cb.addEventListener('click', e => {
-          e.stopPropagation();   // don't bubble to el
-          toggleItem(cb.checked);
-        });
-
-        // Clicking anywhere on the photo always toggles selection.
-        // Label correction is done via the "Change identity" bulk button.
-        el.addEventListener('click', () => toggleItem());
-
-        row.appendChild(el);
-      });
-      container.appendChild(row);
-    });
   }
 
   function packRows(items, W) {
@@ -397,6 +436,8 @@
 
   function reset() {
     allItems.length = 0;
+    pending = [];
+    if (tailEl) { tailEl.remove(); tailEl = null; }
     cursor = null; hasMore = true; loading = false;
     selected.clear();
     updateBulkBar();
@@ -409,5 +450,14 @@
 
   loadPage();
   window.addEventListener('pageshow', e => { if (e.persisted) reset(); });
-  window.addEventListener('resize', () => { if (allItems.length) render(); });
+
+  // Only relayout when the container WIDTH changes — mobile toolbar show/hide
+  // changes viewport HEIGHT only and doesn't affect the justified row packing.
+  window.addEventListener('resize', () => {
+    if (!allItems.length) return;
+    const w = container.clientWidth;
+    if (w === lastW) return;
+    clearTimeout(resizeTimer);
+    resizeTimer = setTimeout(relayout, 150);
+  });
 })();
