@@ -10,6 +10,7 @@
   <span class="nav-spacer"></span>
   <span id="tag-status" class="muted" style="font-size:12px"></span>
   <button class="btn btn-ghost" id="reprocess-btn" style="margin-left:8px">Reprocess</button>
+  <button class="btn btn-danger" id="delete-image-btn" style="margin-left:8px">Delete image</button>
 </div>
 
 <!-- Reprocess modal -->
@@ -193,6 +194,23 @@ document.getElementById('reprocess-save-btn').addEventListener('click', async ()
     err.textContent = data.detail || 'Reprocess failed';
     err.style.display = 'block';
   }
+});
+
+document.getElementById('delete-image-btn').addEventListener('click', () => {
+  showConfirm(
+    'Permanently delete this image and all its detections, labels, and crops?\n\nThis cannot be undone.',
+    async () => {
+      const resp = await fetch('/api/images/{{ source_image_id }}', { method: 'DELETE' });
+      if (resp.ok) {
+        flashToast('Image deleted', 'success');
+        setTimeout(() => { location.href = '/images'; }, 600);
+      } else {
+        const d = await resp.json().catch(() => ({}));
+        if (window.showToast) showToast(d.detail || 'Delete failed', 'error');
+      }
+    },
+    { confirmText: 'Delete image', danger: true }
+  );
 });
 
 // Set breadcrumb from referrer so it always reflects where the user came from

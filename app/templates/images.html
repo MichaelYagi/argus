@@ -69,11 +69,6 @@
 {% block scripts %}
 <script>
 (() => {
-  // Reloads (and other normal navigations) must land at the top — we restore the
-  // scroll position ourselves only when returning from a tag page (see RESTORE_KEY,
-  // set on photo click). Turning off the browser's automatic per-entry scroll
-  // restoration stops a plain reload from jumping back down.
-  if ('scrollRestoration' in history) history.scrollRestoration = 'manual';
 
   // Justified layout, same math as gallery.js packRows, but laid out INCREMENTALLY.
   // Completed full-width rows are appended once and never rebuilt, so loading a new
@@ -124,6 +119,38 @@
           'font-size:11px;font-weight:600;line-height:16px';
         a.appendChild(badge);
       }
+
+      const delBtn = document.createElement('button');
+      delBtn.title = 'Delete image and all its detections';
+      delBtn.style.cssText = 'position:absolute;top:5px;right:5px;z-index:3;' +
+        'background:rgba(0,0,0,.65);border:none;color:#ccc;border-radius:3px;' +
+        'padding:2px 6px;font-size:11px;cursor:pointer;opacity:0;' +
+        'transition:opacity .15s,color .15s;line-height:1';
+      delBtn.textContent = '✕';
+      delBtn.addEventListener('mouseenter', () => { delBtn.style.color = '#fc8181'; });
+      delBtn.addEventListener('mouseleave', () => { delBtn.style.color = '#ccc'; });
+      a.addEventListener('mouseenter', () => { delBtn.style.opacity = '1'; });
+      a.addEventListener('mouseleave', () => { delBtn.style.opacity = '0'; });
+      delBtn.addEventListener('click', e => {
+        e.preventDefault();
+        e.stopPropagation();
+        showConfirm(
+          'Permanently delete this image and all its detections, labels, and crops?\n\nThis cannot be undone.',
+          async () => {
+            const resp = await fetch('/api/images/' + item.source_image_id, { method: 'DELETE' });
+            if (resp.ok) {
+              const idx = items.findIndex(i => i.source_image_id === item.source_image_id);
+              if (idx !== -1) items.splice(idx, 1);
+              relayout();
+              if (window.showToast) showToast('Image deleted', 'success');
+            } else if (window.showToast) {
+              showToast('Delete failed', 'error');
+            }
+          },
+          { confirmText: 'Delete image', danger: true }
+        );
+      });
+      a.appendChild(delBtn);
       rowEl.appendChild(a);
     });
     return rowEl;
@@ -217,43 +244,10 @@
     }, { rootMargin: '300px' }).observe(sentinel);
   }
 
-  // Scroll restoration (bfcache-independent). Clicking a photo records the scroll
-  // position and how many rows were loaded; on return we reload that many and
-  // scroll back. Row heights come from stored dimensions, so layout height is
-  // correct immediately and the scroll lands accurately before images decode.
-  const RESTORE_KEY = 'argus-images-scroll';
+  window.addEventListener('pageshow', e => { if (e.persisted) window.resetGallery(); });
 
-  container.addEventListener('click', e => {
-    const a = e.target.closest('a.g-item');
-    if (!a || e.button !== 0 || e.ctrlKey || e.metaKey || e.shiftKey) return;
-    try {
-      sessionStorage.setItem(RESTORE_KEY, JSON.stringify({ y: window.scrollY, count: items.length }));
-    } catch (_) {}
-  });
-
-  // If the browser restores from bfcache, reset and re-fetch so deleted/changed
-  // images don't linger. Also clear the scroll key so the restore logic doesn't
-  // try to jump to a stale position.
-  window.addEventListener('pageshow', e => {
-    if (!e.persisted) return;
-    try { sessionStorage.removeItem(RESTORE_KEY); } catch (_) {}
-    window.resetGallery();
-  });
-
-  async function init() {
-    let saved = null;
-    try { saved = JSON.parse(sessionStorage.getItem(RESTORE_KEY) || 'null'); } catch (_) {}
-    if (saved && saved.count > 0) {
-      try { sessionStorage.removeItem(RESTORE_KEY); } catch (_) {}
-      // Observer attached only after restore so it can't race the catch-up loads.
-      while (items.length < saved.count && hasMore) await loadPage();
-      window.scrollTo(0, saved.y);
-    } else {
-      await loadPage();
-    }
-    observe();
-  }
-  init();
+  loadPage();
+  observe();
 
   let resizeT;
   window.addEventListener('resize', () => {
