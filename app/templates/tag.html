@@ -120,7 +120,7 @@ function labelObjectBox(div, tip) {
     } else {
       setStatus('Error saving label.');
     }
-  }, div.dataset.label ? `Rename "${div.dataset.label}"` : 'Assign label', onUnidentify);
+  }, 'Assign label', onUnidentify, div.dataset.label || '');
 }
 
 async function unidentifyBox(div, tip) {
@@ -157,7 +157,7 @@ function labelBox(div, tip) {
     } else {
       setStatus('Error saving label.');
     }
-  }, div.dataset.label ? `Rename "${div.dataset.label}"` : 'Assign name', onUnidentify);
+  }, 'Assign name', onUnidentify, div.dataset.label || '');
 }
 
 function setStatus(msg) { document.getElementById('tag-status').textContent = msg; }

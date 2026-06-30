@@ -324,7 +324,7 @@
     document.querySelectorAll('[data-camera-btn]').forEach(b => { b.style.display = 'none'; });
   });
 
-  window.showLabelPopup = (anchor, onConfirm, placeholder = 'Name (blank to clear)', onUnidentify = null) => {
+  window.showLabelPopup = (anchor, onConfirm, placeholder = 'Name (blank to clear)', onUnidentify = null, prefill = '') => {
     document.querySelectorAll('.label-popup, .label-backdrop').forEach(p => p.remove());
 
     // Backdrop — clicking it dismisses the popup
@@ -418,6 +418,7 @@
     }
 
     makeAutocomplete(input);
+    if (prefill) { input.value = prefill; input.select(); }
     input.focus();
 
     const close = () => { popup.remove(); backdrop.remove(); };
