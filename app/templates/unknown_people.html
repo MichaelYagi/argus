@@ -98,9 +98,10 @@
       });
       el.appendChild(delBtn);
 
-      // Assign button (bottom-right)
+      // Assign button (bottom-right) — no cover star here, so sit flush at right: 5px
       const assignBtn = document.createElement('button');
       assignBtn.className = 'g-enroll-btn';
+      assignBtn.style.right = '5px';
       assignBtn.title = 'Assign to a person';
       assignBtn.textContent = '+';
       assignBtn.addEventListener('click', e => {
