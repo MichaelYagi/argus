@@ -101,3 +101,22 @@ async def update_webhook(
 async def delete_webhook(webhook_id: int, user_id: int = Depends(require_auth)):
     if not store.delete_webhook(webhook_id, user_id):
         raise HTTPException(404, "Webhook not found")
+
+
+@router.get("/api/webhooks/{webhook_id}/deliveries")
+async def list_webhook_deliveries(
+    webhook_id: int,
+    limit: int = 50,
+    user_id: int = Depends(require_auth),
+):
+    rows = store.list_deliveries(webhook_id, user_id, min(limit, 100))
+    return [dict(r) for r in rows]
+
+
+@router.post("/api/webhooks/{webhook_id}/test")
+async def test_webhook(webhook_id: int, user_id: int = Depends(require_auth)):
+    from app.core import webhook as _webhook
+    result = _webhook.fire_test(webhook_id, user_id)
+    if result is None:
+        raise HTTPException(404, "Webhook not found")
+    return result

@@ -237,6 +237,23 @@ async def models_page(request: Request):
     return _r(request, "models.html", ctx)
 
 
+@router.get("/webhooks")
+async def webhooks_page(request: Request):
+    ctx = _base(request, "webhooks")
+    if not ctx:
+        return RedirectResponse("/login")
+    whs = store.list_webhooks(ctx["user_id"], ctx["environment_id"])
+    webhooks = []
+    for w in whs:
+        d = dict(w)
+        d["event_list"] = [e.strip() for e in d["events"].split(",") if e.strip()]
+        d["is_active"] = bool(d.get("is_active", 1))
+        webhooks.append(d)
+    ctx["webhooks"] = webhooks
+    ctx["valid_events"] = sorted(["job.done", "detection.created"])
+    return _r(request, "webhooks.html", ctx)
+
+
 @router.get("/docs")
 async def api_docs(request: Request):
     ctx = _base(request, "docs")

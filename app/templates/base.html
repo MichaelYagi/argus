@@ -269,6 +269,7 @@ setInterval(_updateSuggestedDot, 30000);
 {% set detect_grp  = active in ('detect', 'enroll', 'test') %}
 {% set review_grp  = active in ('review', 'clusters', 'images', 'unidentified') %}
 {% set settings_grp = active in ('settings', 'models') %}
+{% set account_grp  = active in ('account', 'webhooks') %}
 <nav>
   <a href="#" onclick="openAbout(); return false;" title="About Argus"
      style="display:flex;align-items:center;gap:7px;text-decoration:none;margin-right:4px;cursor:pointer">
@@ -349,7 +350,14 @@ setInterval(_updateSuggestedDot, 30000);
   </button>
   {% endif %}
 
-  <a href="/account"  class="nav-desktop" style="color:var(--nav-text);font-size:12px">{{ username }}</a>
+  <div class="nav-group nav-desktop {% if account_grp %}group-active{% endif %}">
+    <a href="/account" class="nav-group-label {% if active == 'account' %}active{% endif %}"
+       style="font-size:12px">{{ username }}</a>
+    <button class="nav-group-chevron" aria-haspopup="true" aria-expanded="false" aria-label="More">▾</button>
+    <div class="nav-dropdown nav-dropdown-right" role="menu">
+      <a href="/webhooks" class="{% if active == 'webhooks' %}active{% endif %}" role="menuitem">Webhooks</a>
+    </div>
+  </div>
 
   <!-- Theme picker -->
   <div class="nav-desktop" style="position:relative">
@@ -460,6 +468,7 @@ setInterval(_updateSuggestedDot, 30000);
     </button>
     {% endfor %}
   </div>
+  <a href="/webhooks" class="mobile-sub {% if active == 'webhooks' %}active{% endif %}">Webhooks</a>
   <form method="post" action="/logout">
     <button type="submit">Sign out</button>
   </form>

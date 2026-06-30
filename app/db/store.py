@@ -2236,6 +2236,38 @@ def delete_webhook(webhook_id: int, user_id: int) -> bool:
         return conn.execute("SELECT changes()").fetchone()[0] > 0
 
 
+def log_delivery(
+    webhook_id: int,
+    event: str,
+    status_code: int | None,
+    duration_ms: int,
+    error: str | None = None,
+    is_test: int = 0,
+) -> None:
+    with _connect() as conn:
+        conn.execute(
+            "INSERT INTO webhook_deliveries (webhook_id, event, status_code, duration_ms, error, is_test) "
+            "VALUES (?,?,?,?,?,?)",
+            (webhook_id, event, status_code, duration_ms, error, is_test),
+        )
+        conn.execute(
+            "DELETE FROM webhook_deliveries WHERE webhook_id = ? AND id NOT IN "
+            "(SELECT id FROM webhook_deliveries WHERE webhook_id = ? ORDER BY id DESC LIMIT 100)",
+            (webhook_id, webhook_id),
+        )
+
+
+def list_deliveries(webhook_id: int, user_id: int, limit: int = 50) -> list:
+    with _connect() as conn:
+        return conn.execute(
+            "SELECT d.* FROM webhook_deliveries d "
+            "JOIN webhooks w ON w.id = d.webhook_id "
+            "WHERE d.webhook_id = ? AND w.user_id = ? "
+            "ORDER BY d.id DESC LIMIT ?",
+            (webhook_id, user_id, limit),
+        ).fetchall()
+
+
 def _seed_models(conn: sqlite3.Connection) -> None:
     conn.execute("DELETE FROM models WHERE type NOT IN ('face', 'object')")
     # Insert new models; refresh the description on existing ones (leave embedding_dim

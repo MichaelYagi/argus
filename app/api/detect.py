@@ -54,8 +54,12 @@ async def detect_faces(
     source_filename, source_id = _save_source_image(user_id, environment_id, raw, img, external_ref)
     if replace:
         _clear_detections(user_id, environment_id, source_id, "face")
-    return {"source_image_id": source_id, "external_ref": external_ref,
-            "faces": _run_faces(user_id, environment_id, img, source_id, label=label)}
+    result = {"source_image_id": source_id, "external_ref": external_ref,
+              "faces": _run_faces(user_id, environment_id, img, source_id, label=label)}
+    from app.core import webhook
+    webhook.fire(user_id, environment_id, "detection.created",
+                 {"source_image_id": source_id, "external_ref": external_ref, "type": "face"})
+    return result
 
 
 @router.post("/api/detect/objects")
@@ -78,8 +82,12 @@ async def detect_objects(
     source_filename, source_id = _save_source_image(user_id, environment_id, raw, img, external_ref)
     if replace:
         _clear_detections(user_id, environment_id, source_id, "object")
-    return {"source_image_id": source_id, "external_ref": external_ref,
-            "objects": _run_objects(user_id, environment_id, img, source_id)}
+    result = {"source_image_id": source_id, "external_ref": external_ref,
+              "objects": _run_objects(user_id, environment_id, img, source_id)}
+    from app.core import webhook
+    webhook.fire(user_id, environment_id, "detection.created",
+                 {"source_image_id": source_id, "external_ref": external_ref, "type": "object"})
+    return result
 
 
 @router.post("/api/detect/all")
@@ -103,12 +111,16 @@ async def detect_all(
     source_filename, source_id = _save_source_image(user_id, environment_id, raw, img, external_ref)
     if replace:
         _clear_detections(user_id, environment_id, source_id, None)  # both faces and objects
-    return {
+    result = {
         "source_image_id": source_id,
         "external_ref": external_ref,
         "faces": _run_faces(user_id, environment_id, img, source_id, label=label),
         "objects": _run_objects(user_id, environment_id, img, source_id),
     }
+    from app.core import webhook
+    webhook.fire(user_id, environment_id, "detection.created",
+                 {"source_image_id": source_id, "external_ref": external_ref, "type": "all"})
+    return result
 
 
 @router.post("/api/detect/bulk")

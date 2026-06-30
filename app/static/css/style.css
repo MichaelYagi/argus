@@ -112,6 +112,9 @@ nav form button:hover { border-color: rgba(255,255,255,.4); color: #fff; }
 [data-theme] .nav-dropdown a:hover { background: rgba(255,255,255,.08); }
 .nav-dropdown a.active { color: var(--accent); font-weight: 600; }
 
+/* Dropdown anchored to right edge — for nav groups on the right side of the nav */
+.nav-dropdown.nav-dropdown-right { left: auto; right: -8px; }
+
 /* Mobile menu indented sub-items */
 .mobile-menu a.mobile-sub { padding-left: 36px; font-size: 13px; opacity: .9; }
 

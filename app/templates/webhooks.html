@@ -1,0 +1,334 @@
+{% extends "base.html" %}
+{% block title %}Webhooks — Argus{% endblock %}
+
+{% block content %}
+<div class="page-header" style="margin-bottom:20px">
+  <h1>Webhooks</h1>
+  <span class="nav-spacer"></span>
+  <button class="btn btn-primary" id="add-btn">+ Add webhook</button>
+</div>
+
+<p id="wh-empty" class="muted" {% if webhooks %}hidden{% endif %}
+   style="text-align:center;padding:48px 0">
+  No webhooks configured. Add one to receive HTTP callbacks when events occur in this environment.
+</p>
+
+<div id="wh-list">
+{% for wh in webhooks %}
+<div class="card" style="margin-bottom:12px" id="wh-card-{{ wh.id }}">
+  <div style="display:flex;align-items:flex-start;gap:12px;flex-wrap:wrap">
+    <div style="flex:1;min-width:0">
+      <div style="font-weight:600;margin-bottom:2px">{{ wh.label if wh.label else wh.url }}</div>
+      {% if wh.label %}
+      <div class="muted" style="font-size:12px;word-break:break-all;margin-bottom:6px">{{ wh.url }}</div>
+      {% endif %}
+      <div style="display:flex;gap:4px;flex-wrap:wrap;margin-top:4px">
+        {% for evt in wh.event_list %}
+        <span style="background:var(--hover);border:1px solid var(--border);border-radius:99px;
+                     padding:1px 8px;font-size:11px;font-weight:500">{{ evt }}</span>
+        {% endfor %}
+      </div>
+    </div>
+    <div style="display:flex;align-items:center;gap:8px;flex-shrink:0;flex-wrap:wrap">
+      <label style="display:flex;align-items:center;gap:5px;cursor:pointer;font-size:13px;white-space:nowrap">
+        <input type="checkbox" class="wh-active" data-id="{{ wh.id }}" {% if wh.is_active %}checked{% endif %}>
+        Active
+      </label>
+      <button class="btn btn-ghost wh-test-btn" data-id="{{ wh.id }}"
+              style="font-size:12px;padding:4px 10px">Test</button>
+      <button class="btn btn-ghost wh-edit-btn" data-id="{{ wh.id }}"
+              style="font-size:12px;padding:4px 10px">Edit</button>
+      <button class="btn btn-danger wh-del-btn" data-id="{{ wh.id }}"
+              style="font-size:12px;padding:4px 10px">Delete</button>
+    </div>
+  </div>
+  <div id="tr-{{ wh.id }}" style="display:none;margin-top:8px;font-size:13px"></div>
+  <div style="margin-top:10px;border-top:1px solid var(--border);padding-top:10px">
+    <button class="btn btn-ghost wh-dl-toggle" data-id="{{ wh.id }}"
+            style="font-size:12px;padding:2px 8px">Show deliveries</button>
+    <div id="dl-{{ wh.id }}" hidden style="margin-top:10px"></div>
+  </div>
+</div>
+{% endfor %}
+</div>
+
+<!-- Create/Edit modal -->
+<div id="wh-modal" hidden style="position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:500;
+     display:flex;align-items:center;justify-content:center;padding:16px">
+  <div style="background:var(--surface);border-radius:var(--radius);padding:24px;
+              max-width:480px;width:100%;box-shadow:0 8px 32px rgba(0,0,0,.4);
+              max-height:90vh;overflow-y:auto">
+    <h2 id="modal-title" style="margin-bottom:16px">Add webhook</h2>
+    <div style="margin-bottom:12px">
+      <label class="lbl">URL *</label>
+      <input id="wh-url" type="url" class="input" placeholder="https://example.com/webhook"
+             style="width:100%;box-sizing:border-box">
+    </div>
+    <div style="margin-bottom:12px">
+      <label class="lbl">Label</label>
+      <input id="wh-label" type="text" class="input" placeholder="e.g. Shashin"
+             style="width:100%;box-sizing:border-box">
+    </div>
+    <div style="margin-bottom:12px">
+      <label class="lbl">Secret <span class="muted" style="font-weight:400">(optional — HMAC-SHA256 signing)</span></label>
+      <input id="wh-secret" type="password" class="input"
+             placeholder="Leave blank to keep existing"
+             style="width:100%;box-sizing:border-box">
+    </div>
+    <div style="margin-bottom:16px">
+      <label class="lbl">Events *</label>
+      {% for evt in valid_events %}
+      <label style="display:flex;align-items:center;gap:8px;margin-top:8px;cursor:pointer">
+        <input type="checkbox" class="wh-evt" value="{{ evt }}"> {{ evt }}
+      </label>
+      {% endfor %}
+    </div>
+    <div id="modal-active-row" style="display:none;margin-bottom:16px">
+      <label style="display:flex;align-items:center;gap:8px;cursor:pointer">
+        <input type="checkbox" id="wh-modal-active" checked> Active
+      </label>
+    </div>
+    <div id="modal-err" style="color:var(--danger,#e53e3e);font-size:13px;margin-bottom:10px;display:none"></div>
+    <div style="display:flex;gap:8px;justify-content:flex-end">
+      <button class="btn btn-ghost" id="modal-cancel">Cancel</button>
+      <button class="btn btn-primary" id="modal-save">Save</button>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+(() => {
+  const _whs = {{ webhooks | tojson }};
+  let editId = null;
+
+  // ── Modal ────────────────────────────────────────────────────────────────
+  function openModal(wh) {
+    editId = wh ? wh.id : null;
+    document.getElementById('modal-title').textContent = wh ? 'Edit webhook' : 'Add webhook';
+    document.getElementById('wh-url').value   = wh ? wh.url   : '';
+    document.getElementById('wh-label').value = wh ? wh.label : '';
+    document.getElementById('wh-secret').value = '';
+    document.querySelectorAll('.wh-evt').forEach(cb => {
+      cb.checked = wh ? wh.event_list.includes(cb.value) : false;
+    });
+    const activeRow = document.getElementById('modal-active-row');
+    activeRow.style.display = wh ? '' : 'none';
+    document.getElementById('wh-modal-active').checked = wh ? wh.is_active : true;
+    document.getElementById('modal-err').style.display = 'none';
+    document.getElementById('wh-modal').hidden = false;
+  }
+
+  function closeModal() {
+    document.getElementById('wh-modal').hidden = true;
+    editId = null;
+  }
+
+  document.getElementById('add-btn').addEventListener('click', () => openModal(null));
+  document.getElementById('modal-cancel').addEventListener('click', closeModal);
+  document.getElementById('wh-modal').addEventListener('click', e => {
+    if (e.target === document.getElementById('wh-modal')) closeModal();
+  });
+
+  // ── Save ─────────────────────────────────────────────────────────────────
+  document.getElementById('modal-save').addEventListener('click', async () => {
+    const url    = document.getElementById('wh-url').value.trim();
+    const label  = document.getElementById('wh-label').value.trim();
+    const secret = document.getElementById('wh-secret').value.trim();
+    const events = [...document.querySelectorAll('.wh-evt:checked')].map(cb => cb.value);
+    const active = document.getElementById('wh-modal-active').checked;
+    const errEl  = document.getElementById('modal-err');
+
+    if (!url)         { errEl.textContent = 'URL is required.';               errEl.style.display = ''; return; }
+    if (!events.length) { errEl.textContent = 'Select at least one event.';   errEl.style.display = ''; return; }
+    errEl.style.display = 'none';
+
+    const body = { url, events, label };
+    if (secret) body.secret = secret;
+    if (editId !== null) body.is_active = active;
+
+    let resp;
+    try {
+      resp = await fetch(editId !== null ? `/api/webhooks/${editId}` : '/api/webhooks', {
+        method: editId !== null ? 'PUT' : 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+    } catch (_) {
+      errEl.textContent = 'Network error.'; errEl.style.display = ''; return;
+    }
+    if (!resp.ok) {
+      const d = await resp.json().catch(() => ({}));
+      errEl.textContent = d.detail || 'Save failed.'; errEl.style.display = ''; return;
+    }
+    closeModal();
+    location.reload();
+  });
+
+  // ── Edit ─────────────────────────────────────────────────────────────────
+  document.querySelectorAll('.wh-edit-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const wh = _whs.find(w => w.id === parseInt(btn.dataset.id));
+      if (wh) openModal(wh);
+    });
+  });
+
+  // ── Delete ───────────────────────────────────────────────────────────────
+  document.querySelectorAll('.wh-del-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      showConfirm('Delete this webhook permanently?', async () => {
+        const id = btn.dataset.id;
+        const resp = await fetch(`/api/webhooks/${id}`, { method: 'DELETE' });
+        if (resp.ok || resp.status === 204) {
+          document.getElementById(`wh-card-${id}`)?.remove();
+          if (!document.querySelector('#wh-list .card')) {
+            document.getElementById('wh-empty').hidden = false;
+          }
+          if (window.showToast) showToast('Webhook deleted', 'success');
+        } else if (window.showToast) {
+          showToast('Delete failed', 'error');
+        }
+      }, { confirmText: 'Delete', danger: true });
+    });
+  });
+
+  // ── Active toggle ────────────────────────────────────────────────────────
+  document.querySelectorAll('.wh-active').forEach(cb => {
+    cb.addEventListener('change', () => {
+      fetch(`/api/webhooks/${cb.dataset.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ is_active: cb.checked }),
+      });
+    });
+  });
+
+  // ── Test ping ────────────────────────────────────────────────────────────
+  document.querySelectorAll('.wh-test-btn').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      const id = btn.dataset.id;
+      const resultEl = document.getElementById(`tr-${id}`);
+      btn.disabled = true;
+      btn.textContent = 'Testing…';
+      resultEl.style.display = 'none';
+      let data;
+      try {
+        const resp = await fetch(`/api/webhooks/${id}/test`, { method: 'POST' });
+        data = await resp.json();
+      } catch (_) {
+        data = { ok: false, error: 'Network error' };
+      }
+      btn.disabled = false;
+      btn.textContent = 'Test';
+      if (data.ok) {
+        resultEl.style.color = 'var(--success,#38a169)';
+        resultEl.textContent = `${data.status_code} OK · ${data.duration_ms}ms`;
+      } else {
+        resultEl.style.color = 'var(--danger,#e53e3e)';
+        resultEl.textContent = data.error || `HTTP ${data.status_code} · ${data.duration_ms}ms`;
+      }
+      resultEl.style.display = '';
+      setTimeout(() => { resultEl.style.display = 'none'; }, 6000);
+    });
+  });
+
+  // ── Delivery log ──────────────────────────────────────────────────────────
+  const _loaded = new Set();
+
+  async function loadDeliveries(id, panel) {
+    panel.innerHTML = '<p class="muted" style="font-size:12px">Loading…</p>';
+    let rows;
+    try {
+      rows = await fetch(`/api/webhooks/${id}/deliveries`).then(r => r.json());
+    } catch (_) {
+      panel.innerHTML = '<p class="muted" style="font-size:12px">Failed to load.</p>';
+      return;
+    }
+    renderDeliveries(panel, id, rows);
+  }
+
+  document.querySelectorAll('.wh-dl-toggle').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      const id = btn.dataset.id;
+      const panel = document.getElementById(`dl-${id}`);
+      if (!panel.hidden) {
+        panel.hidden = true;
+        btn.textContent = 'Show deliveries';
+        return;
+      }
+      panel.hidden = false;
+      btn.textContent = 'Hide deliveries';
+      if (!_loaded.has(id)) {
+        _loaded.add(id);
+        await loadDeliveries(id, panel);
+      }
+    });
+  });
+
+  function renderDeliveries(panel, id, rows) {
+    if (!rows.length) {
+      panel.innerHTML = '<p class="muted" style="font-size:12px">No deliveries yet.</p>';
+      renderRefresh(panel, id);
+      return;
+    }
+    const tbl = document.createElement('table');
+    tbl.style.cssText = 'width:100%;border-collapse:collapse;font-size:12px';
+    tbl.innerHTML = `<thead><tr>
+      <th style="text-align:left;padding:4px 10px 4px 0;border-bottom:1px solid var(--border);opacity:.7">Time</th>
+      <th style="text-align:left;padding:4px 10px 4px 0;border-bottom:1px solid var(--border);opacity:.7">Event</th>
+      <th style="text-align:left;padding:4px 10px 4px 0;border-bottom:1px solid var(--border);opacity:.7">Status</th>
+      <th style="text-align:left;padding:4px 0;border-bottom:1px solid var(--border);opacity:.7">Duration</th>
+    </tr></thead>`;
+    const tbody = document.createElement('tbody');
+    rows.forEach(r => {
+      const tr = document.createElement('tr');
+      const ok = r.status_code && r.status_code < 400;
+      const statusHtml = r.error
+        ? `<span style="color:var(--danger,#e53e3e)" title="${_esc(r.error)}">Error</span>`
+        : r.status_code
+          ? `<span style="color:${ok ? 'var(--success,#38a169)' : 'var(--danger,#e53e3e)'}">${r.status_code}</span>`
+          : '<span class="muted">—</span>';
+      const testTag = r.is_test ? ' <span style="opacity:.55;font-size:10px">(test)</span>' : '';
+      tr.innerHTML = `
+        <td style="padding:5px 10px 5px 0;border-bottom:1px solid var(--border);opacity:.8">${_ago(r.delivered_at)}</td>
+        <td style="padding:5px 10px 5px 0;border-bottom:1px solid var(--border)">${_esc(r.event)}${testTag}</td>
+        <td style="padding:5px 10px 5px 0;border-bottom:1px solid var(--border)">${statusHtml}</td>
+        <td style="padding:5px 0;border-bottom:1px solid var(--border);opacity:.8">${r.duration_ms != null ? r.duration_ms + 'ms' : '—'}</td>`;
+      tbody.appendChild(tr);
+    });
+    tbl.appendChild(tbody);
+    panel.innerHTML = '';
+    panel.appendChild(tbl);
+    renderRefresh(panel, id);
+  }
+
+  function renderRefresh(panel, id) {
+    const btn = document.createElement('button');
+    btn.className = 'btn btn-ghost';
+    btn.style.cssText = 'font-size:11px;padding:2px 8px;margin-top:8px';
+    btn.textContent = 'Refresh';
+    btn.addEventListener('click', () => {
+      _loaded.delete(id);
+      loadDeliveries(id, panel).then(() => _loaded.add(id));
+    });
+    panel.appendChild(btn);
+  }
+
+  function _ago(ts) {
+    if (!ts) return '—';
+    const d = new Date(ts.endsWith('Z') ? ts : ts + 'Z');
+    const s = Math.floor((Date.now() - d) / 1000);
+    if (s < 5)    return 'just now';
+    if (s < 60)   return s + 's ago';
+    if (s < 3600) return Math.floor(s / 60) + 'm ago';
+    if (s < 86400) return Math.floor(s / 3600) + 'h ago';
+    return Math.floor(s / 86400) + 'd ago';
+  }
+
+  function _esc(s) {
+    return s ? s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;') : '';
+  }
+})();
+</script>
+{% endblock %}

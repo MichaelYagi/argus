@@ -181,3 +181,17 @@ CREATE TABLE IF NOT EXISTS webhooks (
 );
 
 CREATE INDEX IF NOT EXISTS idx_webhooks_user_env ON webhooks(user_id, environment_id);
+
+-- webhook_deliveries: log of recent HTTP callback attempts (capped at 100 per webhook)
+CREATE TABLE IF NOT EXISTS webhook_deliveries (
+    id           INTEGER PRIMARY KEY AUTOINCREMENT,
+    webhook_id   INTEGER NOT NULL REFERENCES webhooks(id) ON DELETE CASCADE,
+    event        TEXT    NOT NULL,
+    status_code  INTEGER,          -- NULL on network error
+    duration_ms  INTEGER,
+    error        TEXT,             -- NULL on success
+    is_test      INTEGER NOT NULL DEFAULT 0,
+    delivered_at TEXT    NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE INDEX IF NOT EXISTS idx_webhook_deliveries_wid ON webhook_deliveries(webhook_id, id DESC);

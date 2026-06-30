@@ -7,6 +7,7 @@ import hmac
 import json
 import logging
 import threading
+import time
 from datetime import datetime, timezone
 
 import httpx
@@ -30,20 +31,57 @@ def fire(user_id: int, environment_id: int, event: str, payload: dict) -> None:
     for hook in hooks:
         threading.Thread(
             target=_deliver,
-            args=(hook["url"], hook["secret"], body),
+            args=(hook["id"], hook["url"], hook["secret"], body, event),
             daemon=True,
         ).start()
 
 
-def _deliver(url: str, secret: str | None, body: bytes) -> None:
+def fire_test(webhook_id: int, user_id: int) -> dict | None:
+    """Send a synthetic ping to the webhook synchronously; return outcome or None if not found."""
+    from app.db import store
+    hook = store.get_webhook(webhook_id, user_id)
+    if not hook:
+        return None
+    body = json.dumps({
+        "event": "ping",
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "data": {"message": "Test ping from Argus"},
+    }).encode()
+    status_code, duration_ms, error = _send(hook["url"], hook["secret"], body)
+    try:
+        store.log_delivery(webhook_id, "ping", status_code, duration_ms, error, is_test=1)
+    except Exception:
+        pass
+    ok = error is None and status_code is not None and status_code < 400
+    return {"status_code": status_code, "duration_ms": duration_ms, "ok": ok, "error": error}
+
+
+def _deliver(webhook_id: int, url: str, secret: str | None, body: bytes, event: str) -> None:
+    status_code, duration_ms, error = _send(url, secret, body)
+    try:
+        from app.db import store
+        store.log_delivery(webhook_id, event, status_code, duration_ms, error)
+    except Exception:
+        pass
+
+
+def _send(url: str, secret: str | None, body: bytes) -> tuple[int | None, int, str | None]:
+    """POST body to url; return (status_code, duration_ms, error_string_or_None)."""
     headers = {"Content-Type": "application/json"}
     if secret:
         sig = hmac.new(secret.encode(), body, hashlib.sha256).hexdigest()
         headers["X-Argus-Signature"] = f"sha256={sig}"
+    t0 = time.monotonic()
+    status_code: int | None = None
+    error: str | None = None
     try:
         with httpx.Client(timeout=_TIMEOUT) as client:
             resp = client.post(url, content=body, headers=headers)
+            status_code = resp.status_code
             if resp.status_code >= 400:
                 log.warning("Webhook %s returned HTTP %s", url, resp.status_code)
     except Exception as exc:
+        error = str(exc)
         log.warning("Webhook delivery failed %s: %s", url, exc)
+    duration_ms = int((time.monotonic() - t0) * 1000)
+    return status_code, duration_ms, error
