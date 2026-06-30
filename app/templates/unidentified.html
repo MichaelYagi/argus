@@ -223,7 +223,19 @@
     if (e.isIntersecting) loadPage();
   }, { rootMargin: '300px' }).observe(sentinel);
 
+  function reset() {
+    items = []; pending = []; cursor = null; hasMore = true; loading = false;
+    if (tailEl) { tailEl.remove(); tailEl = null; }
+    container.innerHTML = '';
+    emptyEl.hidden = true;
+    if (loadingEl) loadingEl.hidden = false;
+    if (!sentinel.parentNode) container.after(sentinel);
+    loadPage();
+  }
+
   loadPage();
+
+  window.addEventListener('pageshow', e => { if (e.persisted) reset(); });
 
   let resizeT;
   window.addEventListener('resize', () => {

@@ -395,6 +395,19 @@
     if (e.isIntersecting) loadPage();
   }, { rootMargin: '300px' }).observe(sentinel);
 
+  function reset() {
+    allItems.length = 0;
+    cursor = null; hasMore = true; loading = false;
+    selected.clear();
+    updateBulkBar();
+    container.innerHTML = '';
+    if (loadingEl) loadingEl.hidden = false;
+    if (emptyEl) emptyEl.hidden = true;
+    if (!sentinel.parentNode) container.after(sentinel);
+    loadPage();
+  }
+
   loadPage();
+  window.addEventListener('pageshow', e => { if (e.persisted) reset(); });
   window.addEventListener('resize', () => { if (allItems.length) render(); });
 })();

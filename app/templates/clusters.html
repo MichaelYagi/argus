@@ -299,6 +299,8 @@
     thrVal.textContent = (+thr.value).toFixed(2);
     load();
   }).catch(() => { thr.value = 0.5; thrVal.textContent = '0.50'; load(); });
+
+  window.addEventListener('pageshow', e => { if (e.persisted) load(); });
 })();
 </script>
 {% endblock %}

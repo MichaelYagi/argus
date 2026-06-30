@@ -289,5 +289,27 @@ setInterval(refreshStats, 30000);
 
 const _initTab = new URLSearchParams(location.search).get('tab');
 switchTab(_initTab === 'object' ? 'object' : 'face');
+
+window.addEventListener('pageshow', e => {
+  if (!e.persisted) return;
+  ['face', 'object'].forEach(type => {
+    const s = state[type];
+    s.cursor = null; s.hasMore = true; s.loading = false; s.loaded = false;
+    s.selected.clear();
+    document.getElementById('grid-' + type).innerHTML = '<p class="muted loading">Loading…</p>';
+    if (!sentinels[type]) {
+      const sv = document.createElement('div');
+      sv.style.height = '1px';
+      document.getElementById('tab-' + type).appendChild(sv);
+      sentinels[type] = sv;
+      new IntersectionObserver(([ev]) => {
+        sentinelVisible[type] = ev.isIntersecting;
+        if (ev.isIntersecting) loadMore(type);
+      }, { rootMargin: '300px' }).observe(sv);
+    }
+  });
+  updateBulkBar();
+  loadMore(activeTab);
+});
 </script>
 {% endblock %}

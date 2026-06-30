@@ -231,10 +231,13 @@
     } catch (_) {}
   });
 
-  // If the browser restores from bfcache it already restored scroll — drop the
-  // marker so a later fresh visit doesn't wrongly jump.
+  // If the browser restores from bfcache, reset and re-fetch so deleted/changed
+  // images don't linger. Also clear the scroll key so the restore logic doesn't
+  // try to jump to a stale position.
   window.addEventListener('pageshow', e => {
-    if (e.persisted) { try { sessionStorage.removeItem(RESTORE_KEY); } catch (_) {} }
+    if (!e.persisted) return;
+    try { sessionStorage.removeItem(RESTORE_KEY); } catch (_) {}
+    window.resetGallery();
   });
 
   async function init() {

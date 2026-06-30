@@ -243,5 +243,17 @@
   const sentinel = document.createElement('div');
   nomatchList.parentElement.parentElement.after(sentinel);
   new IntersectionObserver(([e]) => { if (e.isIntersecting) loadPage(); }, { rootMargin: '300px' }).observe(sentinel);
+
+  function reset() {
+    cursor = null; hasMore = true; loading = false;
+    selSg.clear(); selNm.clear();
+    updateBars();
+    suggestedList.innerHTML = '';
+    nomatchList.innerHTML = '';
+    if (!sentinel.parentNode) nomatchList.parentElement.parentElement.after(sentinel);
+    loadPage();
+  }
+
   loadPage();
+  window.addEventListener('pageshow', e => { if (e.persisted) reset(); });
 })();
