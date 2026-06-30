@@ -858,7 +858,7 @@ def get_unknown_detections(
 ) -> list[sqlite3.Row]:
     with _connect() as conn:
         env_id = _resolve_env(conn, user_id, environment_id)
-        sql = """SELECT id, type, crop_path, confidence, detected_at
+        sql = """SELECT id, type, crop_path, confidence, detected_at, source_image_id
                  FROM detections WHERE user_id = ? AND environment_id = ? AND identity_id IS NULL"""
         params: list = [user_id, env_id]
         if detection_type:

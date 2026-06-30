@@ -191,6 +191,14 @@ async def clusters_page(request: Request):
     return _r(request, "clusters.html", ctx)
 
 
+@router.get("/unknown-people")
+async def unknown_people_page(request: Request):
+    ctx = _base(request, "unknown_people")
+    if not ctx:
+        return RedirectResponse("/login")
+    return _r(request, "unknown_people.html", ctx)
+
+
 @router.get("/models")
 async def models_page(request: Request):
     ctx = _base(request, "models", show_env_switcher=False)

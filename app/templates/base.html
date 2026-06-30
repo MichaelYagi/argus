@@ -267,7 +267,7 @@ setInterval(_updateSuggestedDot, 30000);
 })();
 </script>
 {% set detect_grp  = active in ('detect', 'enroll', 'test') %}
-{% set review_grp  = active in ('review', 'clusters', 'images') %}
+{% set review_grp  = active in ('review', 'clusters', 'images', 'unknown_people') %}
 {% set settings_grp = active in ('settings', 'models') %}
 <nav>
   <a href="#" onclick="openAbout(); return false;" title="About Argus"
@@ -310,6 +310,7 @@ setInterval(_updateSuggestedDot, 30000);
         <span class="suggested-dot" title="Suggested people available"
           style="display:none;width:7px;height:7px;border-radius:50%;background:#e53e3e;flex-shrink:0"></span>
       </a>
+      <a href="/unknown-people" class="{% if active == 'unknown_people' %}active{% endif %}" role="menuitem">Unknown People</a>
       <a href="/images" class="{% if active == 'images' %}active{% endif %}" role="menuitem">Images</a>
     </div>
   </div>
@@ -422,6 +423,7 @@ setInterval(_updateSuggestedDot, 30000);
       style="display:none;width:7px;height:7px;border-radius:50%;background:#e53e3e;
              margin-left:3px;vertical-align:middle"></span>
   </a>
+  <a href="/unknown-people" class="mobile-sub {% if active == 'unknown_people' %}active{% endif %}">Unknown People</a>
   <a href="/images" class="mobile-sub {% if active == 'images' %}active{% endif %}">Images</a>
   {% else %}
   <a href="/images" class="{% if active == 'images' %}active{% endif %}">Images</a>

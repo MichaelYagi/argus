@@ -414,6 +414,7 @@ async def unknown_detections(
         "crop_url": f"/media/crops/{r['crop_path']}",
         "confidence": r["confidence"],
         "detected_at": r["detected_at"],
+        "source_image_id": r["source_image_id"],
     })
 
 
