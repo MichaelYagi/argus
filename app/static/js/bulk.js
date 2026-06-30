@@ -275,7 +275,8 @@ async function _pool(items, concurrency, fn) {
           img.onload = () => {
             const sx = img.clientWidth  / img.naturalWidth;
             const sy = img.clientHeight / img.naturalHeight;
-            allDets.forEach(det => {
+            const sortedDets = [...allDets].sort((a, b) => (b.bbox.w * b.bbox.h) - (a.bbox.w * a.bbox.h));
+            sortedDets.forEach(det => {
               const b = det.bbox;
               const box = document.createElement('div');
               box.className = 'det-box ' + (det.class_name ? 'object' : 'face');

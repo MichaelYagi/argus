@@ -61,44 +61,34 @@ function renderBoxes() {
   const sy = img.clientHeight / NAT_H;
   const wrap = document.getElementById('tag-wrap');
 
-  FACES.forEach(f => {
+  const all = [
+    ...FACES.map(f => ({ ...f, kind: 'face' })),
+    ...OBJECTS.map(o => ({ ...o, kind: 'object' })),
+  ].sort((a, b) => (b.w * b.h) - (a.w * a.h));
+
+  all.forEach(det => {
     const div = document.createElement('div');
-    div.className = 't-box' + (f.label ? ' labeled' : '');
-    div.style.left   = Math.max(0, f.x * sx) + 'px';
-    div.style.top    = Math.max(0, f.y * sy) + 'px';
-    div.style.width  = (f.w * sx) + 'px';
-    div.style.height = (f.h * sy) + 'px';
-    div.dataset.id    = f.id;
-    div.dataset.label = f.label;
+    const isFace = det.kind === 'face';
+    div.className = isFace ? 't-box' + (det.label ? ' labeled' : '') : 't-box object';
+    div.style.left   = Math.max(0, det.x * sx) + 'px';
+    div.style.top    = Math.max(0, det.y * sy) + 'px';
+    div.style.width  = (det.w * sx) + 'px';
+    div.style.height = (det.h * sy) + 'px';
+    div.dataset.id    = det.id;
+    div.dataset.label = det.label;
 
     const tip = document.createElement('div');
     tip.className = 't-tip';
-    const tipText = (f.label || 'Unknown')
-      + (f.similarity != null ? ' (' + (f.similarity * 100).toFixed(0) + '% match)' : '');
-    tip.textContent = tipText;
+    if (isFace) {
+      tip.textContent = (det.label || 'Unknown')
+        + (det.similarity != null ? ' (' + (det.similarity * 100).toFixed(0) + '% match)' : '');
+      div.addEventListener('click', () => labelBox(div, tip));
+    } else {
+      tip.textContent = (det.label || 'object')
+        + (det.confidence != null ? ' (' + (det.confidence * 100).toFixed(0) + '%)' : '');
+      div.addEventListener('click', () => labelObjectBox(div, tip));
+    }
     div.appendChild(tip);
-
-    div.addEventListener('click', () => labelBox(div, tip));
-    wrap.appendChild(div);
-  });
-
-  OBJECTS.forEach(o => {
-    const div = document.createElement('div');
-    div.className = 't-box object';
-    div.style.left   = Math.max(0, o.x * sx) + 'px';
-    div.style.top    = Math.max(0, o.y * sy) + 'px';
-    div.style.width  = (o.w * sx) + 'px';
-    div.style.height = (o.h * sy) + 'px';
-    div.dataset.id    = o.id;
-    div.dataset.label = o.label;
-
-    const tip = document.createElement('div');
-    tip.className = 't-tip';
-    tip.textContent = (o.label || 'object')
-      + (o.confidence != null ? ' (' + (o.confidence * 100).toFixed(0) + '%)' : '');
-    div.appendChild(tip);
-
-    div.addEventListener('click', () => labelObjectBox(div, tip));
     wrap.appendChild(div);
   });
 }

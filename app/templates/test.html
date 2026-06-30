@@ -351,9 +351,11 @@
   function drawOverlays(wrap, img, r) {
     if (!img.naturalWidth) return;
     wrap.querySelectorAll('.test-overlay').forEach(e => e.remove());
-    r.objects.forEach(o => boxEl(wrap, img, o.bbox, OBJ_COLOR, `${o.class_name} ${(o.confidence * 100).toFixed(0)}%`));
-    r.faces.forEach((f, i) => boxEl(wrap, img, f.bbox, FACE_COLOR,
-      f.label ? `${f.label} ${(f.similarity * 100).toFixed(0)}%` : `Face #${i + 1}`, i));
+    const sortedObjects = [...r.objects].sort((a, b) => (b.bbox.w * b.bbox.h) - (a.bbox.w * a.bbox.h));
+    const sortedFaces   = [...r.faces].sort((a, b) => (b.bbox.w * b.bbox.h) - (a.bbox.w * a.bbox.h));
+    sortedObjects.forEach(o => boxEl(wrap, img, o.bbox, OBJ_COLOR, `${o.class_name} ${(o.confidence * 100).toFixed(0)}%`));
+    sortedFaces.forEach((f, i) => boxEl(wrap, img, f.bbox, FACE_COLOR,
+      f.label ? `${f.label} ${(f.similarity * 100).toFixed(0)}%` : `Face #${i + 1}`, r.faces.indexOf(f)));
   }
 
   window.addEventListener('resize', () => {
