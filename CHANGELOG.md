@@ -5,7 +5,26 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
-## [Unreleased]
+## [0.1.0-alpha.7] — 2026-06-30
+
+### Added
+
+- **Unidentified faces page (`/unidentified`).** Dedicated gallery for all unidentified faces (no match found or dismissed from review). Each crop shows a tag link, a delete button, and an assign (+) button that lets you type a person's name and immediately label the face without going through the review flow. Linked from the dashboard.
+- **Webhooks.** `POST /api/webhooks` creates a webhook; `GET /api/webhooks` lists them; `GET/PUT/DELETE /api/webhooks/{id}` fetch, update, or remove one. Argus fires the webhook on `detection.created`, `identity.created`, `identity.deleted`, and `detection.labeled` events. Update body accepts `url`, `events`, `label`, `secret`, and `is_active` (all optional).
+- **Image reprocess** — `POST /api/images/{id}/reprocess` re-runs detection on an already-stored source image using the currently active models. Accepts `?type=faces|objects|all`, `?replace=true` (clear existing detections of that type first), and `?async=true`.
+- **Image search** — `POST /api/images/search` finds source images containing all supplied identities (AND semantics) with optional `type`, `since`, `until`, `confidence_min`, and cursor/limit pagination. Useful for querying "find all photos where Alice and Bob both appear."
+- **Identity merge API** — `POST /api/identities/{id}/merge` with `{"into": <target_id>}` moves all detections and reference embeddings from the source identity into the target, then deletes the source and rebuilds the match index. Backs the "Merge into" button already present on the identity page.
+- **Hardware and OS info in `GET /api/health`** — response now includes CPU model, physical core count, total RAM, and OS name/version. Adds `psutil` as a new dependency.
+
+### Changed
+
+- **Gallery infinite scroll no longer jumps on mobile.** The justified-layout gallery (identity gallery, source images, unidentified) now appends only new complete rows when a page loads during infinite scroll — existing rows are never touched. Previously, each page load rebuilt the entire DOM, causing scroll-position jumps. A companion fix ignores resize events that only change viewport height (mobile browser toolbar show/hide) since justified row packing is width-based; full relayout only fires when the container width changes.
+- **Source images page (`/images`) improvements** — incremental justified layout (same no-jump fix as identity gallery), back-to-top button, filter bar shows all images matching any combination of identity, type, and date range.
+- **Tag page** — label-entry input repositioned closer to the bbox it belongs to; object boxes use the same assign flow as face boxes.
+
+---
+
+## [0.1.0-alpha.6] — 2026-06-28
 
 ### Added
 
@@ -13,6 +32,8 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - **Camera capture** on Enroll, Detect, and Test — a "Use camera" button grabs a photo from the device camera and feeds it straight into the flow. Uses the live in-browser webcam where the page is a secure context (HTTPS or `localhost`), and falls back to the phone's native camera (capture file input) over plain LAN HTTP, so snapping a photo on a phone works without HTTPS. No backend changes — the captured frame goes through the existing upload path.
 - **More object detection models** in the registry, all producing bounding boxes: YOLOv8l, YOLO11 (s/m/l/x), YOLOv10 (s/m/l/x), and RT-DETR (l/x — a transformer detector, loaded via Ultralytics' `RTDETR`); plus the compact `buffalo_sc` face pack. Existing YOLO-World open-vocab models remain.
 - **Each model now has a short description** (stored in a new `models.description` column) shown on the Models page and returned by `/api/models`.
+- **Source images page (`/images`).** Justified infinite-scroll gallery of all processed source images. Each thumbnail is a link to the tag page for that image; delete an image and all its detections in one click. Filterable by identity, detection type, and date range.
+- **About modal** — an info dialog accessible from the nav showing the Argus version, license, and links.
 
 ### Changed
 
@@ -248,6 +269,8 @@ Initial alpha release.
 
 ---
 
+[0.1.0-alpha.7]: https://github.com/MichaelYagi/argus/compare/v0.1.0-alpha.6...v0.1.0-alpha.7
+[0.1.0-alpha.6]: https://github.com/MichaelYagi/argus/compare/v0.1.0-alpha.5...v0.1.0-alpha.6
 [0.1.0-alpha.5]: https://github.com/MichaelYagi/argus/compare/v0.1.0-alpha.4...v0.1.0-alpha.5
 [0.1.0-alpha.4]: https://github.com/MichaelYagi/argus/compare/v0.1.0-alpha.3...v0.1.0-alpha.4
 [0.1.0-alpha.3]: https://github.com/MichaelYagi/argus/compare/v0.1.0-alpha.2...v0.1.0-alpha.3
