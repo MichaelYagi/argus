@@ -175,7 +175,8 @@
       "Skill(update-config)",
       "Bash(python3 *)",
       "Bash(/mnt/c/Users/Michael/Documents/development/argus/.venv/bin/ruff check *)",
-      "Read(//mnt/c/Users/Michael/**)"
+      "Read(//mnt/c/Users/Michael/**)",
+      "Bash(grep -o \".\\\\{0,20\\\\}'\")"
     ]
   }
 }

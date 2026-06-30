@@ -198,7 +198,7 @@
           const badge = document.createElement(‘div’);
           badge.className = ‘g-badge’;
           badge.textContent = (item.similarity * 100).toFixed(0) + ‘%’;
-          badge.title = ‘Similarity to this person’s reference set’;
+          badge.title = "Similarity to this person’s reference set";
           el.appendChild(badge);
         } else if (identityType === ‘object’ && item.confidence != null) {
           const badge = document.createElement(‘div’);
