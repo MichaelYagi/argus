@@ -15,6 +15,14 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - **`GET /api/webhooks/{id}/deliveries`** — returns the 50 most recent delivery records for a webhook, including `status_code`, `duration_ms`, `error`, `is_test`, and `delivered_at`.
 - **`POST /api/webhooks/{id}/test`** — fires a synchronous test delivery to the webhook URL and returns `{ok, status_code, duration_ms, error}`.
 - **`detection.created` now fires** from all three synchronous detect endpoints (`/api/detect/faces`, `/api/detect/objects`, `/api/detect/all`). Previously listed as a supported event but never triggered from the sync paths.
+- **`GET /api/search`** — FTS5 trigram identity search. Accepts `q` (1–200 chars), optional `type=face|object`, and `limit` (1–50, default 10). Returns ranked matches with `id`, `label`, `type`, `cover_url`, and `detection_count`. Queries shorter than 3 characters fall back to case-insensitive `LIKE`. No migration needed — the FTS index is built automatically on first startup.
+- **Nav search bar.** A search input spanning the top bar on both desktop and mobile. Type to see up to 8 identity matches in a dropdown (debounced 220ms); keyboard-navigable with arrow keys, Enter, and Escape. Backed by `GET /api/search`.
+- **Desktop sidebar navigation.** The top-bar nav groups and carets are replaced by a persistent left sidebar (220px). Toggled by a hamburger button on the left of the top bar; state persisted in `localStorage`. The top bar retains the environment picker, account link, theme picker, and sign-out button. When the sidebar is collapsed and any notification dot or badge count is active, a red dot appears on the hamburger. Webhooks moves to the sidebar as its own section. Mobile drawer is unchanged.
+- **Garbagefire theme.** A deliberately hideous high-contrast theme: yellow background, chartreuse surfaces, hot-pink nav, Comic Sans font throughout.
+
+### Fixed
+
+- **RGBA crop crash.** Detecting faces or objects in PNG images with an alpha channel caused a 500 error when saving the crop as JPEG (`cannot write mode RGBA as JPEG`). The crop is now converted to RGB before saving.
 
 ---
 

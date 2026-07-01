@@ -516,6 +516,39 @@ From the UI: open any image's tag page and click **Reprocess** in the header.
 
 ---
 
+## Identity search
+
+Search enrolled identities (people and object classes) by name using FTS5 trigram matching — handles partial names, case-insensitive, and near-misses. Available from the search bar in the top nav or via API.
+
+```bash
+# Find all identities matching "alice"
+curl -H "X-API-Key: argus_..." \
+  "http://localhost:8100/api/search?q=alice"
+
+# Faces only, up to 20 results
+curl -H "X-API-Key: argus_..." \
+  "http://localhost:8100/api/search?q=john&type=face&limit=20"
+```
+
+Response:
+```json
+{
+  "items": [
+    {
+      "id": 4,
+      "label": "Alice",
+      "type": "face",
+      "cover_url": "/media/crops/abc123.jpg",
+      "detection_count": 312
+    }
+  ]
+}
+```
+
+Queries shorter than 3 characters fall back to a `LIKE` substring match. The FTS index is built automatically on first startup — no migration steps required.
+
+---
+
 ## Image filtering
 
 Query the source image list with filters. All params are optional and combinable.
