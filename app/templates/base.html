@@ -13,6 +13,10 @@
       var t = localStorage.getItem('argus-theme');
       if (t && t !== 'light') document.documentElement.setAttribute('data-theme', t);
     })();
+    (function(){
+      if (localStorage.getItem('argus-sidebar-open') !== '0')
+        document.documentElement.setAttribute('data-sidebar', 'open');
+    })();
   </script>
 </head>
 <body{% if active == 'docs' %} class="docs-page"{% endif %}>
@@ -88,42 +92,42 @@ document.addEventListener('DOMContentLoaded', function() {
   document.addEventListener('click', closeMenu);
   menu.addEventListener('click', e => e.stopPropagation());
 
-  // Nav dropdown groups — click chevron to open, click outside / Escape to close
-  const navGroups = document.querySelectorAll('.nav-group');
-  function closeAllDropdowns() {
-    navGroups.forEach(g => {
-      g.classList.remove('open');
-      const ch = g.querySelector('.nav-group-chevron');
-      if (ch) ch.setAttribute('aria-expanded', 'false');
-    });
+  // Desktop sidebar — persistent, toggled by hamburger, state in localStorage
+  const desktopBurger = document.getElementById('desktop-burger');
+
+  function isSidebarOpen() {
+    return document.documentElement.hasAttribute('data-sidebar');
   }
-  navGroups.forEach(group => {
-    const chevron = group.querySelector('.nav-group-chevron');
-    if (!chevron) return;
-    chevron.addEventListener('click', e => {
-      e.stopPropagation();
-      const isOpen = group.classList.contains('open');
-      closeAllDropdowns();
-      if (!isOpen) {
-        group.classList.add('open');
-        chevron.setAttribute('aria-expanded', 'true');
-        const first = group.querySelector('.nav-dropdown a');
-        if (first) first.focus();
-      }
-    });
-    const dropdown = group.querySelector('.nav-dropdown');
-    if (dropdown) {
-      dropdown.addEventListener('keydown', e => {
-        const items = [...dropdown.querySelectorAll('a')];
-        const idx = items.indexOf(document.activeElement);
-        if (e.key === 'ArrowDown') { e.preventDefault(); items[(idx + 1) % items.length]?.focus(); }
-        else if (e.key === 'ArrowUp')  { e.preventDefault(); items[(idx - 1 + items.length) % items.length]?.focus(); }
-        else if (e.key === 'Tab')      { closeAllDropdowns(); }
-      });
+
+  function setSidebar(open) {
+    if (open) {
+      document.documentElement.setAttribute('data-sidebar', 'open');
+      localStorage.setItem('argus-sidebar-open', '1');
+    } else {
+      document.documentElement.removeAttribute('data-sidebar');
+      localStorage.setItem('argus-sidebar-open', '0');
     }
-  });
-  document.addEventListener('click', closeAllDropdowns);
-  document.addEventListener('keydown', e => { if (e.key === 'Escape') closeAllDropdowns(); });
+    if (desktopBurger) desktopBurger.setAttribute('aria-expanded', String(open));
+    updateBurgerDot();
+  }
+
+  window.updateBurgerDot = function() {
+    const dot = document.getElementById('burger-dot');
+    if (!dot) return;
+    if (isSidebarOpen()) { dot.style.display = 'none'; return; }
+    const sidebar = document.getElementById('desktop-sidebar');
+    if (!sidebar) { dot.style.display = 'none'; return; }
+    const hasReview    = [...sidebar.querySelectorAll('.review-count-badge')].some(el => el.style.display !== 'none');
+    const hasSuggested = [...sidebar.querySelectorAll('.suggested-dot')].some(el => el.style.display !== 'none');
+    const hasModels    = sidebar.querySelector('.models-status-badge') !== null;
+    dot.style.display = (hasReview || hasSuggested || hasModels) ? 'inline-block' : 'none';
+  };
+
+  if (desktopBurger) {
+    desktopBurger.setAttribute('aria-expanded', String(isSidebarOpen()));
+    desktopBurger.addEventListener('click', () => setSidebar(!isSidebarOpen()));
+  }
+  updateBurgerDot();
 
   const envModal = document.getElementById('env-modal');
   if (envModal) {
@@ -229,6 +233,7 @@ function _updateReviewBadge() {
           badge.style.display = 'none';
         }
       });
+      if (window.updateBurgerDot) window.updateBurgerDot();
     })
     .catch(() => {});
 }
@@ -243,6 +248,7 @@ function _updateSuggestedDot() {
       document.querySelectorAll('.suggested-dot').forEach(dot => {
         dot.style.display = (data && data.count) ? 'inline-block' : 'none';
       });
+      if (window.updateBurgerDot) window.updateBurgerDot();
     })
     .catch(() => {});
 }
@@ -270,75 +276,19 @@ setInterval(_updateSuggestedDot, 30000);
 {% set detect_grp  = active in ('detect', 'enroll', 'test') %}
 {% set review_grp  = active in ('review', 'clusters', 'images', 'unidentified') %}
 {% set settings_grp = active in ('settings', 'models') %}
-{% set account_grp  = active in ('account', 'webhooks') %}
 <nav>
+  {% if username %}
+  <button id="desktop-burger" class="desktop-burger nav-desktop" aria-label="Toggle sidebar" aria-expanded="true">
+    &#9776;
+    <span id="burger-dot" class="burger-dot"></span>
+  </button>
+  {% endif %}
+
   <a href="#" onclick="openAbout(); return false;" title="About Argus"
      style="display:flex;align-items:center;gap:7px;text-decoration:none;margin-right:4px;cursor:pointer">
     <img src="/static/favicon.svg" width="24" height="24" alt="Argus">
     <span class="brand">Argus</span>
   </a>
-
-  <!-- Dashboard -->
-  <a href="/" class="nav-desktop {% if active == 'dashboard' %}active{% endif %}">Dashboard</a>
-
-  <!-- Detect group: label → /detect, dropdown: Enroll (face only), Test -->
-  <div class="nav-group nav-desktop {% if detect_grp %}group-active{% endif %}">
-    <a href="/detect" class="nav-group-label {% if active == 'detect' %}active{% endif %}">Detect</a>
-    <button class="nav-group-chevron" aria-haspopup="true" aria-expanded="false" aria-label="More">▾</button>
-    <div class="nav-dropdown" role="menu">
-      {% if face_active %}
-      <a href="/enroll" class="{% if active == 'enroll' %}active{% endif %}" role="menuitem">Enroll</a>
-      {% endif %}
-      <a href="/test" class="{% if active == 'test' %}active{% endif %}" role="menuitem">Test</a>
-    </div>
-  </div>
-
-  <!-- Review group (face active): label → /review, dropdown: Suggested, Images -->
-  <!-- Images only (no face model): plain link -->
-  {% if face_active %}
-  <div class="nav-group nav-desktop {% if review_grp %}group-active{% endif %}">
-    <a href="/review" class="nav-group-label {% if active == 'review' %}active{% endif %}">
-      Review <span class="review-count-badge"
-        style="display:none;background:#e53e3e;color:#fff;border-radius:99px;
-               padding:1px 6px;font-size:10px;font-weight:700;margin-left:3px;
-               vertical-align:middle;line-height:16px"></span>
-    </a>
-    <span class="suggested-dot" title="Suggested people available"
-      style="display:none;width:7px;height:7px;border-radius:50%;background:#e53e3e;flex-shrink:0"></span>
-    <button class="nav-group-chevron" aria-haspopup="true" aria-expanded="false" aria-label="More">▾</button>
-    <div class="nav-dropdown" role="menu">
-      <a href="/clusters" class="{% if active == 'clusters' %}active{% endif %}" role="menuitem">
-        Suggested
-        <span class="suggested-dot" title="Suggested people available"
-          style="display:none;width:7px;height:7px;border-radius:50%;background:#e53e3e;flex-shrink:0"></span>
-      </a>
-      <a href="/unidentified" class="{% if active == 'unidentified' %}active{% endif %}" role="menuitem">Unidentified</a>
-      <a href="/images" class="{% if active == 'images' %}active{% endif %}" role="menuitem">Images</a>
-    </div>
-  </div>
-  {% else %}
-  <a href="/images" class="nav-desktop {% if active == 'images' %}active{% endif %}">Images</a>
-  {% endif %}
-
-  <!-- Settings group (admin): label → /settings, dropdown: Models -->
-  {% if is_admin %}
-  <div class="nav-group nav-desktop {% if settings_grp %}group-active{% endif %}">
-    <a href="/settings" class="nav-group-label {% if active == 'settings' %}active{% endif %}">Settings</a>
-    {% if active_count < 2 %}<span class="models-status-badge"
-      title="{{ 'No recognition models are active' if active_count == 0 else 'Only one model type is active' }}"
-      style="display:inline-block;width:7px;height:7px;border-radius:50%;flex-shrink:0;
-      background:{{ '#e53e3e' if active_count == 0 else '#f59e0b' }}"></span>{% endif %}
-    <button class="nav-group-chevron" aria-haspopup="true" aria-expanded="false" aria-label="More">▾</button>
-    <div class="nav-dropdown" role="menu">
-      <a href="/models" class="{% if active == 'models' %}active{% endif %}" role="menuitem">
-        Models{% if active_count < 2 %} <span class="models-status-badge"
-          title="{{ 'No recognition models are active' if active_count == 0 else 'Only one model type is active' }}"
-          style="display:inline-block;width:7px;height:7px;border-radius:50%;margin-left:3px;vertical-align:middle;
-          background:{{ '#e53e3e' if active_count == 0 else '#f59e0b' }}"></span>{% endif %}
-      </a>
-    </div>
-  </div>
-  {% endif %}
 
   <span class="nav-spacer nav-desktop"></span>
 
@@ -351,21 +301,16 @@ setInterval(_updateSuggestedDot, 30000);
   </button>
   {% endif %}
 
-  <div class="nav-group nav-desktop {% if account_grp %}group-active{% endif %}">
-    <a href="/account" class="nav-group-label {% if active == 'account' %}active{% endif %}"
-       style="font-size:12px">{{ username }}</a>
-    <button class="nav-group-chevron" aria-haspopup="true" aria-expanded="false" aria-label="More">▾</button>
-    <div class="nav-dropdown nav-dropdown-right" role="menu">
-      <a href="/webhooks" class="{% if active == 'webhooks' %}active{% endif %}" role="menuitem">Webhooks</a>
-    </div>
-  </div>
+  {% if username %}
+  <a href="/account" class="nav-desktop {% if active == 'account' %}active{% endif %}"
+     style="font-size:12px">{{ username }}</a>
+  {% endif %}
 
   <!-- Theme picker -->
   <div class="nav-desktop" style="position:relative">
     <button id="theme-btn" title="Change theme"
             style="background:none;border:none;cursor:pointer;padding:3px;
                    display:flex;align-items:center;justify-content:center">
-      <!-- 3-color swatch square: bg | surface | accent stacked vertically -->
       <span id="theme-swatch"
             style="display:flex;flex-direction:column;width:18px;height:18px;
                    border-radius:3px;overflow:hidden;border:1px solid rgba(255,255,255,.25)">
@@ -409,6 +354,55 @@ setInterval(_updateSuggestedDot, 30000);
     this.textContent = m.hidden ? '☰' : '✕';
   ">☰</button>
 </nav>
+
+{% if username %}
+<!-- Desktop sidebar — persistent left panel, toggled by the hamburger -->
+<div id="desktop-sidebar" class="desktop-sidebar">
+  <a href="/" class="{% if active == 'dashboard' %}active{% endif %}">Dashboard</a>
+  <div class="sidebar-divider"></div>
+  <a href="/detect" class="{% if active == 'detect' %}active{% endif %}">Detect</a>
+  {% if face_active %}
+  <a href="/enroll" class="sidebar-sub {% if active == 'enroll' %}active{% endif %}">Enroll</a>
+  {% endif %}
+  <a href="/test" class="sidebar-sub {% if active == 'test' %}active{% endif %}">Test</a>
+  <div class="sidebar-divider"></div>
+  {% if face_active %}
+  <a href="/review" class="{% if active == 'review' %}active{% endif %}">
+    Review <span class="review-count-badge"
+      style="display:none;background:#e53e3e;color:#fff;border-radius:99px;
+             padding:1px 6px;font-size:10px;font-weight:700;margin-left:3px;
+             vertical-align:middle;line-height:16px"></span>
+  </a>
+  <a href="/clusters" class="sidebar-sub {% if active == 'clusters' %}active{% endif %}">
+    Suggested
+    <span class="suggested-dot" title="Suggested people available"
+      style="display:none;width:7px;height:7px;border-radius:50%;background:#e53e3e;
+             margin-left:3px;vertical-align:middle"></span>
+  </a>
+  <a href="/unidentified" class="sidebar-sub {% if active == 'unidentified' %}active{% endif %}">Unidentified</a>
+  <a href="/images" class="sidebar-sub {% if active == 'images' %}active{% endif %}">Images</a>
+  {% else %}
+  <a href="/images" class="{% if active == 'images' %}active{% endif %}">Images</a>
+  {% endif %}
+  {% if is_admin %}
+  <div class="sidebar-divider"></div>
+  <a href="/settings" class="{% if active == 'settings' %}active{% endif %}">
+    Settings{% if active_count < 2 %} <span class="models-status-badge"
+      title="{{ 'No recognition models are active' if active_count == 0 else 'Only one model type is active' }}"
+      style="display:inline-block;width:7px;height:7px;border-radius:50%;margin-left:3px;vertical-align:middle;
+      background:{{ '#e53e3e' if active_count == 0 else '#f59e0b' }}"></span>{% endif %}
+  </a>
+  <a href="/models" class="sidebar-sub {% if active == 'models' %}active{% endif %}">
+    Models{% if active_count < 2 %} <span class="models-status-badge"
+      title="{{ 'No recognition models are active' if active_count == 0 else 'Only one model type is active' }}"
+      style="display:inline-block;width:7px;height:7px;border-radius:50%;margin-left:2px;vertical-align:middle;
+      background:{{ '#e53e3e' if active_count == 0 else '#f59e0b' }}"></span>{% endif %}
+  </a>
+  {% endif %}
+  <div class="sidebar-divider"></div>
+  <a href="/webhooks" class="{% if active == 'webhooks' %}active{% endif %}">Webhooks</a>
+</div>
+{% endif %}
 
 <!-- Mobile dropdown -->
 <div id="mobile-menu" class="mobile-menu" hidden>
