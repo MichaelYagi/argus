@@ -378,7 +378,7 @@ setInterval(_updateSuggestedDot, 30000);
                 background:var(--surface);border:1px solid var(--border);border-radius:8px;
                 box-shadow:0 4px 20px rgba(0,0,0,.4);padding:6px;
                 flex-direction:column;gap:2px;min-width:130px;z-index:300">
-      {% for id, label, c1, c2, c3 in THEMES %}
+      {% for id, label, c1, c2, c3, c4 in THEMES %}
       <button class="theme-opt" data-theme="{{ id }}"
               style="display:flex;align-items:center;gap:10px;padding:7px 10px;
                      border:none;cursor:pointer;border-radius:5px;background:none;
@@ -457,7 +457,7 @@ setInterval(_updateSuggestedDot, 30000);
   <div style="display:flex;align-items:center;gap:8px;padding:0 20px">
     <a href="/account" style="flex:1;display:block;padding:12px 0;color:var(--nav-text);
        text-decoration:none;font-size:14px">{{ username }}</a>
-    {% for id, label, c1, c2, c3 in THEMES %}
+    {% for id, label, c1, c2, c3, c4 in THEMES %}
     <button class="theme-opt" data-theme="{{ id }}" title="{{ label }} theme"
             style="display:inline-flex;width:auto;padding:3px;border:1px solid rgba(255,255,255,.2);
                    border-radius:4px;background:none;cursor:pointer;align-items:center">
