@@ -48,14 +48,14 @@ CREATE VIRTUAL TABLE IF NOT EXISTS identities_fts USING fts5(
 );
 
 CREATE TRIGGER IF NOT EXISTS identities_fts_ai AFTER INSERT ON identities BEGIN
-    INSERT INTO identities_fts(rowid, label) VALUES (new.id, new.label);
+    INSERT INTO identities_fts(rowid, label) VALUES (new.id, LOWER(new.label));
 END;
 CREATE TRIGGER IF NOT EXISTS identities_fts_au AFTER UPDATE OF label ON identities BEGIN
-    INSERT INTO identities_fts(identities_fts, rowid, label) VALUES ('delete', old.id, old.label);
-    INSERT INTO identities_fts(rowid, label) VALUES (new.id, new.label);
+    INSERT INTO identities_fts(identities_fts, rowid, label) VALUES ('delete', old.id, LOWER(old.label));
+    INSERT INTO identities_fts(rowid, label) VALUES (new.id, LOWER(new.label));
 END;
 CREATE TRIGGER IF NOT EXISTS identities_fts_ad AFTER DELETE ON identities BEGIN
-    INSERT INTO identities_fts(identities_fts, rowid, label) VALUES ('delete', old.id, old.label);
+    INSERT INTO identities_fts(identities_fts, rowid, label) VALUES ('delete', old.id, LOWER(old.label));
 END;
 
 -- source_images: per-user uploaded images; file_path is content-hash based

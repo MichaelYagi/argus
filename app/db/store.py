@@ -227,13 +227,48 @@ def _migrate(conn: sqlite3.Connection) -> None:
     # Reconcile orphaned references left by older builds / direct DB edits.
     _reconcile_orphan_references(conn)
 
-    # Populate FTS index for existing rows — triggers handle future mutations.
-    # Only needed once: if identities exist but the index is empty (initial migration).
+    # Ensure FTS triggers store LOWER(label) for case-insensitive search.
+    # If the existing trigger still inserts new.label (not LOWER), drop and recreate all three.
+    try:
+        ai_sql = conn.execute(
+            "SELECT sql FROM sqlite_master WHERE type='trigger' AND name='identities_fts_ai'"
+        ).fetchone()
+        if ai_sql is None or "LOWER" not in ai_sql[0]:
+            for t in ("identities_fts_ai", "identities_fts_au", "identities_fts_ad"):
+                conn.execute(f"DROP TRIGGER IF EXISTS {t}")
+            conn.execute("""
+                CREATE TRIGGER identities_fts_ai AFTER INSERT ON identities BEGIN
+                    INSERT INTO identities_fts(rowid, label) VALUES (new.id, LOWER(new.label));
+                END
+            """)
+            conn.execute("""
+                CREATE TRIGGER identities_fts_au AFTER UPDATE OF label ON identities BEGIN
+                    INSERT INTO identities_fts(identities_fts, rowid, label) VALUES ('delete', old.id, LOWER(old.label));
+                    INSERT INTO identities_fts(rowid, label) VALUES (new.id, LOWER(new.label));
+                END
+            """)
+            conn.execute("""
+                CREATE TRIGGER identities_fts_ad AFTER DELETE ON identities BEGIN
+                    INSERT INTO identities_fts(identities_fts, rowid, label) VALUES ('delete', old.id, LOWER(old.label));
+                END
+            """)
+            # Repopulate with lowercased labels — can't use 'rebuild' here because the
+            # content table would re-read mixed-case labels from identities.label.
+            conn.execute("INSERT INTO identities_fts(identities_fts) VALUES ('delete-all')")
+            conn.execute(
+                "INSERT INTO identities_fts(rowid, label) SELECT id, LOWER(label) FROM identities"
+            )
+    except Exception:
+        pass
+
+    # Populate FTS index for new installations (identities exist but index is empty).
     try:
         identities_count = conn.execute("SELECT COUNT(*) FROM identities").fetchone()[0]
         fts_count = conn.execute("SELECT COUNT(*) FROM identities_fts").fetchone()[0]
         if identities_count > 0 and fts_count == 0:
-            conn.execute("INSERT INTO identities_fts(identities_fts) VALUES ('rebuild')")
+            conn.execute(
+                "INSERT INTO identities_fts(rowid, label) SELECT id, LOWER(label) FROM identities"
+            )
     except Exception:
         pass
 
@@ -527,8 +562,9 @@ def search_identities(
         env_id = _resolve_env(conn, user_id, environment_id)
         type_filter = " AND i.type = ?" if identity_type else ""
         type_param = [identity_type] if identity_type else []
+        q = q.strip().lower()
 
-        if len(q.strip()) < 3:
+        if len(q) < 3:
             rows = conn.execute(
                 _COLS + f"""
                 WHERE i.user_id = ? AND i.environment_id = ?{type_filter}
