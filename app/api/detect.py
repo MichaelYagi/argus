@@ -752,6 +752,8 @@ def _save_crop(img: Any, bbox: tuple[int, int, int, int], padding: float) -> str
     x2 = min(img.width, x + w + pad_x)
     y2 = min(img.height, y + h + pad_y)
     crop = img.crop((x1, y1, x2, y2))
+    if crop.mode != "RGB":
+        crop = crop.convert("RGB")
     crop_dir = crops_dir()
     crop_dir.mkdir(parents=True, exist_ok=True)
     filename = f"{uuid.uuid4().hex}.jpg"
