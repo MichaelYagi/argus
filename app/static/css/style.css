@@ -53,6 +53,29 @@
   --shadow: 0 1px 3px rgba(0,0,0,.5);
 }
 
+[data-theme="garbagefire"] {
+  --bg: #ffff00;
+  --surface: #7fff00;
+  --nav-bg: #ff1493;
+  --nav-text: #ffff00;
+  --accent: #ff4500;
+  --text: #cc0000;
+  --muted: #8b008b;
+  --border: #ff00ff;
+  --hover: #adff2f;
+  --placeholder: #ccff00;
+  --toggle-off: #ff69b4;
+  --danger: #0000cd;
+  --success: #ff1493;
+  --warn: #00ff7f;
+  --shadow: 0 2px 8px rgba(255,0,255,.4);
+}
+[data-theme="garbagefire"] body,
+[data-theme="garbagefire"] input,
+[data-theme="garbagefire"] select,
+[data-theme="garbagefire"] textarea,
+[data-theme="garbagefire"] button { font-family: 'Comic Sans MS', 'Chalkboard SE', cursive; }
+
 * { box-sizing: border-box; margin: 0; padding: 0; }
 
 body {
