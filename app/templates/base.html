@@ -62,8 +62,9 @@ document.addEventListener('DOMContentLoaded', function() {
     localStorage.setItem('argus-theme', t);
     document.querySelectorAll('.theme-opt').forEach(o => {
       const active = o.dataset.theme === t;
-      o.style.fontWeight = active ? '600' : '400';
-      o.style.background = active ? 'var(--hover)' : 'none';
+      o.style.fontWeight = active ? '600' : '';
+      o.style.background = active ? 'var(--hover)' : '';
+      o.style.color      = 'var(--text)';
       o.style.outline = active ? '2px solid var(--accent)' : '';
       o.style.outlineOffset = active ? '1px' : '';
     });
