@@ -62,7 +62,7 @@ document.addEventListener('DOMContentLoaded', function() {
     localStorage.setItem('argus-theme', t);
     document.querySelectorAll('.theme-opt').forEach(o => {
       const active = o.dataset.theme === t;
-      o.style.fontWeight = active ? '600' : '';
+      o.style.fontWeight = active ? '600' : '500';
       o.style.background = active ? 'var(--hover)' : 'none';
       o.style.color      = 'var(--text)';
       o.style.outline = active ? '2px solid var(--accent)' : '';
