@@ -27,6 +27,7 @@ from app.api import (
     media,
     models,
     review,
+    search,
     settings,
     webhooks,
 )
@@ -106,6 +107,7 @@ app.include_router(models.router)
 app.include_router(settings.router)
 app.include_router(logs.router)
 app.include_router(review.router)
+app.include_router(search.router)
 app.include_router(images.router)
 app.include_router(changes.router)
 app.include_router(clusters.router)

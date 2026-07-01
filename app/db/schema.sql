@@ -38,6 +38,26 @@ CREATE TABLE IF NOT EXISTS identities (
     UNIQUE(user_id, environment_id, type, label)
 );
 
+-- identities_fts: FTS5 trigram index for fuzzy identity label search.
+-- Content table points to identities; triggers keep the index in sync.
+CREATE VIRTUAL TABLE IF NOT EXISTS identities_fts USING fts5(
+    label,
+    content='identities',
+    content_rowid='id',
+    tokenize='trigram'
+);
+
+CREATE TRIGGER IF NOT EXISTS identities_fts_ai AFTER INSERT ON identities BEGIN
+    INSERT INTO identities_fts(rowid, label) VALUES (new.id, new.label);
+END;
+CREATE TRIGGER IF NOT EXISTS identities_fts_au AFTER UPDATE OF label ON identities BEGIN
+    INSERT INTO identities_fts(identities_fts, rowid, label) VALUES ('delete', old.id, old.label);
+    INSERT INTO identities_fts(rowid, label) VALUES (new.id, new.label);
+END;
+CREATE TRIGGER IF NOT EXISTS identities_fts_ad AFTER DELETE ON identities BEGIN
+    INSERT INTO identities_fts(identities_fts, rowid, label) VALUES ('delete', old.id, old.label);
+END;
+
 -- source_images: per-user uploaded images; file_path is content-hash based
 -- (same file uploaded by two users shares the file on disk, separate DB rows)
 CREATE TABLE IF NOT EXISTS source_images (

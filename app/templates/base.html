@@ -129,6 +129,83 @@ document.addEventListener('DOMContentLoaded', function() {
   }
   updateBurgerDot();
 
+  // Nav search
+  (function() {
+    const wrap  = document.getElementById('nav-search-wrap');
+    const input = document.getElementById('nav-search-input');
+    const drop  = document.getElementById('nav-search-dropdown');
+    if (!wrap || !input || !drop) return;
+
+    let timer = null;
+    let lastQ  = '';
+
+    function close() { drop.style.display = 'none'; drop.innerHTML = ''; }
+
+    function render(items, q) {
+      if (!items.length) {
+        drop.innerHTML = '<div class="ns-empty">No results for “' + q + '”</div>';
+      } else {
+        drop.innerHTML = items.map(function(it) {
+          var thumb = it.cover_url
+            ? '<img src="' + it.cover_url + '" class="ns-thumb" alt="">'
+            : '<span class="ns-thumb ns-ph">' + (it.label[0] || '?') + '</span>';
+          var badge = '<span class="ns-badge ns-badge-' + it.type + '">' + it.type + '</span>';
+          var cnt   = it.detection_count ? '<span class="ns-count">' + it.detection_count + '</span>' : '';
+          return '<a href="/identities/' + it.id + '" class="ns-item">'
+            + thumb + '<span class="ns-label">' + it.label + '</span>' + badge + cnt + '</a>';
+        }).join('');
+      }
+      drop.style.display = 'block';
+    }
+
+    async function run(q) {
+      lastQ = q;
+      if (!q.trim()) { close(); return; }
+      try {
+        var r = await fetch('/api/search?q=' + encodeURIComponent(q) + '&limit=8');
+        if (q !== lastQ) return;
+        if (r.status === 401 || r.status === 403) { close(); return; }
+        if (!r.ok) { close(); return; }
+        var data = await r.json();
+        if (q !== lastQ) return;
+        render(data.items, q);
+      } catch(e) { close(); }
+    }
+
+    input.addEventListener('input', function() {
+      clearTimeout(timer);
+      var q = input.value;
+      if (!q.trim()) { close(); return; }
+      timer = setTimeout(function() { run(q); }, 220);
+    });
+
+    input.addEventListener('keydown', function(e) {
+      if (e.key === 'Escape') { close(); input.blur(); return; }
+      if (e.key === 'Enter') {
+        var f = drop.querySelector('.ns-item');
+        if (f) window.location = f.href;
+        return;
+      }
+      if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        var f = drop.querySelector('.ns-item');
+        if (f) f.focus();
+      }
+    });
+
+    drop.addEventListener('keydown', function(e) {
+      var items = [...drop.querySelectorAll('.ns-item')];
+      var idx = items.indexOf(document.activeElement);
+      if (e.key === 'ArrowDown') { e.preventDefault(); items[(idx + 1) % items.length]?.focus(); }
+      else if (e.key === 'ArrowUp') { e.preventDefault(); idx <= 0 ? input.focus() : items[idx - 1].focus(); }
+      else if (e.key === 'Escape') { close(); input.focus(); }
+    });
+
+    document.addEventListener('click', function(e) {
+      if (!wrap.contains(e.target)) close();
+    });
+  })();
+
   const envModal = document.getElementById('env-modal');
   if (envModal) {
     const openEnv  = () => { envModal.style.display = 'flex'; };
@@ -290,7 +367,15 @@ setInterval(_updateSuggestedDot, 30000);
     <span class="brand">Argus</span>
   </a>
 
-  <span class="nav-spacer nav-desktop"></span>
+  {% if username %}
+  <div id="nav-search-wrap" class="nav-search-wrap">
+    <input id="nav-search-input" type="search" autocomplete="off" spellcheck="false"
+           placeholder="Search people and objects...">
+    <div id="nav-search-dropdown" class="nav-search-dropdown"></div>
+  </div>
+  {% else %}
+  <span style="flex:1"></span>
+  {% endif %}
 
   {% if environments is defined and environments %}
   <button type="button" class="nav-desktop env-manage-btn" title="Manage environments"
@@ -347,7 +432,6 @@ setInterval(_updateSuggestedDot, 30000);
   </form>
 
   <!-- Mobile hamburger -->
-  <span class="nav-spacer nav-mobile"></span>
   <button class="nav-burger" id="nav-burger" aria-label="Menu" onclick="
     var m = document.getElementById('mobile-menu');
     m.hidden = !m.hidden;

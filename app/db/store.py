@@ -227,6 +227,16 @@ def _migrate(conn: sqlite3.Connection) -> None:
     # Reconcile orphaned references left by older builds / direct DB edits.
     _reconcile_orphan_references(conn)
 
+    # Populate FTS index for existing rows — triggers handle future mutations.
+    # Only needed once: if identities exist but the index is empty (initial migration).
+    try:
+        identities_count = conn.execute("SELECT COUNT(*) FROM identities").fetchone()[0]
+        fts_count = conn.execute("SELECT COUNT(*) FROM identities_fts").fetchone()[0]
+        if identities_count > 0 and fts_count == 0:
+            conn.execute("INSERT INTO identities_fts(identities_fts) VALUES ('rebuild')")
+    except Exception:
+        pass
+
 
 # ---------------------------------------------------------------------------
 # Environment resolution helper
@@ -500,6 +510,62 @@ def set_model_active(model_id: int, model_type: str) -> None:
 # ---------------------------------------------------------------------------
 # Identities (per-user)
 # ---------------------------------------------------------------------------
+
+def search_identities(
+    user_id: int, q: str, environment_id: int,
+    limit: int = 10, identity_type: str | None = None,
+) -> list[sqlite3.Row]:
+    """FTS5 trigram search over identity labels; falls back to LIKE for <3-char queries."""
+    _COLS = """
+        SELECT i.id, i.label, i.type,
+               d.crop_path AS cover_crop_path,
+               (SELECT COUNT(*) FROM detections dc WHERE dc.identity_id = i.id) AS detection_count
+        FROM identities i
+        LEFT JOIN detections d ON d.id = i.cover_detection_id
+    """
+    with _connect() as conn:
+        env_id = _resolve_env(conn, user_id, environment_id)
+        type_filter = " AND i.type = ?" if identity_type else ""
+        type_param = [identity_type] if identity_type else []
+
+        if len(q.strip()) < 3:
+            rows = conn.execute(
+                _COLS + f"""
+                WHERE i.user_id = ? AND i.environment_id = ?{type_filter}
+                  AND LOWER(i.label) LIKE LOWER(?)
+                ORDER BY i.label LIMIT ?
+                """,
+                [user_id, env_id] + type_param + [f"%{q}%", limit],
+            ).fetchall()
+        else:
+            safe_q = q.replace('"', '""')
+            try:
+                rows = conn.execute(
+                    f"""
+                    SELECT i.id, i.label, i.type,
+                           d.crop_path AS cover_crop_path,
+                           (SELECT COUNT(*) FROM detections dc WHERE dc.identity_id = i.id) AS detection_count
+                    FROM identities_fts
+                    JOIN identities i ON identities_fts.rowid = i.id
+                    LEFT JOIN detections d ON d.id = i.cover_detection_id
+                    WHERE identities_fts MATCH ?
+                      AND i.user_id = ? AND i.environment_id = ?{type_filter}
+                    ORDER BY bm25(identities_fts)
+                    LIMIT ?
+                    """,
+                    [f'"{safe_q}"', user_id, env_id] + type_param + [limit],
+                ).fetchall()
+            except Exception:
+                rows = conn.execute(
+                    _COLS + f"""
+                    WHERE i.user_id = ? AND i.environment_id = ?{type_filter}
+                      AND LOWER(i.label) LIKE LOWER(?)
+                    ORDER BY i.label LIMIT ?
+                    """,
+                    [user_id, env_id] + type_param + [f"%{q}%", limit],
+                ).fetchall()
+        return rows
+
 
 def list_identities(
     user_id: int,

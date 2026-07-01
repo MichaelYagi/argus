@@ -155,6 +155,56 @@ a:hover { text-decoration: underline; }
 
 @keyframes spin { to { transform: rotate(360deg); } }
 
+/* ---------- Nav search ---------- */
+.nav-search-wrap {
+  flex: 1; min-width: 0; position: relative;
+  padding: 0 10px;
+}
+.nav-search-wrap input[type=search] {
+  width: 100%; background: rgba(255,255,255,.08);
+  border: 1px solid rgba(255,255,255,.13); border-radius: 6px;
+  color: #fff; font-size: 13px; padding: 5px 10px;
+  outline: none; font-family: inherit;
+  transition: border-color .15s, background .15s;
+  -webkit-appearance: none;
+}
+.nav-search-wrap input[type=search]::placeholder { color: var(--nav-text); }
+.nav-search-wrap input[type=search]:focus {
+  border-color: rgba(255,255,255,.35); background: rgba(255,255,255,.12);
+}
+.nav-search-dropdown {
+  display: none; position: absolute;
+  top: calc(100% + 6px); left: 10px; right: 10px;
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: 8px; box-shadow: 0 4px 20px rgba(0,0,0,.35);
+  z-index: 400; overflow: hidden;
+}
+.ns-empty { padding: 12px 14px; font-size: 13px; color: var(--muted); }
+.ns-item {
+  display: flex; align-items: center; gap: 10px;
+  padding: 8px 12px; text-decoration: none; color: var(--text);
+  font-size: 13px; border-bottom: 1px solid var(--border);
+}
+.ns-item:last-child { border-bottom: none; }
+.ns-item:hover, .ns-item:focus { background: var(--hover); outline: none; color: var(--text); }
+.ns-thumb {
+  width: 32px; height: 32px; border-radius: 4px;
+  object-fit: cover; flex-shrink: 0; display: block;
+}
+.ns-ph {
+  background: var(--placeholder); display: flex;
+  align-items: center; justify-content: center;
+  font-size: 13px; font-weight: 600; color: var(--muted);
+}
+.ns-label { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ns-badge {
+  font-size: 10px; font-weight: 600; padding: 2px 6px;
+  border-radius: 99px; flex-shrink: 0;
+}
+.ns-badge-face   { background: rgba(59,130,246,.15); color: #3b82f6; }
+.ns-badge-object { background: rgba(16,185,129,.15); color: #10b981; }
+.ns-count { font-size: 11px; color: var(--muted); flex-shrink: 0; }
+
 /* ---------- Desktop sidebar ---------- */
 .desktop-sidebar {
   display: none;
