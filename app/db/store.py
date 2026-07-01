@@ -553,7 +553,10 @@ def search_identities(
     """FTS5 trigram search over identity labels; falls back to LIKE for <3-char queries."""
     _COLS = """
         SELECT i.id, i.label, i.type,
-               d.crop_path AS cover_crop_path,
+               COALESCE(d.crop_path, (
+                   SELECT crop_path FROM detections
+                   WHERE identity_id = i.id ORDER BY detected_at ASC LIMIT 1
+               )) AS cover_crop_path,
                (SELECT COUNT(*) FROM detections dc WHERE dc.identity_id = i.id) AS detection_count
         FROM identities i
         LEFT JOIN detections d ON d.id = i.cover_detection_id
