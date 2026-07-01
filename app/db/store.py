@@ -243,13 +243,15 @@ def _migrate(conn: sqlite3.Connection) -> None:
             """)
             conn.execute("""
                 CREATE TRIGGER identities_fts_au AFTER UPDATE OF label ON identities BEGIN
-                    INSERT INTO identities_fts(identities_fts, rowid, label) VALUES ('delete', old.id, LOWER(old.label));
+                    INSERT INTO identities_fts(identities_fts, rowid, label)
+                        VALUES ('delete', old.id, LOWER(old.label));
                     INSERT INTO identities_fts(rowid, label) VALUES (new.id, LOWER(new.label));
                 END
             """)
             conn.execute("""
                 CREATE TRIGGER identities_fts_ad AFTER DELETE ON identities BEGIN
-                    INSERT INTO identities_fts(identities_fts, rowid, label) VALUES ('delete', old.id, LOWER(old.label));
+                    INSERT INTO identities_fts(identities_fts, rowid, label)
+                        VALUES ('delete', old.id, LOWER(old.label));
                 END
             """)
             # Repopulate with lowercased labels — can't use 'rebuild' here because the
