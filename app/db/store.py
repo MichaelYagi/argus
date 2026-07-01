@@ -575,6 +575,7 @@ def search_identities(
             ).fetchall()
         else:
             safe_q = q.replace('"', '""')
+            rows = []
             try:
                 rows = conn.execute(
                     f"""
@@ -592,6 +593,8 @@ def search_identities(
                     [f'"{safe_q}"', user_id, env_id] + type_param + [limit],
                 ).fetchall()
             except Exception:
+                pass
+            if not rows:
                 rows = conn.execute(
                     _COLS + f"""
                     WHERE i.user_id = ? AND i.environment_id = ?{type_filter}
