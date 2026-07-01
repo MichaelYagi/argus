@@ -63,9 +63,7 @@ document.addEventListener('DOMContentLoaded', function() {
     document.querySelectorAll('.theme-opt').forEach(o => {
       const active = o.dataset.theme === t;
       o.style.fontWeight = active ? '600' : '400';
-      o.style.background = active ? 'rgba(255,255,255,.1)' : 'none';
-      // Accent ring so the active theme is obvious in both the desktop list and the
-      // icon-only mobile picker (where the faint background tint isn't visible enough).
+      o.style.background = active ? 'var(--hover)' : 'none';
       o.style.outline = active ? '2px solid var(--accent)' : '';
       o.style.outlineOffset = active ? '1px' : '';
     });
@@ -384,7 +382,8 @@ setInterval(_updateSuggestedDot, 30000);
                      border:none;cursor:pointer;border-radius:5px;background:none;
                      font-size:13px;font-family:inherit;text-align:left;width:100%;color:var(--text)">
         <span style="display:flex;flex-direction:column;width:14px;height:14px;
-                     border-radius:2px;overflow:hidden;flex-shrink:0">
+                     border-radius:2px;overflow:hidden;flex-shrink:0;
+                     border:1px solid rgba(0,0,0,.15)">
           <span style="flex:1;background:{{ c1 }}"></span>
           <span style="flex:1;background:{{ c2 }}"></span>
           <span style="flex:1;background:{{ c3 }}"></span>
