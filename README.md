@@ -239,6 +239,8 @@ Each user has one or more named environments. All recognition data — identitie
 
 All `/api/*` routes require an `X-API-Key` header **or** a valid browser session (for same-origin UI calls — no header needed when calling from the browser while logged in).
 
+**Cross-origin requests (CORS):** Argus includes `CORSMiddleware` with `allow_origins=["*"]`, so browser-side calls from other LAN hosts (e.g. a separate web app on a different IP or port) work without a proxy. Authentication is still enforced via `X-API-Key` on every request.
+
 **Get an API key:**
 1. Sign in at `http://localhost:8100`
 2. Go to **Account** → click **Create key**, choose an environment and type a label → copy the key (shown once — the last four characters are displayed afterwards as a hint so you can tell keys apart)
@@ -545,7 +547,7 @@ Response:
 }
 ```
 
-Queries shorter than 3 characters fall back to a `LIKE` substring match. The FTS index is built automatically on first startup — no migration steps required.
+Queries shorter than 3 characters fall back to a case-insensitive `LIKE` substring match; the same fallback fires if the FTS index is empty. The FTS index is built automatically on first startup — no migration steps required. `cover_url` is populated from the identity's oldest detection crop when no explicit cover has been selected, matching what the gallery page shows.
 
 ---
 

@@ -5,7 +5,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
-## [Unreleased]
+## [0.1.0-alpha.8] — 2026-07-01
 
 ### Added
 
@@ -19,10 +19,13 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - **Nav search bar.** A search input spanning the top bar on both desktop and mobile. Type to see up to 8 identity matches in a dropdown (debounced 220ms); keyboard-navigable with arrow keys, Enter, and Escape. Backed by `GET /api/search`.
 - **Desktop sidebar navigation.** The top-bar nav groups and carets are replaced by a persistent left sidebar (220px). Toggled by a hamburger button on the left of the top bar; state persisted in `localStorage`. The top bar retains the environment picker, account link, theme picker, and sign-out button. When the sidebar is collapsed and any notification dot or badge count is active, a red dot appears on the hamburger. Webhooks moves to the sidebar as its own section. Mobile drawer is unchanged.
 - **Garbagefire theme.** A deliberately hideous high-contrast theme: yellow background, chartreuse surfaces, hot-pink nav, Comic Sans font throughout.
+- **CORS support.** `CORSMiddleware` added (`allow_origins=["*"]`), allowing browser-side cross-origin calls to the API from other LAN hosts (e.g. a separate web app calling Argus's `/api/*` routes directly). No configuration needed.
 
 ### Fixed
 
 - **RGBA crop crash.** Detecting faces or objects in PNG images with an alpha channel caused a 500 error when saving the crop as JPEG (`cannot write mode RGBA as JPEG`). The crop is now converted to RGB before saving.
+- **`GET /api/search` case-insensitivity.** The FTS5 index stored labels with original casing; queries were not normalized, so "brian" would not match "Brian" on builds where the trigram tokenizer's case-folding is not guaranteed. The index now stores `LOWER(label)` (triggers updated, existing index rebuilt on next startup) and all queries are lowercased before matching. A `LIKE` fallback fires when the FTS5 path returns no results, making search resilient to a stale or empty index.
+- **`GET /api/search` `cover_url` always null.** `cover_url` was null for any identity whose `cover_detection_id` had not been explicitly set via enrollment or the cover-selection UI, even though the gallery page shows a cover for those identities. The search response now falls back to the oldest detection's crop — the same logic used by the gallery — so `cover_url` is populated whenever any detection exists.
 
 ---
 
@@ -290,7 +293,7 @@ Initial alpha release.
 
 ---
 
-[Unreleased]: https://github.com/MichaelYagi/argus/compare/v0.1.0-alpha.7...HEAD
+[0.1.0-alpha.8]: https://github.com/MichaelYagi/argus/compare/v0.1.0-alpha.7...v0.1.0-alpha.8
 [0.1.0-alpha.7]: https://github.com/MichaelYagi/argus/compare/v0.1.0-alpha.6...v0.1.0-alpha.7
 [0.1.0-alpha.6]: https://github.com/MichaelYagi/argus/compare/v0.1.0-alpha.5...v0.1.0-alpha.6
 [0.1.0-alpha.5]: https://github.com/MichaelYagi/argus/compare/v0.1.0-alpha.4...v0.1.0-alpha.5
