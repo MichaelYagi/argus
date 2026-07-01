@@ -118,7 +118,7 @@ nav form button:hover { border-color: rgba(255,255,255,.4); color: #fff; }
 /* Theme picker dropdown — ensure text color is always the page's --text, not the nav's
    --nav-text. The mobile-menu button rule has higher specificity, but those swatches are
    icon-only so it doesn't matter there. */
-#theme-menu .theme-opt { color: var(--text); }
+#theme-menu .theme-opt { color: var(--text); font-weight: 500; }
 
 /* Mobile menu indented sub-items */
 .mobile-menu a.mobile-sub { padding-left: 36px; font-size: 13px; opacity: .9; }
