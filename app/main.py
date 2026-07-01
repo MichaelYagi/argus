@@ -7,6 +7,7 @@ import os
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from starlette.middleware.sessions import SessionMiddleware
 
@@ -84,6 +85,12 @@ def _autoload_engines() -> None:
 
 app = FastAPI(title="Argus", version=__version__, lifespan=lifespan, docs_url=None)
 
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 app.add_middleware(
     SessionMiddleware,
     secret_key=os.environ.get("SECRET_KEY", "change-me"),
