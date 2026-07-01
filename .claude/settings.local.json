@@ -176,7 +176,8 @@
       "Bash(python3 *)",
       "Bash(/mnt/c/Users/Michael/Documents/development/argus/.venv/bin/ruff check *)",
       "Read(//mnt/c/Users/Michael/**)",
-      "Bash(grep -o \".\\\\{0,20\\\\}'\")"
+      "Bash(grep -o \".\\\\{0,20\\\\}'\")",
+      "Bash(sort -t: -k2 -rn)"
     ]
   }
 }
