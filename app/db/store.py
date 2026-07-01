@@ -555,7 +555,7 @@ def search_identities(
         SELECT i.id, i.label, i.type,
                COALESCE(d.crop_path, (
                    SELECT crop_path FROM detections
-                   WHERE identity_id = i.id ORDER BY detected_at ASC LIMIT 1
+                   WHERE identity_id = i.id ORDER BY detected_at ASC, id ASC LIMIT 1
                )) AS cover_crop_path,
                (SELECT COUNT(*) FROM detections dc WHERE dc.identity_id = i.id) AS detection_count
         FROM identities i
@@ -583,7 +583,10 @@ def search_identities(
                 rows = conn.execute(
                     f"""
                     SELECT i.id, i.label, i.type,
-                           d.crop_path AS cover_crop_path,
+                           COALESCE(d.crop_path, (
+                               SELECT crop_path FROM detections
+                               WHERE identity_id = i.id ORDER BY detected_at ASC, id ASC LIMIT 1
+                           )) AS cover_crop_path,
                            (SELECT COUNT(*) FROM detections dc WHERE dc.identity_id = i.id) AS detection_count
                     FROM identities_fts
                     JOIN identities i ON identities_fts.rowid = i.id
