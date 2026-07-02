@@ -196,6 +196,8 @@ async def enroll_new(
         store.compute_and_store_representative(identity_id, model_id)
         from app.core import face_index as _fi
         _fi.rebuild_user(user_id, environment_id)
+    from app.core import activity_buffer as _ab
+    _ab.emit("enrollment", f"New face enrolled: {name}")
     return {"identity_id": identity_id, "label": name, "embeddings": 1,
             "embedding_id": embedding_id, "detection_id": detection_id,
             "external_ref": external_ref,
@@ -252,6 +254,8 @@ async def enroll_existing(
         from app.core import face_index as _fi
         _fi.rebuild_user(user_id, environment_id)
     identity = store.get_identity(identity_id, user_id, environment_id)
+    from app.core import activity_buffer as _ab
+    _ab.emit("enrollment", f"Face sample added to {identity['label'] if identity else identity_id}")
     return {
         "embedding_id": embedding_id,
         "identity_id": identity_id,

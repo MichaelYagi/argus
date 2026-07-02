@@ -160,10 +160,15 @@
               box-shadow:var(--shadow);width:min(960px,96%);max-height:85vh;
               display:flex;flex-direction:column">
     <div style="display:flex;align-items:center;gap:12px;padding:12px 16px;border-bottom:1px solid var(--border)">
-      <strong>Logs</strong>
+      <div style="display:flex;flex-shrink:0">
+        <button type="button" id="tab-activity-btn" class="btn btn-primary"
+                style="font-size:12px;padding:3px 12px;border-radius:6px 0 0 6px">Activity</button>
+        <button type="button" id="tab-logs-btn" class="btn btn-ghost"
+                style="font-size:12px;padding:3px 12px;border-radius:0 6px 6px 0">Logs</button>
+      </div>
       <input id="logs-filter" type="text" placeholder="Filter… (use -term to exclude)"
-             style="flex:1;min-width:120px;font-size:12px;padding:4px 8px">
-      <button class="btn btn-ghost" id="logs-copy" type="button" title="Copy logs"
+             style="flex:1;min-width:120px;font-size:12px;padding:4px 8px;display:none">
+      <button class="btn btn-ghost" id="logs-copy" type="button" title="Copy to clipboard"
               style="font-size:12px;display:inline-flex;align-items:center">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"
              stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -174,14 +179,16 @@
       <button class="btn btn-ghost" id="logs-refresh" type="button" style="font-size:12px">Refresh</button>
       <button class="btn btn-ghost" id="logs-close" type="button" style="font-size:12px">Close</button>
     </div>
-    <div id="logs-levels" style="display:flex;gap:6px;flex-wrap:wrap;padding:10px 16px;border-bottom:1px solid var(--border)">
+    <div id="logs-levels" style="display:none;gap:6px;flex-wrap:wrap;padding:10px 16px;border-bottom:1px solid var(--border)">
       <button type="button" class="btn logs-level-btn" data-level="DEBUG" style="font-size:12px;padding:3px 12px">Debug</button>
       <button type="button" class="btn logs-level-btn" data-level="INFO" style="font-size:12px;padding:3px 12px">Info</button>
       <button type="button" class="btn logs-level-btn" data-level="WARNING" style="font-size:12px;padding:3px 12px">Warning</button>
       <button type="button" class="btn logs-level-btn" data-level="ERROR" style="font-size:12px;padding:3px 12px">Error</button>
       <button type="button" class="btn logs-level-btn" data-level="CRITICAL" style="font-size:12px;padding:3px 12px">Critical</button>
     </div>
-    <pre id="logs-output" style="margin:0;overflow:auto;flex:1;min-height:240px;padding:12px 16px;
+    <div id="activity-output" style="margin:0;overflow:auto;flex:1;min-height:240px;padding:12px 16px;
+         font-size:12px;line-height:1.6;white-space:pre-wrap;word-break:break-word"></div>
+    <pre id="logs-output" style="display:none;margin:0;overflow:auto;flex:1;min-height:240px;padding:12px 16px;
          font-size:12px;line-height:1.5;white-space:pre-wrap;word-break:break-word"></pre>
   </div>
 </div>
@@ -192,19 +199,27 @@
 <script src="/static/js/settings.js"></script>
 <script>
 (() => {
-  const modal    = document.getElementById('logs-modal');
-  const output   = document.getElementById('logs-output');
-  const filterEl = document.getElementById('logs-filter');
-  const levelBtns = Array.from(document.querySelectorAll('.logs-level-btn'));
+  const modal          = document.getElementById('logs-modal');
+  const output         = document.getElementById('logs-output');
+  const activityOutput = document.getElementById('activity-output');
+  const filterEl       = document.getElementById('logs-filter');
+  const levelsEl       = document.getElementById('logs-levels');
+  const levelBtns      = Array.from(document.querySelectorAll('.logs-level-btn'));
+  const tabActivityBtn = document.getElementById('tab-activity-btn');
+  const tabLogsBtn     = document.getElementById('tab-logs-btn');
   if (!modal) return;
+
+  let activeTab = 'activity';
 
   function esc(s) {
     return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
   }
-  const COLORS = { ERROR:'#e53e3e', CRITICAL:'#e53e3e', WARNING:'#d69e2e', INFO:'var(--muted)', DEBUG:'var(--muted)' };
 
+  // ---- Logs tab ----
+
+  const LEVEL_COLORS = { ERROR:'#e53e3e', CRITICAL:'#e53e3e', WARNING:'#d69e2e', INFO:'var(--muted)', DEBUG:'var(--muted)' };
   let lines = [];
-  const activeLevels = new Set(levelBtns.map(b => b.dataset.level));  // all on by default
+  const activeLevels = new Set(levelBtns.map(b => b.dataset.level));
 
   function syncLevelButtons() {
     levelBtns.forEach(b => {
@@ -214,7 +229,6 @@
     });
   }
 
-  // Space-separated terms: a plain term must be present, a -term must be absent.
   function matches(line) {
     if (!activeLevels.has(line.level)) return false;
     const terms = filterEl.value.trim().toLowerCase().split(/\s+/).filter(Boolean);
@@ -229,14 +243,14 @@
 
   function render() {
     const shown = lines.filter(matches);
-    if (!lines.length)      { output.textContent = 'No log lines in the buffer.'; return; }
-    if (!shown.length)      { output.textContent = 'No lines match the filter.'; return; }
+    if (!lines.length) { output.textContent = 'No log lines in the buffer.'; return; }
+    if (!shown.length) { output.textContent = 'No lines match the filter.'; return; }
     output.innerHTML = shown.map(l =>
       `<div><span style="color:var(--muted)">${esc(l.time)}</span> ` +
-      `<strong style="color:${COLORS[l.level] || 'var(--text)'}">${esc(l.level)}</strong> ` +
+      `<strong style="color:${LEVEL_COLORS[l.level] || 'var(--text)'}">${esc(l.level)}</strong> ` +
       `<span style="color:var(--muted)">${esc(l.logger)}</span> ${esc(l.message)}</div>`
     ).join('');
-    output.scrollTop = output.scrollHeight;  // newest at the bottom
+    output.scrollTop = output.scrollHeight;
   }
 
   async function load() {
@@ -252,17 +266,71 @@
     }
   }
 
-  function open()  { syncLevelButtons(); modal.style.display = 'flex'; load(); }
+  // ---- Activity tab ----
+
+  const CAT_COLORS = {
+    detection:  'var(--muted)',
+    identity:   '#38a169',
+    enrollment: '#805ad5',
+    model:      '#d69e2e',
+    settings:   'var(--muted)',
+  };
+
+  function renderActivity(events) {
+    if (!events.length) { activityOutput.textContent = 'No activity yet.'; return; }
+    activityOutput.innerHTML = events.map(e =>
+      `<div><span style="color:var(--muted)">${esc(e.time)}</span> ` +
+      `<span style="color:${CAT_COLORS[e.category] || 'var(--text)'}">` +
+      `[${esc(e.category)}]</span> ${esc(e.message)}</div>`
+    ).join('');
+  }
+
+  async function loadActivity() {
+    activityOutput.textContent = 'Loading…';
+    try {
+      const r = await fetch('/api/activity');
+      if (!r.ok) { activityOutput.textContent = 'Failed to load activity (' + r.status + ').'; return; }
+      const data = await r.json();
+      renderActivity(data.events || []);
+    } catch (e) {
+      activityOutput.textContent = 'Failed to load activity.';
+    }
+  }
+
+  // ---- Tab switching ----
+
+  function switchTab(tab) {
+    activeTab = tab;
+    tabActivityBtn.classList.toggle('btn-primary', tab === 'activity');
+    tabActivityBtn.classList.toggle('btn-ghost',   tab !== 'activity');
+    tabLogsBtn.classList.toggle('btn-primary', tab === 'logs');
+    tabLogsBtn.classList.toggle('btn-ghost',   tab !== 'logs');
+    filterEl.style.display       = tab === 'logs' ? '' : 'none';
+    levelsEl.style.display       = tab === 'logs' ? 'flex' : 'none';
+    activityOutput.style.display = tab === 'activity' ? '' : 'none';
+    output.style.display         = tab === 'logs' ? '' : 'none';
+    if (tab === 'logs') syncLevelButtons();
+  }
+
+  // ---- Open / close ----
+
+  function open() {
+    modal.style.display = 'flex';
+    if (activeTab === 'activity') loadActivity(); else { syncLevelButtons(); load(); }
+  }
+
   function close() { modal.style.display = 'none'; }
 
-  async function copyLogs() {
-    const text = output.innerText || '';
+  // ---- Copy ----
+
+  async function copyContent() {
+    const el = activeTab === 'activity' ? activityOutput : output;
+    const text = el.innerText || '';
     if (!text.trim()) return;
     try {
       if (navigator.clipboard && window.isSecureContext) {
         await navigator.clipboard.writeText(text);
       } else {
-        // Fallback for plain LAN HTTP, where the clipboard API isn't available.
         const ta = document.createElement('textarea');
         ta.value = text;
         ta.style.cssText = 'position:fixed;top:0;left:0;opacity:0';
@@ -271,16 +339,22 @@
         document.execCommand('copy');
         ta.remove();
       }
-      if (window.showToast) showToast('Logs copied to clipboard', 'success');
+      if (window.showToast) showToast('Copied to clipboard', 'success');
     } catch (e) {
       if (window.showToast) showToast('Copy failed', 'error');
     }
   }
 
+  // ---- Wire up ----
+
+  tabActivityBtn.addEventListener('click', () => { switchTab('activity'); loadActivity(); });
+  tabLogsBtn.addEventListener('click',    () => { switchTab('logs'); load(); });
   document.getElementById('view-logs-btn').addEventListener('click', open);
   document.getElementById('logs-close').addEventListener('click', close);
-  document.getElementById('logs-copy').addEventListener('click', copyLogs);
-  document.getElementById('logs-refresh').addEventListener('click', load);
+  document.getElementById('logs-copy').addEventListener('click', copyContent);
+  document.getElementById('logs-refresh').addEventListener('click', () => {
+    if (activeTab === 'activity') loadActivity(); else load();
+  });
   filterEl.addEventListener('input', render);
   levelBtns.forEach(b => b.addEventListener('click', () => {
     const lv = b.dataset.level;

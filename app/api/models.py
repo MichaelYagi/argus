@@ -106,6 +106,8 @@ async def activate_model(model_id: int, user_id: int = Depends(require_admin)):
         registry.swap_object_engine(engine)
 
     store.set_model_active(model_id, row["type"])
+    from app.core import activity_buffer as _ab
+    _ab.emit("model", f"Model activated: {row['name']} ({row['type']})")
     return _fmt(store.get_model(model_id))
 
 

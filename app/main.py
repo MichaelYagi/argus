@@ -13,6 +13,7 @@ from starlette.middleware.sessions import SessionMiddleware
 
 from app import __version__
 from app.api import (
+    activity,
     changes,
     clusters,
     detect,
@@ -32,7 +33,7 @@ from app.api import (
     settings,
     webhooks,
 )
-from app.core import log_buffer, settings_cache
+from app.core import activity_buffer, log_buffer, settings_cache
 from app.db import store
 from app.pages import account, auth, bulk, main_pages, tag
 from app.pages import keys as keys_page
@@ -47,7 +48,9 @@ async def lifespan(app: FastAPI):
     store.init_db()
     settings_cache.cache.load()
     _row = store.get_setting("system.log_buffer_size")
-    log_buffer.install(int(_row["value"]) if _row else log_buffer.DEFAULT_SIZE)
+    _buf_size = int(_row["value"]) if _row else log_buffer.DEFAULT_SIZE
+    log_buffer.install(_buf_size)
+    activity_buffer.install(_buf_size)
     _autoload_engines()
     yield
 
@@ -103,6 +106,7 @@ app.mount("/static", StaticFiles(directory="app/static"), name="static")
 
 # API routes
 app.include_router(health.router)
+app.include_router(activity.router)
 app.include_router(detect.router)
 app.include_router(jobs.router)
 app.include_router(environments.router)

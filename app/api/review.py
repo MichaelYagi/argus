@@ -132,6 +132,9 @@ async def reassign(
 
     store.reassign_detection(detection_id, user_id, identity_id, environment_id)
     _enroll_confirmed(detection_id, user_id, environment_id)  # human named this face — enroll unconditionally
+    from app.core import activity_buffer as _ab
+    ident = store.get_identity(identity_id, user_id, environment_id)
+    _ab.emit("identity", f"Face reassigned to {ident['label'] if ident else identity_id}")
     return {"detection_id": detection_id, "identity_id": identity_id, "review_status": "reassigned"}
 
 
@@ -175,6 +178,16 @@ async def bulk_review(
     # Rejects (and any reference changes above) may have altered the set — refresh once.
     from app.core import face_index as _fi
     _fi.rebuild_user(user_id, environment_id)
+    from app.core import activity_buffer as _ab
+    n_confirmed  = sum(1 for r in results if r.get("status") == "confirmed")
+    n_rejected   = sum(1 for r in results if r.get("status") == "rejected")
+    n_reassigned = sum(1 for r in results if r.get("status") == "reassigned")
+    parts: list[str] = []
+    if n_confirmed:  parts.append(f"{n_confirmed} confirmed")
+    if n_rejected:   parts.append(f"{n_rejected} rejected")
+    if n_reassigned: parts.append(f"{n_reassigned} reassigned")
+    if parts:
+        _ab.emit("identity", f"Bulk review: {', '.join(parts)}")
     return results
 
 
@@ -226,6 +239,10 @@ async def label_detection(
     store.label_detection(detection_id, user_id, identity_id, environment_id)
     _enroll_confirmed(detection_id, user_id, environment_id)
     identity = store.get_identity(identity_id, user_id, environment_id)
+    from app.core import activity_buffer as _ab
+    lbl = identity["label"] if identity else str(identity_id)
+    kind = "Face" if det["type"] == "face" else "Object"
+    _ab.emit("identity", f"{kind} identified as {lbl}")
     return {
         "detection_id": detection_id,
         "identity_id": identity_id,

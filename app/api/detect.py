@@ -9,7 +9,7 @@ from typing import Any
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request
 
-from app.core import settings_cache
+from app.core import activity_buffer as _ab, settings_cache
 from app.core.auth import require_auth, require_env_id
 from app.core.engine_registry import registry
 from app.core.image_input import (
@@ -56,6 +56,7 @@ async def detect_faces(
         _clear_detections(user_id, environment_id, source_id, "face")
     result = {"source_image_id": source_id, "external_ref": external_ref,
               "faces": _run_faces(user_id, environment_id, img, source_id, label=label)}
+    _emit_det(len(result["faces"]), 0, external_ref)
     from app.core import webhook
     webhook.fire(user_id, environment_id, "detection.created",
                  {"source_image_id": source_id, "external_ref": external_ref, "type": "face"})
@@ -84,6 +85,7 @@ async def detect_objects(
         _clear_detections(user_id, environment_id, source_id, "object")
     result = {"source_image_id": source_id, "external_ref": external_ref,
               "objects": _run_objects(user_id, environment_id, img, source_id)}
+    _emit_det(0, len(result["objects"]), external_ref)
     from app.core import webhook
     webhook.fire(user_id, environment_id, "detection.created",
                  {"source_image_id": source_id, "external_ref": external_ref, "type": "object"})
@@ -117,6 +119,7 @@ async def detect_all(
         "faces": _run_faces(user_id, environment_id, img, source_id, label=label),
         "objects": _run_objects(user_id, environment_id, img, source_id),
     }
+    _emit_det(len(result["faces"]), len(result["objects"]), external_ref)
     from app.core import webhook
     webhook.fire(user_id, environment_id, "detection.created",
                  {"source_image_id": source_id, "external_ref": external_ref, "type": "all"})
@@ -471,6 +474,7 @@ def _run_detection_job(
             result["faces"] = _run_faces(user_id, environment_id, img, source_id, label=label)
         if det_type in ("object", "all"):
             result["objects"] = _run_objects(user_id, environment_id, img, source_id)
+        _emit_det(len(result.get("faces", [])), len(result.get("objects", [])), external_ref)
         store.update_job(job_id, "complete", result)
         webhook.fire(user_id, environment_id, "job.done", {"job_id": job_id, "status": "complete", **result})
     except HTTPException as exc:
@@ -511,6 +515,11 @@ def _run_bulk_job(
             base["error"] = str(exc)
         results.append(base)
         store.update_job(job_id, "running", {"processed": i + 1, "total": len(jobs)})
+    nf = sum(len(r.get("faces", [])) for r in results if "faces" in r)
+    no = sum(len(r.get("objects", [])) for r in results if "objects" in r)
+    n_imgs = sum(1 for r in results if "source_image_id" in r)
+    if n_imgs:
+        _emit_det(nf, no, f"{n_imgs} image{'s' if n_imgs != 1 else ''}")
     result = {"total": len(results), "type": detect_type, "results": results}
     store.update_job(job_id, "complete", result)
     webhook.fire(user_id, environment_id, "job.done", {"job_id": job_id, "status": "complete", **result})
@@ -552,6 +561,16 @@ async def _extract_external_ref(request: Request) -> str | None:
         except Exception:
             raw = None
     return (raw or "").strip() or None
+
+
+def _emit_det(nf: int, no: int, ref: str | None = None) -> None:
+    parts: list[str] = []
+    if nf: parts.append(f"{nf} face{'s' if nf != 1 else ''}")
+    if no: parts.append(f"{no} object{'s' if no != 1 else ''}")
+    if not parts: return
+    msg = ", ".join(parts) + " detected"
+    if ref: msg += f" ({ref})"
+    _ab.emit("detection", msg)
 
 
 def _is_truthy(v: Any) -> bool:
