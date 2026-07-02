@@ -7,19 +7,19 @@ from __future__ import annotations
 from collections import deque
 from datetime import datetime
 
-from app.core.log_buffer import clamp, DEFAULT_SIZE
+import app.core.log_buffer as _lb
 
-_buf: deque[dict] = deque(maxlen=DEFAULT_SIZE)
+_buf: deque[dict] = deque(maxlen=_lb.DEFAULT_SIZE)
 
 
 def install(size: int) -> None:
     global _buf
-    _buf = deque(_buf, maxlen=clamp(size))
+    _buf = deque(_buf, maxlen=_lb.clamp(size))
 
 
 def resize(size: int) -> None:
     global _buf
-    _buf = deque(_buf, maxlen=clamp(size))
+    _buf = deque(_buf, maxlen=_lb.clamp(size))
 
 
 def emit(category: str, message: str) -> None:
