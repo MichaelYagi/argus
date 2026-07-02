@@ -235,7 +235,7 @@
 
   loadPage();
 
-  window.addEventListener('pageshow', e => { if (e.persisted) location.reload(); });
+  window.addEventListener('pageshow', e => { if (e.persisted) reset(); });
 
   let resizeT, lastW = 0;
   window.addEventListener('resize', () => {
