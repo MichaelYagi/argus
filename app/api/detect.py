@@ -9,7 +9,7 @@ from typing import Any
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request
 
-from app.core import activity_buffer as _ab, settings_cache
+from app.core import settings_cache
 from app.core.auth import require_auth, require_env_id
 from app.core.engine_registry import registry
 from app.core.image_input import (
@@ -564,12 +564,17 @@ async def _extract_external_ref(request: Request) -> str | None:
 
 
 def _emit_det(nf: int, no: int, ref: str | None = None) -> None:
+    from app.core import activity_buffer as _ab
     parts: list[str] = []
-    if nf: parts.append(f"{nf} face{'s' if nf != 1 else ''}")
-    if no: parts.append(f"{no} object{'s' if no != 1 else ''}")
-    if not parts: return
+    if nf:
+        parts.append(f"{nf} face{'s' if nf != 1 else ''}")
+    if no:
+        parts.append(f"{no} object{'s' if no != 1 else ''}")
+    if not parts:
+        return
     msg = ", ".join(parts) + " detected"
-    if ref: msg += f" ({ref})"
+    if ref:
+        msg += f" ({ref})"
     _ab.emit("detection", msg)
 
 

@@ -183,9 +183,12 @@ async def bulk_review(
     n_rejected   = sum(1 for r in results if r.get("status") == "rejected")
     n_reassigned = sum(1 for r in results if r.get("status") == "reassigned")
     parts: list[str] = []
-    if n_confirmed:  parts.append(f"{n_confirmed} confirmed")
-    if n_rejected:   parts.append(f"{n_rejected} rejected")
-    if n_reassigned: parts.append(f"{n_reassigned} reassigned")
+    if n_confirmed:
+        parts.append(f"{n_confirmed} confirmed")
+    if n_rejected:
+        parts.append(f"{n_rejected} rejected")
+    if n_reassigned:
+        parts.append(f"{n_reassigned} reassigned")
     if parts:
         _ab.emit("identity", f"Bulk review: {', '.join(parts)}")
     return results

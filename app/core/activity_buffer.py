@@ -7,7 +7,7 @@ from __future__ import annotations
 from collections import deque
 from datetime import datetime
 
-from app.core.log_buffer import MAX_SIZE, DEFAULT_SIZE, clamp
+from app.core.log_buffer import clamp, DEFAULT_SIZE
 
 _buf: deque[dict] = deque(maxlen=DEFAULT_SIZE)
 

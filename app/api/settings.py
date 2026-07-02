@@ -60,7 +60,7 @@ async def update_setting(key: str, body: _UpdateBody, user_id: int = Depends(req
 
     # Resize the live log ring buffer when its size setting changes.
     if key == "system.log_buffer_size":
-        from app.core import log_buffer, activity_buffer
+        from app.core import activity_buffer, log_buffer
         log_buffer.resize(int(value_str))
         activity_buffer.resize(int(value_str))
 
