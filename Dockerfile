@@ -2,9 +2,11 @@ FROM python:3.11-slim
 
 WORKDIR /app
 
+# git       — required by pip to install ram @ git+https://... at build time
 # libgomp1  — onnxruntime (OpenMP threading)
 # libxcb1, libx11-6 — linked by insightface/ultralytics even in headless mode
 RUN apt-get update && apt-get install -y --no-install-recommends \
+        git \
         libgomp1 \
         libxcb1 \
         libx11-6 \
