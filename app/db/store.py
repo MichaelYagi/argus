@@ -1801,13 +1801,13 @@ _MODEL_SEED: list[tuple] = [
 
     # --- Face (InsightFace packs: detection + ArcFace embeddings + age/gender/pose) ---
     ("face",   "buffalo_l",       512,  "Large pack (RetinaFace + ArcFace). Best accuracy. Recommended default.", None),
-    ("face",   "buffalo_s",       512,  "Small pack — faster and lighter, slightly lower accuracy than buffalo_l.", None),
+    ("face",   "buffalo_s",       512,  "Small pack — faster, lighter, slightly lower accuracy than buffalo_l.", None),
     ("face",   "buffalo_sc",      512,  "Compact pack — detect + recognize only (no age/gender/pose). Lightest.", None),
-    ("face",   "antelopev2",      512,  "Alternative ResNet100/glint360k pack. Accuracy comparable to buffalo_l.", None),
+    ("face",   "antelopev2",      512,  "ResNet100/glint360k pack. Accuracy comparable to buffalo_l.", None),
 
     # --- Object: standard YOLO (fixed 80 COCO classes) ---
     ("object", "yolov8n",         None, "YOLOv8 nano — fastest, lowest accuracy. 80 COCO classes.", None),
-    ("object", "yolov8s",         None, "YOLOv8 small — fast with a good speed/accuracy balance. 80 COCO classes.", None),
+    ("object", "yolov8s",         None, "YOLOv8 small — good speed/accuracy balance. 80 COCO classes.", None),
     ("object", "yolov8m",         None, "YOLOv8 medium — more accurate, slower. 80 COCO classes.", None),
     ("object", "yolov8l",         None, "YOLOv8 large — higher accuracy, heavier. 80 COCO classes.", None),
     ("object", "yolov8x",         None, "YOLOv8 extra-large — most accurate v8, slowest. 80 COCO classes.", None),

@@ -14,7 +14,7 @@
     <span id="wh-about-arrow" style="font-size:11px;transition:transform .15s;transform:rotate(-90deg)">▼</span>
     About webhooks
   </div>
-  <div id="wh-about-content" hidden style="margin-top:14px;display:grid;gap:20px;
+  <div id="wh-about-content" style="display:none;margin-top:14px;gap:20px;
               grid-template-columns:repeat(auto-fit,minmax(280px,1fr))">
 
     <div>
@@ -164,7 +164,7 @@ if not hmac.compare_digest(sig, expected):
     </div>
     <div style="margin-bottom:12px">
       <label class="lbl">Secret <span class="muted" style="font-weight:400">(optional — HMAC-SHA256 signing)</span></label>
-      <input id="wh-secret" type="password" class="input"
+      <input id="wh-secret" type="password" class="input" autocomplete="new-password"
              placeholder="Leave blank to keep existing"
              style="width:100%;box-sizing:border-box">
     </div>
@@ -192,8 +192,9 @@ if not hmac.compare_digest(sig, expected):
   const _content = document.getElementById('wh-about-content');
   const _arrow   = document.getElementById('wh-about-arrow');
   _toggle.addEventListener('click', () => {
-    _content.hidden = !_content.hidden;
-    _arrow.style.transform = _content.hidden ? 'rotate(-90deg)' : '';
+    const open = _content.style.display === 'none';
+    _content.style.display = open ? 'grid' : 'none';
+    _arrow.style.transform = open ? '' : 'rotate(-90deg)';
   });
 
   const _whs = {{ webhooks | tojson }};

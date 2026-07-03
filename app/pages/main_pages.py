@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import json
+
 from fastapi import APIRouter, Form, Request
 from fastapi.responses import RedirectResponse
 from fastapi.templating import Jinja2Templates
@@ -206,13 +208,12 @@ async def models_page(request: Request):
         return RedirectResponse("/login")
     if not ctx["is_admin"]:
         return RedirectResponse("/")
-    import json as _json
     from app.api.models import downloading_ids
     ctx["models"] = [dict(r) for r in store.list_models()]
     # Parse config JSON so the template can access compound model component names.
     for m in ctx["models"]:
         raw = m.get("config")
-        m["config"] = _json.loads(raw) if raw else None
+        m["config"] = json.loads(raw) if raw else None
     # Face model display order: buffalo_l first, antelopev2 last; the rest keep
     # their store (type, name) ordering. Objects are unaffected.
     _face_rank = {"buffalo_l": 0, "antelopev2": 2}
