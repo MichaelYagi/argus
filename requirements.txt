@@ -6,7 +6,10 @@ insightface
 onnxruntime-gpu; platform_machine == "x86_64"
 onnxruntime; platform_machine != "x86_64"
 ultralytics
-transformers>=4.57  # Florence-2 object model (native integration; 4.57+ ships Florence2ForConditionalGeneration)
+transformers>=4.57,<5.0  # Florence-2 (4.57+) and Grounding DINO (4.49+); <5.0 because ram package uses APIs removed in 5.x
+ram @ git+https://github.com/xinyu1205/recognize-anything.git  # RAM++ tagger engine (installs as 'ram')
+timm        # Swin-L backbone required by ram
+fairscale   # ViT checkpoint wrapper required by ram
 numpy
 pillow
 pillow-heif

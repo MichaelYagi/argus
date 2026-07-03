@@ -60,6 +60,7 @@ END;
 
 -- source_images: per-user uploaded images; file_path is content-hash based
 -- (same file uploaded by two users shares the file on disk, separate DB rows)
+-- image_tags: JSON array of keyword tags from a tagger engine (e.g. RAM++); null for YOLO/Florence
 CREATE TABLE IF NOT EXISTS source_images (
     id          INTEGER PRIMARY KEY AUTOINCREMENT,
     user_id     INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -68,6 +69,7 @@ CREATE TABLE IF NOT EXISTS source_images (
     width       INTEGER NOT NULL,
     height      INTEGER NOT NULL,
     external_ref TEXT,             -- opaque caller-owned correlation id; never interpreted by Argus
+    image_tags  TEXT,              -- JSON array of image-level keyword tags; null when not produced
     uploaded_at TEXT    NOT NULL DEFAULT (datetime('now')),
     UNIQUE(user_id, environment_id, file_path)
 );
@@ -122,6 +124,7 @@ CREATE INDEX IF NOT EXISTS idx_detections_source_image
     ON detections(source_image_id);
 
 -- models: shared registry of available face/object models (admin-managed)
+-- config: optional JSON for compound models (e.g. {"tagger":"ram-plus-plus","detector":"grounding-dino-base"})
 CREATE TABLE IF NOT EXISTS models (
     id            INTEGER PRIMARY KEY AUTOINCREMENT,
     type          TEXT    NOT NULL CHECK(type IN ('face', 'object')),
@@ -129,6 +132,7 @@ CREATE TABLE IF NOT EXISTS models (
     file_path     TEXT,
     embedding_dim INTEGER,
     description   TEXT,
+    config        TEXT,
     is_downloaded INTEGER NOT NULL DEFAULT 0,
     is_active     INTEGER NOT NULL DEFAULT 0,
     added_at      TEXT    NOT NULL DEFAULT (datetime('now')),

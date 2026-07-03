@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import shutil
 import threading
 from typing import Any, Optional
@@ -153,11 +154,18 @@ def _is_florence(model_name: str) -> bool:
     return model_name.lower().startswith("florence")
 
 
+def _is_tagger(model_name: str) -> bool:
+    return model_name.lower() == "ram-plus-plus-grounding-dino"
+
+
 def _load_engine(model_type: str, model_name: str) -> Any:
     """Load (and if necessary download) an engine. Slow for large models."""
     if model_type == "face":
         from app.core.face_engine import FaceEngine
         return FaceEngine(model_name, models_dir())
+    if _is_tagger(model_name):
+        from app.core.tagger_engine import TaggerEngine
+        return TaggerEngine(models_dir())
     if _is_florence(model_name):
         from app.core.florence_engine import FlorenceEngine
         return FlorenceEngine(models_dir())
@@ -168,6 +176,11 @@ def _load_engine(model_type: str, model_name: str) -> Any:
 def _delete_files(model_type: str, model_name: str) -> None:
     if model_type == "face":
         path = models_dir() / "models" / model_name
+        if path.exists():
+            shutil.rmtree(path)
+    elif _is_tagger(model_name):
+        from app.core.tagger_engine import DIR_NAME
+        path = models_dir() / DIR_NAME
         if path.exists():
             shutil.rmtree(path)
     elif _is_florence(model_name):
@@ -186,12 +199,18 @@ def _fmt(row) -> dict:
         description = row["description"]
     except (IndexError, KeyError):
         description = None
+    try:
+        raw_config = row["config"]
+        config = json.loads(raw_config) if raw_config else None
+    except (IndexError, KeyError, json.JSONDecodeError, ValueError):
+        config = None
     return {
         "id": row["id"],
         "type": row["type"],
         "name": row["name"],
         "embedding_dim": row["embedding_dim"],
         "description": description,
+        "config": config,
         "is_downloaded": bool(row["is_downloaded"]),
         "is_active": bool(row["is_active"]),
     }

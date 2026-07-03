@@ -173,8 +173,14 @@ def _migrate(conn: sqlite3.Connection) -> None:
     if "key_hint" not in existing_key_cols:
         conn.execute("ALTER TABLE api_keys ADD COLUMN key_hint TEXT NOT NULL DEFAULT ''")
 
-    if "description" not in {r[1] for r in conn.execute("PRAGMA table_info(models)")}:
+    existing_model_cols = {r[1] for r in conn.execute("PRAGMA table_info(models)")}
+    if "description" not in existing_model_cols:
         conn.execute("ALTER TABLE models ADD COLUMN description TEXT")
+    if "config" not in existing_model_cols:
+        conn.execute("ALTER TABLE models ADD COLUMN config TEXT")
+
+    if "image_tags" not in {r[1] for r in conn.execute("PRAGMA table_info(source_images)")}:
+        conn.execute("ALTER TABLE source_images ADD COLUMN image_tags TEXT")
 
     # external_ref: opaque caller-owned correlation id on identities + source_images
     if "external_ref" not in {r[1] for r in conn.execute("PRAGMA table_info(identities)")}:
@@ -1225,6 +1231,15 @@ def get_or_create_source_image(
         return row["id"]
 
 
+def set_source_image_tags(source_image_id: int, tags_json: str) -> None:
+    """Persist image-level keyword tags produced by a tagger engine (e.g. RAM++)."""
+    with _connect() as conn:
+        conn.execute(
+            "UPDATE source_images SET image_tags = ? WHERE id = ?",
+            (tags_json, source_image_id),
+        )
+
+
 # ---------------------------------------------------------------------------
 # Detections (per-user)
 # ---------------------------------------------------------------------------
@@ -1781,45 +1796,57 @@ def update_setting(key: str, value: str) -> None:
 
 # (type, name, embedding_dim, description). All object models produce bounding boxes.
 _MODEL_SEED: list[tuple] = [
+    # (type, name, embedding_dim, description, config)
+    # config is a JSON string for compound models; None for all single-file models.
+
     # --- Face (InsightFace packs: detection + ArcFace embeddings + age/gender/pose) ---
-    ("face",   "buffalo_l",       512,  "Large pack (RetinaFace + ArcFace). Best accuracy. Recommended default."),
-    ("face",   "buffalo_s",       512,  "Small pack — faster and lighter, slightly lower accuracy than buffalo_l."),
-    ("face",   "buffalo_sc",      512,  "Compact pack — detect + recognize only (no age/gender/pose). Lightest."),
-    ("face",   "antelopev2",      512,  "Alternative ResNet100/glint360k pack. Accuracy comparable to buffalo_l."),
+    ("face",   "buffalo_l",       512,  "Large pack (RetinaFace + ArcFace). Best accuracy. Recommended default.", None),
+    ("face",   "buffalo_s",       512,  "Small pack — faster and lighter, slightly lower accuracy than buffalo_l.", None),
+    ("face",   "buffalo_sc",      512,  "Compact pack — detect + recognize only (no age/gender/pose). Lightest.", None),
+    ("face",   "antelopev2",      512,  "Alternative ResNet100/glint360k pack. Accuracy comparable to buffalo_l.", None),
 
     # --- Object: standard YOLO (fixed 80 COCO classes) ---
-    ("object", "yolov8n",         None, "YOLOv8 nano — fastest, lowest accuracy. 80 COCO classes."),
-    ("object", "yolov8s",         None, "YOLOv8 small — fast with a good speed/accuracy balance. 80 COCO classes."),
-    ("object", "yolov8m",         None, "YOLOv8 medium — more accurate, slower. 80 COCO classes."),
-    ("object", "yolov8l",         None, "YOLOv8 large — higher accuracy, heavier. 80 COCO classes."),
-    ("object", "yolov8x",         None, "YOLOv8 extra-large — most accurate v8, slowest. 80 COCO classes."),
+    ("object", "yolov8n",         None, "YOLOv8 nano — fastest, lowest accuracy. 80 COCO classes.", None),
+    ("object", "yolov8s",         None, "YOLOv8 small — fast with a good speed/accuracy balance. 80 COCO classes.", None),
+    ("object", "yolov8m",         None, "YOLOv8 medium — more accurate, slower. 80 COCO classes.", None),
+    ("object", "yolov8l",         None, "YOLOv8 large — higher accuracy, heavier. 80 COCO classes.", None),
+    ("object", "yolov8x",         None, "YOLOv8 extra-large — most accurate v8, slowest. 80 COCO classes.", None),
 
     # --- Object: YOLO11 (newer generation; better accuracy per size) ---
-    ("object", "yolo11n",         None, "YOLO11 nano — newer gen; beats yolov8n at similar speed."),
-    ("object", "yolo11s",         None, "YOLO11 small — newer gen; strong speed/accuracy balance."),
-    ("object", "yolo11m",         None, "YOLO11 medium — newer gen; more accurate, slower."),
-    ("object", "yolo11l",         None, "YOLO11 large — newer gen; high accuracy."),
-    ("object", "yolo11x",         None, "YOLO11 extra-large — newer gen; best YOLO11 accuracy, slowest."),
+    ("object", "yolo11n",         None, "YOLO11 nano — newer gen; beats yolov8n at similar speed.", None),
+    ("object", "yolo11s",         None, "YOLO11 small — newer gen; strong speed/accuracy balance.", None),
+    ("object", "yolo11m",         None, "YOLO11 medium — newer gen; more accurate, slower.", None),
+    ("object", "yolo11l",         None, "YOLO11 large — newer gen; high accuracy.", None),
+    ("object", "yolo11x",         None, "YOLO11 extra-large — newer gen; best YOLO11 accuracy, slowest.", None),
 
     # --- Object: YOLOv10 (NMS-free, efficient) ---
-    ("object", "yolov10s",        None, "YOLOv10 small — NMS-free, efficient. 80 COCO classes."),
-    ("object", "yolov10m",        None, "YOLOv10 medium — NMS-free; accuracy/speed balance."),
-    ("object", "yolov10l",        None, "YOLOv10 large — NMS-free; higher accuracy."),
-    ("object", "yolov10x",        None, "YOLOv10 extra-large — NMS-free; top YOLOv10 accuracy."),
+    ("object", "yolov10s",        None, "YOLOv10 small — NMS-free, efficient. 80 COCO classes.", None),
+    ("object", "yolov10m",        None, "YOLOv10 medium — NMS-free; accuracy/speed balance.", None),
+    ("object", "yolov10l",        None, "YOLOv10 large — NMS-free; higher accuracy.", None),
+    ("object", "yolov10x",        None, "YOLOv10 extra-large — NMS-free; top YOLOv10 accuracy.", None),
 
     # --- Object: RT-DETR (transformer detector; strong accuracy, real-time) ---
-    ("object", "rtdetr-l",        None, "RT-DETR large — transformer detector; strong accuracy, real-time."),
-    ("object", "rtdetr-x",        None, "RT-DETR extra-large — transformer detector; highest accuracy, heavier."),
+    ("object", "rtdetr-l",        None, "RT-DETR large — transformer detector; strong accuracy, real-time.", None),
+    ("object", "rtdetr-x",        None, "RT-DETR extra-large — transformer detector; highest accuracy, heavier.", None),
 
     # --- Object: YOLO-World (open vocabulary — detect anything you describe) ---
-    ("object", "yolov8s-worldv2", None, "YOLO-World small — open vocabulary; detect any terms you define."),
-    ("object", "yolov8m-worldv2", None, "YOLO-World medium — open vocabulary; better accuracy than small."),
-    ("object", "yolov8l-worldv2", None, "YOLO-World large — open vocabulary; best open-vocab accuracy, slower."),
+    ("object", "yolov8s-worldv2", None, "YOLO-World small — open vocabulary; detect any terms you define.", None),
+    ("object", "yolov8m-worldv2", None, "YOLO-World medium — open vocabulary; better accuracy than small.", None),
+    ("object", "yolov8l-worldv2", None, "YOLO-World large — open vocabulary; best open-vocab accuracy, slower.", None),
 
     # --- Object: Florence-2 (grounded open-vocabulary detector; describes what it finds) ---
     ("object", "florence-2-base", None,
      "Florence-2 base — grounded open-vocabulary detection; free-form labels, no class list. "
-     "Heavier than YOLO. Recommended default."),
+     "Heavier than YOLO. Recommended default.", None),
+
+    # --- Object: RAM++ + Grounding DINO (keyword tagger + open-vocabulary localizer) ---
+    # Compound model: RAM++ generates image-level keyword tags; Grounding DINO localizes each
+    # tag with a bounding box. Both components download and activate as a single unit.
+    ("object", "ram-plus-plus-grounding-dino", None,
+     "RAM++ + Grounding DINO — generates descriptive keyword tags for the whole image and "
+     "localizes each tag with a bounding box. Open vocabulary, no fixed class list. "
+     "More descriptive than YOLO or Florence.",
+     '{"tagger":"ram-plus-plus","detector":"grounding-dino-base"}'),
 ]
 
 # Default vocabulary for YOLO-World: 80 COCO classes + common extras
@@ -2383,11 +2410,13 @@ def list_deliveries(webhook_id: int, user_id: int, limit: int = 50) -> list:
 
 def _seed_models(conn: sqlite3.Connection) -> None:
     conn.execute("DELETE FROM models WHERE type NOT IN ('face', 'object')")
-    # Insert new models; refresh the description on existing ones (leave embedding_dim
-    # and download/active state untouched).
+    # Insert new models; refresh the description and config on existing ones (leave
+    # embedding_dim and download/active state untouched).
     conn.executemany(
-        """INSERT INTO models (type, name, embedding_dim, description) VALUES (?, ?, ?, ?)
-           ON CONFLICT(type, name) DO UPDATE SET description = excluded.description""",
+        """INSERT INTO models (type, name, embedding_dim, description, config) VALUES (?, ?, ?, ?, ?)
+           ON CONFLICT(type, name) DO UPDATE SET
+               description = excluded.description,
+               config      = excluded.config""",
         _MODEL_SEED,
     )
 

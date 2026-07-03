@@ -83,9 +83,11 @@ async def detect_objects(
     source_filename, source_id = _save_source_image(user_id, environment_id, raw, img, external_ref)
     if replace:
         _clear_detections(user_id, environment_id, source_id, "object")
-    result = {"source_image_id": source_id, "external_ref": external_ref,
-              "objects": _run_objects(user_id, environment_id, img, source_id)}
-    _emit_det(0, len(result["objects"]), external_ref)
+    objs, img_tags = _run_objects(user_id, environment_id, img, source_id)
+    result: dict = {"source_image_id": source_id, "external_ref": external_ref, "objects": objs}
+    if img_tags is not None:
+        result["image_tags"] = img_tags
+    _emit_det(0, len(objs), external_ref)
     from app.core import webhook
     webhook.fire(user_id, environment_id, "detection.created",
                  {"source_image_id": source_id, "external_ref": external_ref, "type": "object"})
@@ -113,13 +115,16 @@ async def detect_all(
     source_filename, source_id = _save_source_image(user_id, environment_id, raw, img, external_ref)
     if replace:
         _clear_detections(user_id, environment_id, source_id, None)  # both faces and objects
+    objs, img_tags = _run_objects(user_id, environment_id, img, source_id)
     result = {
         "source_image_id": source_id,
         "external_ref": external_ref,
         "faces": _run_faces(user_id, environment_id, img, source_id, label=label),
-        "objects": _run_objects(user_id, environment_id, img, source_id),
+        "objects": objs,
     }
-    _emit_det(len(result["faces"]), len(result["objects"]), external_ref)
+    if img_tags is not None:
+        result["image_tags"] = img_tags
+    _emit_det(len(result["faces"]), len(objs), external_ref)
     from app.core import webhook
     webhook.fire(user_id, environment_id, "detection.created",
                  {"source_image_id": source_id, "external_ref": external_ref, "type": "all"})
@@ -189,7 +194,10 @@ async def detect_bulk(
             if detect_type in ("faces", "all"):
                 base["faces"] = _run_faces(user_id, environment_id, img, src_id)
             if detect_type in ("objects", "all"):
-                base["objects"] = _run_objects(user_id, environment_id, img, src_id)
+                objs, img_tags = _run_objects(user_id, environment_id, img, src_id)
+                base["objects"] = objs
+                if img_tags is not None:
+                    base["image_tags"] = img_tags
         except HTTPException as exc:
             base["error"] = exc.detail
         except Exception as exc:
@@ -327,6 +335,7 @@ def _stateless_detect(
     objects: list[dict] = []
     face_available = False
     object_available = False
+    image_tags: list[str] | None = None
 
     if type_param in ("faces", "all"):
         face_engine = registry.get_face_engine()
@@ -357,7 +366,11 @@ def _stateless_detect(
         object_engine = registry.get_object_engine()
         if object_engine is not None:
             object_available = True
-            for det in object_engine.detect(img_array):
+            if getattr(object_engine, "has_image_tags", False):
+                image_tags, raw_dets = object_engine.detect_with_tags(img_array)
+            else:
+                raw_dets = object_engine.detect(img_array)
+            for det in raw_dets:
                 objects.append({
                     "bbox": {"x": det.bbox[0], "y": det.bbox[1],
                              "w": det.bbox[2], "h": det.bbox[3]},
@@ -366,12 +379,15 @@ def _stateless_detect(
                     "class_id": det.class_id,
                 })
 
-    return {
+    result: dict = {
         "faces": faces,
         "objects": objects,
         "counts": {"faces": len(faces), "objects": len(objects)},
         "available": {"faces": face_available, "objects": object_available},
     }
+    if image_tags is not None:
+        result["image_tags"] = image_tags
+    return result
 
 
 _TEST_BATCH_MAX = 100
@@ -473,7 +489,10 @@ def _run_detection_job(
         if det_type in ("face", "all"):
             result["faces"] = _run_faces(user_id, environment_id, img, source_id, label=label)
         if det_type in ("object", "all"):
-            result["objects"] = _run_objects(user_id, environment_id, img, source_id)
+            objs, img_tags = _run_objects(user_id, environment_id, img, source_id)
+            result["objects"] = objs
+            if img_tags is not None:
+                result["image_tags"] = img_tags
         _emit_det(len(result.get("faces", [])), len(result.get("objects", [])), external_ref)
         store.update_job(job_id, "complete", result)
         webhook.fire(user_id, environment_id, "job.done", {"job_id": job_id, "status": "complete", **result})
@@ -508,7 +527,10 @@ def _run_bulk_job(
             if detect_type in ("faces", "all"):
                 base["faces"] = _run_faces(user_id, environment_id, img, src_id)
             if detect_type in ("objects", "all"):
-                base["objects"] = _run_objects(user_id, environment_id, img, src_id)
+                objs, img_tags = _run_objects(user_id, environment_id, img, src_id)
+                base["objects"] = objs
+                if img_tags is not None:
+                    base["image_tags"] = img_tags
         except HTTPException as exc:
             base["error"] = exc.detail
         except Exception as exc:
@@ -700,7 +722,14 @@ def _run_faces(user_id: int, environment_id: int, img: Any, source_id: int, labe
     return results
 
 
-def _run_objects(user_id: int, environment_id: int, img: Any, source_id: int) -> list[dict]:
+def _run_objects(
+    user_id: int, environment_id: int, img: Any, source_id: int
+) -> tuple[list[dict], list[str] | None]:
+    """Run object/tagger detection. Returns (detections, image_tags).
+
+    image_tags is a list of keyword strings when the active engine is a tagger
+    (RAM++ + Grounding DINO); None for all other engines.
+    """
     model_row = store.get_active_model("object")
     if model_row is None:
         raise HTTPException(503, "No active object model. Download and activate one via /api/models.")
@@ -710,12 +739,18 @@ def _run_objects(user_id: int, environment_id: int, img: Any, source_id: int) ->
         raise HTTPException(503, "Object engine not loaded. Activate a model via /api/models/{id}/activate.")
 
     padding = settings_cache.cache.get_or("system.crop_padding", 0.2)
-
     img_array = to_rgb_array(img)
-    detections = engine.detect(img_array)
+
+    image_tags: list[str] | None = None
+    if getattr(engine, "has_image_tags", False):
+        image_tags, raw_dets = engine.detect_with_tags(img_array)
+        if image_tags:
+            store.set_source_image_tags(source_id, json.dumps(image_tags))
+    else:
+        raw_dets = engine.detect(img_array)
 
     results = []
-    for det in detections:
+    for det in raw_dets:
         identity_id = store.get_or_create_identity(user_id, "object", det.class_name, environment_id)
         crop_filename = _save_crop(img, det.bbox, padding)
         detection_id = store.insert_detection(
@@ -744,7 +779,7 @@ def _run_objects(user_id: int, environment_id: int, img: Any, source_id: int) ->
             "review_status": "pending",
         })
 
-    return results
+    return results, image_tags
 
 
 # ---------------------------------------------------------------------------

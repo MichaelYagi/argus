@@ -40,7 +40,10 @@
     <h3>{{ m.name }}</h3>
     {% if m.is_active %}<span class="badge badge-active">Active</span>{% endif %}
   </div>
-  <div class="m-meta">{% if m.is_downloaded %}Downloaded{% else %}Not downloaded{% endif %}</div>
+  <div class="m-meta">
+    {% if m.is_downloaded %}Downloaded{% else %}Not downloaded{% endif %}
+    {% if m.config %}&middot; {{ m.config.tagger }} + {{ m.config.detector }}{% endif %}
+  </div>
   {% if m.description %}<p class="muted" style="font-size:12px;margin:4px 0 10px">{{ m.description | replace('Recommended default', '<strong>Recommended default</strong>' | safe) }}</p>{% endif %}
   <div class="m-actions">
     {% if not m.is_downloaded %}
@@ -57,8 +60,8 @@
 {% endif %}{% endfor %}
 </div>
 
-{# COCO classes grid — only when a standard (non-world, non-Florence) object model is active #}
-{% if obj_active and not active_obj_world and not active_obj_florence %}
+{# COCO classes grid — only when a standard (non-world, non-Florence, non-tagger) object model is active #}
+{% if obj_active and not active_obj_world and not active_obj_florence and not active_obj_tagger %}
 <div class="card" style="margin-top:28px">
   <h2>Object classes</h2>
   <p class="muted" style="font-size:12px;margin-bottom:8px">

@@ -206,8 +206,13 @@ async def models_page(request: Request):
         return RedirectResponse("/login")
     if not ctx["is_admin"]:
         return RedirectResponse("/")
+    import json as _json
     from app.api.models import downloading_ids
     ctx["models"] = [dict(r) for r in store.list_models()]
+    # Parse config JSON so the template can access compound model component names.
+    for m in ctx["models"]:
+        raw = m.get("config")
+        m["config"] = _json.loads(raw) if raw else None
     # Face model display order: buffalo_l first, antelopev2 last; the rest keep
     # their store (type, name) ordering. Objects are unaffected.
     _face_rank = {"buffalo_l": 0, "antelopev2": 2}
@@ -229,11 +234,12 @@ async def models_page(request: Request):
     # nothing-active, a deactivated model, and a model flagged active whose
     # weights are gone or failed to load on startup.
     from app.core.engine_registry import registry
-    ctx["obj_active"]       = registry.get_object_engine() is not None
-    ctx["active_obj_world"] = bool(active_obj_name and "world" in active_obj_name.lower())
-    # Florence-2 is open-vocabulary but not user-promptable: no COCO grid, no
-    # world vocabulary editor — there is nothing to configure about its classes.
+    ctx["obj_active"]          = registry.get_object_engine() is not None
+    ctx["active_obj_world"]    = bool(active_obj_name and "world" in active_obj_name.lower())
+    # Florence-2 and the RAM++ + Grounding DINO tagger are open-vocabulary and not
+    # user-promptable: no COCO grid, no world vocabulary editor.
     ctx["active_obj_florence"] = bool(active_obj_name and active_obj_name.lower().startswith("florence"))
+    ctx["active_obj_tagger"]   = bool(active_obj_name and active_obj_name.lower() == "ram-plus-plus-grounding-dino")
     return _r(request, "models.html", ctx)
 
 

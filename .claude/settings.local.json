@@ -177,7 +177,10 @@
       "Bash(/mnt/c/Users/Michael/Documents/development/argus/.venv/bin/ruff check *)",
       "Read(//mnt/c/Users/Michael/**)",
       "Bash(grep -o \".\\\\{0,20\\\\}'\")",
-      "Bash(sort -t: -k2 -rn)"
+      "Bash(sort -t: -k2 -rn)",
+      "Bash(.venv/bin/python3 *)",
+      "Bash(.venv/bin/pip install *)",
+      "Bash(grep -i \"^food$\\\\|^food \" /mnt/c/Users/Michael/Documents/development/argus/.venv/lib/python3.13/site-packages/ram/data/ram_tag_list.txt)"
     ]
   }
 }
