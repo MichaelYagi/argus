@@ -8,9 +8,102 @@
   <button class="btn btn-primary" id="add-btn">+ Add webhook</button>
 </div>
 
+<div id="wh-about" style="margin-bottom:24px">
+  <div id="wh-about-toggle" style="cursor:pointer;font-weight:600;font-size:14px;
+                  display:flex;align-items:center;gap:6px;user-select:none;width:fit-content">
+    <span id="wh-about-arrow" style="font-size:11px;transition:transform .15s;transform:rotate(-90deg)">▼</span>
+    About webhooks
+  </div>
+  <div id="wh-about-content" hidden style="margin-top:14px;display:grid;gap:20px;
+              grid-template-columns:repeat(auto-fit,minmax(280px,1fr))">
+
+    <div>
+      <div style="font-weight:600;font-size:13px;margin-bottom:6px">What they are</div>
+      <p class="muted" style="font-size:13px;margin:0;line-height:1.6">
+        When something happens in Argus — a detection completes, a job finishes — Argus sends an HTTP POST
+        to a URL you configure. Your server receives the request and can act on it immediately,
+        with no polling required.
+      </p>
+    </div>
+
+    <div>
+      <div style="font-weight:600;font-size:13px;margin-bottom:6px">When to use one</div>
+      <ul class="muted" style="font-size:13px;margin:0;padding-left:18px;line-height:1.8">
+        <li>Notify another service the moment a detection result is ready</li>
+        <li>React to async batch jobs finishing without polling <code style="font-size:11px">/api/jobs/{id}</code></li>
+        <li>Trigger a downstream pipeline — indexing, tagging, alerts</li>
+      </ul>
+    </div>
+
+    <div>
+      <div style="font-weight:600;font-size:13px;margin-bottom:6px">Events</div>
+      <div style="font-size:13px;display:grid;gap:8px">
+        <div>
+          <code style="font-size:12px;background:var(--surface-raised);padding:1px 6px;border-radius:4px">detection.created</code>
+          <span class="muted" style="font-size:12px;margin-left:6px">
+            Fired after each synchronous detect call. Data includes <code style="font-size:11px">source_image_id</code>,
+            <code style="font-size:11px">external_ref</code>, and <code style="font-size:11px">type</code>
+            (<code style="font-size:11px">face</code> / <code style="font-size:11px">object</code> / <code style="font-size:11px">all</code>).
+          </span>
+        </div>
+        <div>
+          <code style="font-size:12px;background:var(--surface-raised);padding:1px 6px;border-radius:4px">job.done</code>
+          <span class="muted" style="font-size:12px;margin-left:6px">
+            Fired when an async batch job completes or fails. Data includes <code style="font-size:11px">job_id</code>,
+            <code style="font-size:11px">status</code> (<code style="font-size:11px">complete</code> or <code style="font-size:11px">failed</code>),
+            and the full detection result on success.
+          </span>
+        </div>
+      </div>
+    </div>
+
+    <div>
+      <div style="font-weight:600;font-size:13px;margin-bottom:6px">Payload shape</div>
+      <pre style="font-size:11px;background:var(--surface-raised);border:1px solid var(--border);
+                  border-radius:var(--radius);padding:10px 12px;margin:0;line-height:1.5;
+                  white-space:pre-wrap;word-break:break-word">{
+  "event": "detection.created",
+  "timestamp": "2026-07-03T12:00:00.123456+00:00",
+  "data": {
+    "source_image_id": 42,
+    "external_ref": "photo-123",
+    "type": "face"
+  }
+}</pre>
+    </div>
+
+    <div>
+      <div style="font-weight:600;font-size:13px;margin-bottom:6px">Signing <span class="muted" style="font-weight:400">(optional)</span></div>
+      <p class="muted" style="font-size:13px;margin:0 0 8px;line-height:1.6">
+        Set a secret and every request includes <code style="font-size:11px">X-Argus-Signature: sha256=&lt;hmac-hex&gt;</code>.
+        Verify it on your server:
+      </p>
+      <pre style="font-size:11px;background:var(--surface-raised);border:1px solid var(--border);
+                  border-radius:var(--radius);padding:10px 12px;margin:0;line-height:1.5;
+                  white-space:pre-wrap;word-break:break-word">import hashlib, hmac
+sig = request.headers["X-Argus-Signature"].removeprefix("sha256=")
+expected = hmac.new(secret.encode(), request.body, hashlib.sha256).hexdigest()
+if not hmac.compare_digest(sig, expected):
+    raise ValueError("signature mismatch")</pre>
+    </div>
+
+    <div>
+      <div style="font-weight:600;font-size:13px;margin-bottom:6px">Setup</div>
+      <ol class="muted" style="font-size:13px;margin:0;padding-left:18px;line-height:1.8">
+        <li>Click <strong>+ Add webhook</strong> above</li>
+        <li>Enter the URL Argus will POST to</li>
+        <li>Optionally add a label and a shared secret</li>
+        <li>Check the events you want to receive</li>
+        <li>Save, then click <strong>Test</strong> to verify connectivity</li>
+      </ol>
+    </div>
+
+  </div>
+</div>
+
 <p id="wh-empty" class="muted" {% if webhooks %}hidden{% endif %}
    style="text-align:center;padding:48px 0">
-  No webhooks configured. Add one to receive HTTP callbacks when events occur in this environment.
+  No webhooks configured. Add one above.
 </p>
 
 <div id="wh-list">
@@ -95,6 +188,14 @@
 {% block scripts %}
 <script>
 (() => {
+  const _toggle  = document.getElementById('wh-about-toggle');
+  const _content = document.getElementById('wh-about-content');
+  const _arrow   = document.getElementById('wh-about-arrow');
+  _toggle.addEventListener('click', () => {
+    _content.hidden = !_content.hidden;
+    _arrow.style.transform = _content.hidden ? 'rotate(-90deg)' : '';
+  });
+
   const _whs = {{ webhooks | tojson }};
   let editId = null;
 
