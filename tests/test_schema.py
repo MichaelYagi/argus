@@ -148,5 +148,5 @@ def test_settings_categories():
 
 def test_init_db_idempotent():
     store.init_db()  # second call on same DB
-    assert len(_query("SELECT * FROM models")) == 24
+    assert len(_query("SELECT * FROM models")) == 25
     assert len(_query("SELECT * FROM settings")) == 20
