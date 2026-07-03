@@ -173,6 +173,7 @@ def test_detect_objects_happy_path(client):
     source_id = _insert_source_image(user_id)
 
     mock_engine = MagicMock()
+    mock_engine.has_image_tags = False
     mock_engine.detect.return_value = [
         ObjectDetection(bbox=(5, 10, 200, 150), confidence=0.87, class_name="dog", class_id=16),
     ]
@@ -211,6 +212,7 @@ def test_detect_all_happy_path(client):
         FaceDetection(bbox=(10, 10, 80, 80), confidence=0.9, embedding=MagicMock()),
     ]
     obj_engine = MagicMock()
+    obj_engine.has_image_tags = False
     obj_engine.detect.return_value = [
         ObjectDetection(bbox=(0, 0, 100, 100), confidence=0.8, class_name="cat", class_id=15),
     ]
@@ -503,6 +505,7 @@ def test_test_endpoint_happy_path(client):
                       age=30, gender="F"),
     ]
     obj_engine = MagicMock()
+    obj_engine.has_image_tags = False
     obj_engine.detect.return_value = [
         ObjectDetection(bbox=(0, 0, 50, 80), confidence=0.9, class_name="person", class_id=0),
         ObjectDetection(bbox=(5, 5, 40, 40), confidence=0.7, class_name="dog", class_id=16),
@@ -532,6 +535,7 @@ def test_test_endpoint_does_not_store(client):
         FaceDetection(bbox=(1, 2, 30, 30), confidence=0.8, embedding=MagicMock()),
     ]
     obj_engine = MagicMock()
+    obj_engine.has_image_tags = False
     obj_engine.detect.return_value = [
         ObjectDetection(bbox=(0, 0, 9, 9), confidence=0.6, class_name="car", class_id=2),
     ]
@@ -563,6 +567,7 @@ def test_test_endpoint_type_filter(client):
         FaceDetection(bbox=(1, 2, 30, 30), confidence=0.8, embedding=MagicMock()),
     ]
     obj_engine = MagicMock()
+    obj_engine.has_image_tags = False
     obj_engine.detect.return_value = [
         ObjectDetection(bbox=(0, 0, 9, 9), confidence=0.6, class_name="car", class_id=2),
     ]
@@ -603,6 +608,7 @@ def test_test_batch_multipart_files(client):
         FaceDetection(bbox=(10, 20, 100, 100), confidence=0.95, embedding=MagicMock()),
     ]
     obj_engine = MagicMock()
+    obj_engine.has_image_tags = False
     obj_engine.detect.return_value = [
         ObjectDetection(bbox=(0, 0, 50, 80), confidence=0.9, class_name="person", class_id=0),
     ]

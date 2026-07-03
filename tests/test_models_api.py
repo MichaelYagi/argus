@@ -53,7 +53,7 @@ def test_list_models_returns_all(client):
     h = _setup(client)
     r = client.get("/api/models", headers=h)
     assert r.status_code == 200
-    assert len(r.json()) == 24
+    assert len(r.json()) == 25
 
 
 def test_list_models_filter_face(client):
@@ -74,6 +74,7 @@ def test_list_models_filter_object(client):
         "rtdetr-l", "rtdetr-x",
         "yolov8s-worldv2", "yolov8m-worldv2", "yolov8l-worldv2",
         "florence-2-base",
+        "ram-plus-plus-grounding-dino",
     }
 
 

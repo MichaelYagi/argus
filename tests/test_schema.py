@@ -68,7 +68,7 @@ def test_api_keys_hash_index_exists():
 
 def test_models_seeded_count():
     rows = _query("SELECT * FROM models")
-    assert len(rows) == 24
+    assert len(rows) == 25
 
 
 def test_models_seeded_face_entries():
@@ -88,6 +88,7 @@ def test_models_seeded_object_entries():
         "rtdetr-l", "rtdetr-x",
         "yolov8s-worldv2", "yolov8m-worldv2", "yolov8l-worldv2",
         "florence-2-base",
+        "ram-plus-plus-grounding-dino",
     }
     assert all(r["embedding_dim"] is None for r in rows)
 
