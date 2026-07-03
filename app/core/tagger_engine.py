@@ -54,23 +54,25 @@ def _tagger_device() -> str:
 
 def _patch_ram_source() -> None:
     """Idempotent: rewrite the one line in ram/models/utils.py that uses
-    additional_special_tokens_ids, which was removed in transformers 5.x.
-    Edits the installed source file so the fix survives import caching.
+    additional_special_tokens_ids, removed in transformers 5.x.
+    Uses sys.path search to locate the file without triggering any ram imports.
     Must be called before any 'import ram' statement.
     """
-    import importlib.util
-    spec = importlib.util.find_spec("ram.models.utils")
-    if spec is None or not spec.origin:
-        return
+    import sys
     old = "tokenizer.enc_token_id = tokenizer.additional_special_tokens_ids[0]"
     new = "tokenizer.enc_token_id = tokenizer.convert_tokens_to_ids(tokenizer.additional_special_tokens)[0]"
-    path = Path(spec.origin)
-    try:
-        text = path.read_text()
-        if old in text:
-            path.write_text(text.replace(old, new))
-    except OSError:
-        pass
+    for entry in sys.path:
+        if not isinstance(entry, str):
+            continue
+        candidate = Path(entry) / "ram" / "models" / "utils.py"
+        if candidate.is_file():
+            try:
+                text = candidate.read_text()
+                if old in text:
+                    candidate.write_text(text.replace(old, new))
+            except OSError:
+                pass
+            return
 
 
 def _patch_transformers_modeling_utils() -> None:
@@ -131,8 +133,8 @@ class TaggerEngine:
         base_dir.mkdir(parents=True, exist_ok=True)
 
         # --- RAM++ ---------------------------------------------------------
-        _patch_ram_source()
-        _patch_transformers_modeling_utils()
+        _patch_ram_source()           # edits utils.py on disk before any ram import
+        _patch_transformers_modeling_utils()  # patches transformers symbols in memory
 
         try:
             from ram.models import ram_plus
