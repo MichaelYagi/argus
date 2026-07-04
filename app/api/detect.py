@@ -922,33 +922,6 @@ def _match_face(
     return (None, best[0][1]) if best else (None, 0.0)
 
 
-def _phash(path: Any, hash_size: int = 8) -> int | None:
-    """Perceptual average hash of an image file. Returns None on failure."""
-    try:
-        from PIL import Image
-        import numpy as np
-        img = Image.open(path).convert("L")
-        img = img.resize((hash_size, hash_size), Image.LANCZOS)
-        pixels = np.array(img, dtype=float)
-        avg = pixels.mean()
-        h = 0
-        for b in (pixels > avg).flatten():
-            h = (h << 1) | int(b)
-        return h
-    except Exception:
-        return None
-
-
-def _phash_distance(h1: int, h2: int) -> int:
-    return bin(h1 ^ h2).count("1")
-
-
-
-
-# Hamming distance ≤ 5 out of 64 bits = same image content.
-_PHASH_DUP_THRESHOLD = 5
-
-
 def scan_unidentified(user_id: int, environment_id: int) -> dict:
     """Retroactively match unidentified face detections against enrolled identities.
 
@@ -956,8 +929,9 @@ def scan_unidentified(user_id: int, environment_id: int) -> dict:
     - sim >= auto_confirm_threshold  → confirmed, goes directly into the identity gallery
     - match_threshold <= sim < auto_confirm  → pending, goes to the review queue only
 
-    Deduplicates at the source-image level: at most one detection per
-    (identity, source_image) pair — any extras are dismissed.
+    Deduplicates: one identity gets at most one detection per source image. If the same
+    source image already has a detection for a given identity (from a prior detect run or
+    a previous scan), any duplicate unidentified detection for that source is dismissed.
     """
     import numpy as np
 
@@ -968,12 +942,11 @@ def scan_unidentified(user_id: int, environment_id: int) -> dict:
     auto_confirm_thr = settings_cache.cache.get_or("face.auto_confirm_threshold", 0.80)
     rows = store.get_unknown_face_embeddings(user_id, model_row["id"], environment_id)
 
-    # Pre-populate seen with (source_image_id, identity_id) pairs that already have
-    # a detection (confirmed or pending) for this identity — so we never create two.
+    # Pre-populate seen with (source_image_id, identity_id) pairs that already exist
+    # in the DB, so duplicate unidentified detections from the same image are dismissed.
     seen: set[tuple[int, int]] = store.get_identity_source_pairs(user_id, environment_id)
 
-    # Score every row, sort highest-confidence first so the best detection wins
-    # when multiple unidentified crops from the same source match the same identity.
+    # Score every row, sort highest-confidence first so the best crop wins deduplication.
     scored: list[tuple[float, Any, int]] = []
     for row in rows:
         try:
@@ -1011,58 +984,11 @@ def scan_unidentified(user_id: int, environment_id: int) -> dict:
     return {"scanned": len(rows), "confirmed": confirmed, "pending": pending, "dismissed": dismissed}
 
 
-def dedup_confirmed(user_id: int, environment_id: int) -> int:
-    """Dismiss visually duplicate confirmed face detections for the same identity.
-
-    Two detections for the same identity whose crops are perceptually identical
-    (pHash distance <= _PHASH_DUP_THRESHOLD) are duplicates — keep the
-    higher-confidence one, dismiss the rest.
-
-    Processes detections highest-confidence first so the best crop always wins.
-    Returns count of dismissed detections."""
-    from app.core.paths import crops_dir
-    crops = crops_dir()
-
-    with store._connect() as conn:
-        env_id = store._resolve_env(conn, user_id, environment_id)
-        rows = conn.execute(
-            """SELECT d.id, d.identity_id, d.crop_path
-               FROM detections d
-               WHERE d.user_id = ? AND d.environment_id = ? AND d.type = 'face'
-                 AND d.review_status = 'confirmed' AND d.ignored = 0
-               ORDER BY d.identity_id, d.confidence DESC, d.id ASC""",
-            (user_id, env_id),
-        ).fetchall()
-
-    # For each identity, accumulate seen crop hashes in confidence order.
-    # Any crop whose hash is within threshold of a previously-seen one is a duplicate.
-    seen_hashes: dict[int, list[int]] = {}  # identity_id → [phash, ...]
-    to_dismiss: list[int] = []
-
-    for row in rows:
-        iid = int(row["identity_id"])
-        h = _phash(crops / row["crop_path"])
-        if h is None:
-            continue
-        existing = seen_hashes.get(iid, [])
-        if any(_phash_distance(h, prev) <= _PHASH_DUP_THRESHOLD for prev in existing):
-            to_dismiss.append(int(row["id"]))
-        else:
-            seen_hashes.setdefault(iid, []).append(h)
-
-    if not to_dismiss:
-        return 0
-    return store.dismiss_detections(user_id, to_dismiss, environment_id)
-
-
 @router.post("/api/faces/scan", status_code=200)
 async def scan_faces_endpoint(
     user_id: int = Depends(require_auth),
     environment_id: int = Depends(require_env_id),
 ):
-    """Match all unidentified face detections against enrolled identities, then
-    dismiss near-duplicate confirmed detections from the same physical photo."""
-    dismissed_dups = dedup_confirmed(user_id, environment_id)
-    result = scan_unidentified(user_id, environment_id)
-    result["dismissed_dups"] = dismissed_dups
-    return result
+    """Match all unidentified face detections against enrolled identities.
+    Returns counts of detections scanned and newly matched."""
+    return scan_unidentified(user_id, environment_id)

@@ -889,14 +889,12 @@ def get_identity_gallery(
                         ON fe.identity_id = d.identity_id AND fe.source_image_path = d.crop_path
                  LEFT JOIN source_images si ON si.id = d.source_image_id
                  WHERE d.identity_id = ? AND d.user_id = ? AND d.environment_id = ?
-                   AND d.review_status = 'confirmed' AND d.ignored = 0
                    AND NOT EXISTS (
                      SELECT 1 FROM detections d2
                      WHERE d2.identity_id = d.identity_id
                        AND d2.user_id = d.user_id
                        AND d2.environment_id = d.environment_id
                        AND d2.source_image_id = d.source_image_id
-                       AND d2.review_status = 'confirmed'
                        AND d2.id != d.id
                        AND (d2.confidence > d.confidence
                             OR (d2.confidence = d.confidence AND d2.id < d.id))
@@ -1774,7 +1772,6 @@ def delete_detection(detection_id: int, user_id: int, environment_id: int | None
         if model_row:
             compute_and_store_representative(ref_identity, model_row["id"])
     return deleted
-
 
 
 def get_identity_source_pairs(user_id: int, environment_id: int | None = None) -> set[tuple[int, int]]:
