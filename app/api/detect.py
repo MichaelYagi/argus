@@ -658,14 +658,20 @@ def _run_faces(user_id: int, environment_id: int, img: Any, source_id: int, labe
     img_array = to_rgb_array(img)
     detections = engine.detect(img_array)
 
+    # When a label is provided, only the highest-confidence detection gets that
+    # identity confirmed. All other faces are treated as unidentified and go to
+    # the review queue — same as a no-label detect call.
+    labeled_id: int | None = None
+    if label and detections:
+        best = max(detections, key=lambda d: d.confidence)
+        labeled_id = id(best)
+
     results = []
     for det in detections:
         identity_id, sim = _match_face(det.embedding, model_row["id"], user_id, environment_id, threshold)
 
-        if label:
-            # Caller already knows who this is — assign directly and confirm.
-            # The identity is asserted, not matched, so report full confidence
-            # rather than the incidental score against the prior reference set.
+        if label and id(det) == labeled_id:
+            # Caller asserted this specific face — confirm it directly.
             identity_id = store.get_or_create_identity(user_id, "face", label, environment_id)
             sim = 1.0
             review_status = "confirmed"
@@ -698,12 +704,12 @@ def _run_faces(user_id: int, environment_id: int, img: Any, source_id: int, labe
             attributes=json.dumps(attrs),
         )
 
-        display_label = label
+        display_label = label if (label and id(det) == labeled_id) else None
         if display_label is None and identity_id is not None:
             row = store.get_identity(identity_id, user_id, environment_id)
             display_label = row["label"] if row else None
 
-        if label:
+        if label and id(det) == labeled_id:
             from app.api.enroll import enroll_from_detection
             enroll_from_detection(store.get_detection(detection_id, user_id, environment_id), user_id, environment_id)
 
