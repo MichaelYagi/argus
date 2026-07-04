@@ -889,6 +889,7 @@ def get_identity_gallery(
                         ON fe.identity_id = d.identity_id AND fe.source_image_path = d.crop_path
                  LEFT JOIN source_images si ON si.id = d.source_image_id
                  WHERE d.identity_id = ? AND d.user_id = ? AND d.environment_id = ?
+                   AND d.review_status = 'confirmed'
                    AND NOT EXISTS (
                      SELECT 1 FROM detections d2
                      WHERE d2.identity_id = d.identity_id
