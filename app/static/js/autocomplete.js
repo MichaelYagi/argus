@@ -27,8 +27,16 @@
   // ---------------------------------------------------------------------------
   window.makeAutocomplete = input => {
     let drop = null;
+    let activeIdx = -1;
 
-    const hide = () => { drop?.remove(); drop = null; };
+    const hide = () => { drop?.remove(); drop = null; activeIdx = -1; };
+
+    const setActive = idx => {
+      if (!drop) return;
+      const items = drop.querySelectorAll('li');
+      items.forEach((li, i) => { li.style.background = i === idx ? 'var(--hover)' : ''; });
+      activeIdx = idx;
+    };
 
     const show = items => {
       hide();
@@ -50,8 +58,11 @@
         const li = document.createElement('li');
         li.textContent = label;
         Object.assign(li.style, { padding: '7px 12px', cursor: 'pointer', fontSize: '13px' });
-        li.addEventListener('mouseenter', () => { li.style.background = 'var(--hover)'; });
-        li.addEventListener('mouseleave', () => { li.style.background = ''; });
+        li.addEventListener('mouseenter', () => {
+          const idx = Array.from(drop.querySelectorAll('li')).indexOf(li);
+          setActive(idx);
+        });
+        li.addEventListener('mouseleave', () => setActive(-1));
         li.addEventListener('mousedown', e => {
           e.preventDefault();
           input.value = label;
@@ -84,10 +95,24 @@
     });
     input.addEventListener('blur', () => setTimeout(hide, 200));
     input.addEventListener('keydown', e => {
-      if (e.key === 'Escape') hide();
+      if (e.key === 'Escape') { hide(); return; }
+      if (e.key === 'ArrowDown' && drop) {
+        e.preventDefault();
+        const count = drop.querySelectorAll('li').length;
+        setActive(Math.min(activeIdx + 1, count - 1));
+        return;
+      }
+      if (e.key === 'ArrowUp' && drop) {
+        e.preventDefault();
+        setActive(Math.max(activeIdx - 1, -1));
+        return;
+      }
       if (e.key === 'Enter' && drop) {
-        const first = drop.querySelector('li');
-        if (first) { input.value = first.textContent; hide(); }
+        if (activeIdx >= 0) {
+          const li = drop.querySelectorAll('li')[activeIdx];
+          if (li) { input.value = li.textContent; }
+        }
+        hide();
       }
     });
   };

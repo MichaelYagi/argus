@@ -235,12 +235,13 @@
     <div style="flex:1;min-width:200px">
       <strong style="font-size:13px;color:var(--text)">Delete all identity data</strong>
       <p style="font-size:12px;margin:4px 0 0;color:var(--muted)">
-        Permanently removes all of your enrolled people, detected objects, detections,
-        face embeddings, and stored images. Your account, API keys, settings, and
-        model configuration are not affected. Cannot be undone.
+        Permanently removes all enrolled people, detected objects, detections,
+        face embeddings, and stored images in the <strong>{{ env_name }}</strong> environment.
+        Your account, API keys, settings, and model configuration are not affected. Cannot be undone.
       </p>
     </div>
     <button id="delete-all-data-btn"
+            data-env="{{ env_name }}"
             style="background:#e53e3e;color:#fff;border:none;border-radius:var(--radius);
                    padding:8px 16px;font-size:13px;font-weight:500;cursor:pointer;
                    white-space:nowrap;flex-shrink:0">
@@ -274,12 +275,13 @@
 // ---------------------------------------------------------------------------
 // Danger zone — delete all of the current user's identity data
 // ---------------------------------------------------------------------------
-document.getElementById('delete-all-data-btn').addEventListener('click', () => {
+document.getElementById('delete-all-data-btn').addEventListener('click', function() {
+  const env = this.dataset.env || 'default';
   showConfirm(
-    'This will permanently delete all of your enrolled people, detected objects, detections, face embeddings, and stored images. Your account, API keys, settings, and model configuration will not be affected. This cannot be undone.',
+    'This will permanently delete all enrolled people, detected objects, detections, face embeddings, and stored images in the "' + env + '" environment. Your account, API keys, settings, and model configuration will not be affected. This cannot be undone.',
     async () => {
       const r = await fetch('/api/identities', { method: 'DELETE' });
-      if (r.ok) showMessage('All identity data deleted.');
+      if (r.ok) showMessage('All identity data deleted from the "' + env + '" environment.');
     },
     { confirmText: 'Delete all data', danger: true }
   );
