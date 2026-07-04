@@ -145,7 +145,7 @@
     });
 
     const msg = document.createElement('p');
-    msg.textContent = message;
+    if (message instanceof Node) { msg.appendChild(message); } else { msg.textContent = message; }
     msg.style.cssText = 'margin-bottom:20px;font-size:14px;line-height:1.5';
 
     const row = document.createElement('div');

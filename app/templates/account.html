@@ -277,8 +277,14 @@
 // ---------------------------------------------------------------------------
 document.getElementById('delete-all-data-btn').addEventListener('click', function() {
   const env = this.dataset.env || 'default';
+  const frag = document.createDocumentFragment();
+  frag.appendChild(document.createTextNode('This will permanently delete all enrolled people, detected objects, detections, face embeddings, and stored images in the '));
+  const b = document.createElement('strong');
+  b.textContent = env;
+  frag.appendChild(b);
+  frag.appendChild(document.createTextNode(' environment. Your account, API keys, settings, and model configuration will not be affected. This cannot be undone.'));
   showConfirm(
-    'This will permanently delete all enrolled people, detected objects, detections, face embeddings, and stored images in the "' + env + '" environment. Your account, API keys, settings, and model configuration will not be affected. This cannot be undone.',
+    frag,
     async () => {
       const r = await fetch('/api/identities', { method: 'DELETE' });
       if (r.ok) showMessage('All identity data deleted from the "' + env + '" environment.');
