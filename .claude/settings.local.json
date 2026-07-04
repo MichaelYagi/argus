@@ -180,7 +180,8 @@
       "Bash(sort -t: -k2 -rn)",
       "Bash(.venv/bin/python3 *)",
       "Bash(.venv/bin/pip install *)",
-      "Bash(grep -i \"^food$\\\\|^food \" /mnt/c/Users/Michael/Documents/development/argus/.venv/lib/python3.13/site-packages/ram/data/ram_tag_list.txt)"
+      "Bash(grep -i \"^food$\\\\|^food \" /mnt/c/Users/Michael/Documents/development/argus/.venv/lib/python3.13/site-packages/ram/data/ram_tag_list.txt)",
+      "Bash(docker exec argus-argus-1 python3 -c ' *)"
     ]
   }
 }

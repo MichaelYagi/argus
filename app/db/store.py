@@ -926,7 +926,7 @@ def get_unknown_face_embeddings(
                LEFT JOIN source_images si ON si.id = d.source_image_id
                WHERE d.user_id = ? AND d.environment_id = ? AND d.type = 'face'
                  AND d.identity_id IS NULL AND d.embedding IS NOT NULL AND d.model_id = ?
-                 AND d.ignored = 0
+                 AND d.ignored = 0 AND (d.review_status IS NULL OR d.review_status != 'rejected')
                ORDER BY d.id""",
             (user_id, env_id, model_id),
         ).fetchall()
@@ -991,7 +991,8 @@ def get_unknown_detections(
                         d.source_image_id, si.file_path AS source_image_path
                  FROM detections d
                  LEFT JOIN source_images si ON si.id = d.source_image_id
-                 WHERE d.user_id = ? AND d.environment_id = ? AND d.identity_id IS NULL"""
+                 WHERE d.user_id = ? AND d.environment_id = ? AND d.identity_id IS NULL
+                   AND d.ignored = 0"""
         params: list = [user_id, env_id]
         if detection_type:
             sql += " AND d.type = ?"
