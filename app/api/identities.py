@@ -5,7 +5,7 @@ from __future__ import annotations
 import sqlite3
 from typing import Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query
 from pydantic import BaseModel
 
 from app.core import settings_cache
@@ -260,6 +260,7 @@ async def delete_all_identities(
 @router.get("/api/identities/{identity_id}/gallery")
 async def identity_gallery(
     identity_id: int,
+    background_tasks: BackgroundTasks,
     cursor: Optional[str] = Query(None),
     limit: Optional[int] = Query(None),
     enrolled: Optional[bool] = Query(None),
@@ -268,6 +269,8 @@ async def identity_gallery(
 ):
     if not store.get_identity(identity_id, user_id, environment_id):
         raise HTTPException(404, "Identity not found")
+    from app.api.detect import dedup_confirmed
+    background_tasks.add_task(dedup_confirmed, user_id, environment_id)
     page_size = limit or settings_cache.cache.get_or("system.gallery_page_size", 30)
     rows = store.get_identity_gallery(
         identity_id, user_id, cursor=cursor, limit=page_size,
