@@ -4,9 +4,6 @@
 {% block content %}
 <div class="page-header" style="margin-bottom:16px">
   <h1>Unidentified</h1>
-  <span class="nav-spacer"></span>
-  <button id="up-scan-btn" class="btn btn-ghost" title="Match unidentified faces against enrolled identities">Scan</button>
-  <span id="up-scan-status" class="muted" style="font-size:12px;margin-left:8px"></span>
 </div>
 
 <p class="muted" id="up-empty" hidden style="text-align:center;padding:48px 0">
@@ -236,31 +233,13 @@
     loadPage();
   }
 
-  loadPage();
+  async function init() {
+    try { await fetch('/api/faces/scan', { method: 'POST' }); } catch (_) {}
+    loadPage();
+  }
+  init();
 
   window.addEventListener('pageshow', e => { if (e.persisted) reset(); });
-
-  const scanBtn    = document.getElementById('up-scan-btn');
-  const scanStatus = document.getElementById('up-scan-status');
-  if (scanBtn) {
-    scanBtn.addEventListener('click', async () => {
-      scanBtn.disabled = true;
-      scanStatus.textContent = 'Scanning…';
-      try {
-        const r = await fetch('/api/faces/scan', { method: 'POST' });
-        if (!r.ok) { scanStatus.textContent = 'Scan failed.'; return; }
-        const d = await r.json();
-        scanStatus.textContent = d.matched
-          ? `${d.matched} new match${d.matched !== 1 ? 'es' : ''} found`
-          : 'No new matches';
-        if (d.matched) reset();
-      } catch (_) {
-        scanStatus.textContent = 'Scan failed.';
-      } finally {
-        scanBtn.disabled = false;
-      }
-    });
-  }
 
   let resizeT, lastW = 0;
   window.addEventListener('resize', () => {

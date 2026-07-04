@@ -925,30 +925,63 @@ def _match_face(
 def scan_unidentified(user_id: int, environment_id: int) -> dict:
     """Retroactively match unidentified face detections against enrolled identities.
 
-    Runs after any labeling event so new enrollments propagate to existing unidentified
-    faces without requiring a fresh detect pass. Returns counts of rows scanned and matched.
+    Uses the same two-threshold logic as at-detection-time:
+    - sim >= auto_confirm_threshold  → confirmed, goes directly into the identity gallery
+    - match_threshold <= sim < auto_confirm  → pending, goes to the review queue only
+
+    Deduplicates: one identity gets at most one detection per source image. If the same
+    source image already has a detection for a given identity (from a prior detect run or
+    a previous scan), any duplicate unidentified detection for that source is dismissed.
     """
     import numpy as np
 
     model_row = store.get_active_model("face")
     if not model_row:
-        return {"scanned": 0, "matched": 0}
+        return {"scanned": 0, "confirmed": 0, "pending": 0}
     threshold = settings_cache.cache.get_or("face.match_threshold", 0.5)
+    auto_confirm_thr = settings_cache.cache.get_or("face.auto_confirm_threshold", 0.80)
     rows = store.get_unknown_face_embeddings(user_id, model_row["id"], environment_id)
-    matched = 0
+
+    # Pre-populate seen with (source_image_id, identity_id) pairs that already exist
+    # in the DB, so duplicate unidentified detections from the same image are dismissed.
+    seen: set[tuple[int, int]] = store.get_identity_source_pairs(user_id, environment_id)
+
+    # Score every row, sort highest-confidence first so the best crop wins deduplication.
+    scored: list[tuple[float, Any, int]] = []
     for row in rows:
         try:
             emb = np.frombuffer(bytes(row["embedding"]), dtype=np.float32)
         except Exception:
             continue
-        identity_id, _sim = _match_face(emb, model_row["id"], user_id, environment_id, threshold)
+        identity_id, sim = _match_face(emb, model_row["id"], user_id, environment_id, threshold)
         if identity_id is not None:
+            scored.append((sim, row, identity_id))
+    scored.sort(key=lambda x: x[0], reverse=True)
+
+    confirmed = pending = dismissed = 0
+    for sim, row, identity_id in scored:
+        key = (int(row["source_image_id"]), identity_id)
+        if key in seen:
+            store.dismiss_detections(user_id, [row["id"]], environment_id)
+            dismissed += 1
+            continue
+        seen.add(key)
+        if sim >= auto_confirm_thr:
             store.label_detection(row["id"], user_id, identity_id, environment_id)
-            matched += 1
-    if matched:
+            confirmed += 1
+        else:
+            store.suggest_detection(row["id"], user_id, identity_id, environment_id)
+            pending += 1
+
+    if confirmed or pending:
         from app.core import activity_buffer as _ab
-        _ab.emit("identity", f"Retroactive scan: {matched} face{'s' if matched != 1 else ''} matched")
-    return {"scanned": len(rows), "matched": matched}
+        parts = []
+        if confirmed:
+            parts.append(f"{confirmed} confirmed")
+        if pending:
+            parts.append(f"{pending} sent to review")
+        _ab.emit("identity", f"Retroactive scan: {', '.join(parts)}")
+    return {"scanned": len(rows), "confirmed": confirmed, "pending": pending, "dismissed": dismissed}
 
 
 @router.post("/api/faces/scan", status_code=200)

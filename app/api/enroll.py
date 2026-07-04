@@ -6,7 +6,7 @@ import hashlib
 import sqlite3
 from typing import Any
 
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request
 
 from app.core import settings_cache
 from app.core.auth import require_auth, require_env_id
@@ -148,6 +148,7 @@ _FMT_EXT = {"JPEG": "jpg", "PNG": "png", "WEBP": "webp", "BMP": "bmp",
 @router.post("/api/faces/enroll", status_code=201)
 async def enroll_new(
     request: Request,
+    background_tasks: BackgroundTasks,
     user_id: int = Depends(require_auth),
     environment_id: int = Depends(require_env_id),
 ):
@@ -198,6 +199,8 @@ async def enroll_new(
         _fi.rebuild_user(user_id, environment_id)
     from app.core import activity_buffer as _ab
     _ab.emit("enrollment", f"New face enrolled: {name}")
+    from app.api.detect import scan_unidentified
+    background_tasks.add_task(scan_unidentified, user_id, environment_id)
     return {"identity_id": identity_id, "label": name, "embeddings": 1,
             "embedding_id": embedding_id, "detection_id": detection_id,
             "external_ref": external_ref,
@@ -211,6 +214,7 @@ async def enroll_new(
 async def enroll_existing(
     identity_id: int,
     request: Request,
+    background_tasks: BackgroundTasks,
     user_id: int = Depends(require_auth),
     environment_id: int = Depends(require_env_id),
 ):
@@ -256,6 +260,8 @@ async def enroll_existing(
     identity = store.get_identity(identity_id, user_id, environment_id)
     from app.core import activity_buffer as _ab
     _ab.emit("enrollment", f"Face sample added to {identity['label'] if identity else identity_id}")
+    from app.api.detect import scan_unidentified
+    background_tasks.add_task(scan_unidentified, user_id, environment_id)
     return {
         "embedding_id": embedding_id,
         "identity_id": identity_id,

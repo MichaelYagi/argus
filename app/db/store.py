@@ -1745,6 +1745,36 @@ def delete_detection(detection_id: int, user_id: int, environment_id: int | None
     return deleted
 
 
+def get_identity_source_pairs(user_id: int, environment_id: int | None = None) -> set[tuple[int, int]]:
+    """Return all (source_image_id, identity_id) pairs that already have a detection,
+    used by scan_unidentified to avoid linking a duplicate crop from the same image."""
+    with _connect() as conn:
+        env_id = _resolve_env(conn, user_id, environment_id)
+        rows = conn.execute(
+            """SELECT source_image_id, identity_id FROM detections
+               WHERE user_id = ? AND environment_id = ? AND identity_id IS NOT NULL
+                 AND type = 'face'""",
+            (user_id, env_id),
+        ).fetchall()
+        return {(int(r[0]), int(r[1])) for r in rows}
+
+
+def suggest_detection(detection_id: int, user_id: int, identity_id: int, environment_id: int | None = None) -> bool:
+    """Auto-match path: set a tentative identity (review_status stays 'pending') so the
+    detection appears in the review queue without being auto-confirmed into the gallery."""
+    with _connect() as conn:
+        env_id = _resolve_env(conn, user_id, environment_id)
+        conn.execute(
+            """UPDATE detections SET identity_id = ?
+               WHERE id = ? AND user_id = ? AND environment_id = ? AND identity_id IS NULL""",
+            (identity_id, detection_id, user_id, env_id),
+        )
+        changed = conn.execute("SELECT changes()").fetchone()[0] > 0
+        if changed:
+            record_change(conn, user_id, env_id, "detection", detection_id, "relabeled")
+        return changed
+
+
 def label_detection(detection_id: int, user_id: int, identity_id: int, environment_id: int | None = None) -> bool:
     """Casual correction: set identity and mark confirmed. Drops the previous
     identity's reference for this crop so it doesn't orphan when the label changes."""
