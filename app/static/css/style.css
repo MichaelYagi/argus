@@ -545,6 +545,12 @@ input[type=range] { width: 150px; cursor: pointer; }
 .t-box.labeled:hover { border-color: #9f9; }
 .t-box.object { border-color: #39f; }
 .t-box.object:hover { border-color: #9cf; }
+.t-box.focused { border-color: #ff0; border-width: 3px; animation: t-focus-pulse 0.8s ease-in-out 4; }
+.t-box.focused:hover { border-color: #ffe066; }
+@keyframes t-focus-pulse {
+  0%,100% { box-shadow: 0 0 0 0 rgba(255,255,0,.7); }
+  50%      { box-shadow: 0 0 0 8px rgba(255,255,0,0); }
+}
 .t-tip { position: absolute; bottom: 100%; left: 0; background: rgba(0,0,0,.75); color: #fff; font-size: 11px; padding: 2px 6px; white-space: nowrap; pointer-events: none; display: none; }
 .t-box:hover .t-tip { display: block; }
 

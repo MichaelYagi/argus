@@ -67,16 +67,21 @@ function renderBoxes() {
     ...OBJECTS.map(o => ({ ...o, kind: 'object' })),
   ].sort((a, b) => (b.w * b.h) - (a.w * a.h));
 
+  const focusId = parseInt(new URLSearchParams(location.search).get('focus') || '0', 10);
+  let focusEl = null;
+
   all.forEach(det => {
     const div = document.createElement('div');
     const isFace = det.kind === 'face';
     div.className = isFace ? 't-box' + (det.label ? ' labeled' : '') : 't-box object';
+    if (focusId && det.id === focusId) div.classList.add('focused');
     div.style.left   = Math.max(0, det.x * sx) + 'px';
     div.style.top    = Math.max(0, det.y * sy) + 'px';
     div.style.width  = (det.w * sx) + 'px';
     div.style.height = (det.h * sy) + 'px';
     div.dataset.id    = det.id;
     div.dataset.label = det.label;
+    if (focusId && det.id === focusId) focusEl = div;
 
     const tip = document.createElement('div');
     tip.className = 't-tip';
@@ -92,6 +97,7 @@ function renderBoxes() {
     div.appendChild(tip);
     wrap.appendChild(div);
   });
+  if (focusEl) focusEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
 }
 
 function labelObjectBox(div, tip) {

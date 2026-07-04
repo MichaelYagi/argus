@@ -920,3 +920,42 @@ def _match_face(
     # Below threshold — get best anyway for review queue context
     best = face_index.search(embedding, user_id, environment_id, threshold=0.0, k=1)
     return (None, best[0][1]) if best else (None, 0.0)
+
+
+def scan_unidentified(user_id: int, environment_id: int) -> dict:
+    """Retroactively match unidentified face detections against enrolled identities.
+
+    Runs after any labeling event so new enrollments propagate to existing unidentified
+    faces without requiring a fresh detect pass. Returns counts of rows scanned and matched.
+    """
+    import numpy as np
+
+    model_row = store.get_active_model("face")
+    if not model_row:
+        return {"scanned": 0, "matched": 0}
+    threshold = settings_cache.cache.get_or("face.match_threshold", 0.5)
+    rows = store.get_unknown_face_embeddings(user_id, model_row["id"], environment_id)
+    matched = 0
+    for row in rows:
+        try:
+            emb = np.frombuffer(bytes(row["embedding"]), dtype=np.float32)
+        except Exception:
+            continue
+        identity_id, _sim = _match_face(emb, model_row["id"], user_id, environment_id, threshold)
+        if identity_id is not None:
+            store.label_detection(row["id"], user_id, identity_id, environment_id)
+            matched += 1
+    if matched:
+        from app.core import activity_buffer as _ab
+        _ab.emit("identity", f"Retroactive scan: {matched} face{'s' if matched != 1 else ''} matched")
+    return {"scanned": len(rows), "matched": matched}
+
+
+@router.post("/api/faces/scan", status_code=200)
+async def scan_faces_endpoint(
+    user_id: int = Depends(require_auth),
+    environment_id: int = Depends(require_env_id),
+):
+    """Match all unidentified face detections against enrolled identities.
+    Returns counts of detections scanned and newly matched."""
+    return scan_unidentified(user_id, environment_id)

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any, Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query
 from pydantic import BaseModel
 
 from app.core import settings_cache
@@ -223,6 +223,7 @@ class _LabelBody(BaseModel):
 @router.put("/api/detections/{detection_id}/label", status_code=200)
 async def label_detection(
     detection_id: int, body: _LabelBody,
+    background_tasks: BackgroundTasks,
     user_id: int = Depends(require_auth),
     environment_id: int = Depends(require_env_id),
 ):
@@ -246,6 +247,9 @@ async def label_detection(
     lbl = identity["label"] if identity else str(identity_id)
     kind = "Face" if det["type"] == "face" else "Object"
     _ab.emit("identity", f"{kind} identified as {lbl}")
+    if det["type"] == "face":
+        from app.api.detect import scan_unidentified
+        background_tasks.add_task(scan_unidentified, user_id, environment_id)
     return {
         "detection_id": detection_id,
         "identity_id": identity_id,
@@ -270,6 +274,7 @@ class _BatchLabelBody(BaseModel):
 @router.post("/api/detections/label", status_code=200)
 async def label_detections_batch(
     body: _BatchLabelBody,
+    background_tasks: BackgroundTasks,
     user_id: int = Depends(require_auth),
     environment_id: int = Depends(require_env_id),
 ):
@@ -281,6 +286,7 @@ async def label_detections_batch(
         raise HTTPException(400, f"Too many items (max {_BATCH_MAX})")
 
     results = []
+    has_face = False
     for item in body.items:
         if not item.identity_id and not (item.label and item.label.strip()):
             results.append({"detection_id": item.detection_id, "ok": False,
@@ -297,12 +303,17 @@ async def label_detections_batch(
             )
         store.label_detection(item.detection_id, user_id, identity_id, environment_id)
         _enroll_confirmed(item.detection_id, user_id, environment_id)
+        if det["type"] == "face":
+            has_face = True
         identity = store.get_identity(identity_id, user_id, environment_id)
         results.append({
             "detection_id": item.detection_id, "ok": True,
             "identity_id": identity_id,
             "label": identity["label"] if identity else None,
         })
+    if has_face:
+        from app.api.detect import scan_unidentified
+        background_tasks.add_task(scan_unidentified, user_id, environment_id)
     return {"results": results}
 
 
