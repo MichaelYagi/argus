@@ -888,7 +888,17 @@ def get_identity_gallery(
                  LEFT JOIN face_embeddings fe
                         ON fe.identity_id = d.identity_id AND fe.source_image_path = d.crop_path
                  LEFT JOIN source_images si ON si.id = d.source_image_id
-                 WHERE d.identity_id = ? AND d.user_id = ? AND d.environment_id = ?"""
+                 WHERE d.identity_id = ? AND d.user_id = ? AND d.environment_id = ?
+                   AND NOT EXISTS (
+                     SELECT 1 FROM detections d2
+                     WHERE d2.identity_id = d.identity_id
+                       AND d2.user_id = d.user_id
+                       AND d2.environment_id = d.environment_id
+                       AND d2.source_image_id = d.source_image_id
+                       AND d2.id != d.id
+                       AND (d2.confidence > d.confidence
+                            OR (d2.confidence = d.confidence AND d2.id < d.id))
+                   )"""
         params: list = [identity_id, user_id, env_id]
         if enrolled is True:
             sql += " AND fe.id IS NOT NULL"
@@ -1596,6 +1606,26 @@ def get_review_queue(
     """Pending face detections, lowest confidence first. Cursor = 'confidence_id'."""
     with _connect() as conn:
         env_id = _resolve_env(conn, user_id, environment_id)
+        dedup = """AND NOT EXISTS (
+                     SELECT 1 FROM detections d2
+                     WHERE d2.identity_id = d.identity_id
+                       AND d2.user_id = d.user_id
+                       AND d2.environment_id = d.environment_id
+                       AND d2.source_image_id = d.source_image_id
+                       AND d2.review_status = 'pending' AND d2.type = 'face'
+                       AND d2.id != d.id
+                       AND (d2.confidence < d.confidence
+                            OR (d2.confidence = d.confidence AND d2.id < d.id))
+                   )"""
+        base_select = """SELECT d.id, d.source_image_id, d.model_id, d.confidence,
+                          d.crop_path, d.detected_at, d.identity_id, d.embedding,
+                          i.label AS current_label,
+                          si.file_path AS source_image_path
+                   FROM detections d
+                   LEFT JOIN identities i ON d.identity_id = i.id
+                   LEFT JOIN source_images si ON si.id = d.source_image_id
+                   WHERE d.user_id = ? AND d.environment_id = ?
+                     AND d.review_status = 'pending' AND d.type = 'face'"""
         if cursor:
             try:
                 c_conf, c_id = cursor.rsplit("_", 1)
@@ -1604,30 +1634,16 @@ def get_review_queue(
             except ValueError:
                 conf_val, id_val = 0.0, 0
             rows = conn.execute(
-                """SELECT d.id, d.source_image_id, d.model_id, d.confidence,
-                          d.crop_path, d.detected_at, d.identity_id, d.embedding,
-                          i.label AS current_label,
-                          si.file_path AS source_image_path
-                   FROM detections d
-                   LEFT JOIN identities i ON d.identity_id = i.id
-                   LEFT JOIN source_images si ON si.id = d.source_image_id
-                   WHERE d.user_id = ? AND d.environment_id = ?
-                     AND d.review_status = 'pending' AND d.type = 'face'
+                f"""{base_select}
+                     {dedup}
                      AND (d.confidence > ? OR (d.confidence = ? AND d.id > ?))
                    ORDER BY d.confidence ASC, d.id ASC LIMIT ?""",
                 (user_id, env_id, conf_val, conf_val, id_val, limit + 1),
             ).fetchall()
         else:
             rows = conn.execute(
-                """SELECT d.id, d.source_image_id, d.model_id, d.confidence,
-                          d.crop_path, d.detected_at, d.identity_id, d.embedding,
-                          i.label AS current_label,
-                          si.file_path AS source_image_path
-                   FROM detections d
-                   LEFT JOIN identities i ON d.identity_id = i.id
-                   LEFT JOIN source_images si ON si.id = d.source_image_id
-                   WHERE d.user_id = ? AND d.environment_id = ?
-                     AND d.review_status = 'pending' AND d.type = 'face'
+                f"""{base_select}
+                     {dedup}
                    ORDER BY d.confidence ASC, d.id ASC LIMIT ?""",
                 (user_id, env_id, limit + 1),
             ).fetchall()
@@ -1674,7 +1690,19 @@ def confirm_detection(detection_id: int, user_id: int, environment_id: int | Non
                WHERE id = ? AND user_id = ? AND environment_id = ?""",
             (detection_id, user_id, env_id),
         )
-        return conn.execute("SELECT changes()").fetchone()[0] > 0
+        changed = conn.execute("SELECT changes()").fetchone()[0] > 0
+        if changed:
+            # Auto-confirm any pending siblings from the same source image for the same
+            # identity so they don't accumulate in the review queue or gallery.
+            conn.execute(
+                """UPDATE detections SET review_status = 'confirmed', reviewed_at = datetime('now')
+                   WHERE user_id = ? AND environment_id = ? AND review_status = 'pending'
+                     AND type = 'face' AND id != ?
+                     AND source_image_id = (SELECT source_image_id FROM detections WHERE id = ?)
+                     AND identity_id    = (SELECT identity_id    FROM detections WHERE id = ?)""",
+                (user_id, env_id, detection_id, detection_id, detection_id),
+            )
+        return changed
 
 
 def reject_detection(detection_id: int, user_id: int, environment_id: int | None = None) -> bool:
