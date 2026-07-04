@@ -1012,35 +1012,47 @@ def scan_unidentified(user_id: int, environment_id: int) -> dict:
 
 
 def dedup_confirmed(user_id: int, environment_id: int) -> int:
-    """Dismiss lower-quality duplicate confirmed face detections.
+    """Dismiss visually duplicate confirmed face detections for the same identity.
 
-    For each (identity_id, source_image_id) pair, keeps the highest-confidence
-    confirmed detection and marks any extras as ignored. Complements the NOT EXISTS
-    dedup in get_identity_gallery by physically cleaning up the data.
+    Two detections for the same identity whose crops are perceptually identical
+    (pHash distance <= _PHASH_DUP_THRESHOLD) are duplicates — keep the
+    higher-confidence one, dismiss the rest.
+
+    Processes detections highest-confidence first so the best crop always wins.
     Returns count of dismissed detections."""
+    from app.core.paths import crops_dir
+    crops = crops_dir()
+
     with store._connect() as conn:
         env_id = store._resolve_env(conn, user_id, environment_id)
         rows = conn.execute(
-            """SELECT d.id FROM detections d
+            """SELECT d.id, d.identity_id, d.crop_path
+               FROM detections d
                WHERE d.user_id = ? AND d.environment_id = ? AND d.type = 'face'
                  AND d.review_status = 'confirmed' AND d.ignored = 0
-                 AND EXISTS (
-                   SELECT 1 FROM detections d2
-                   WHERE d2.identity_id = d.identity_id
-                     AND d2.user_id = d.user_id
-                     AND d2.environment_id = d.environment_id
-                     AND d2.source_image_id = d.source_image_id
-                     AND d2.review_status = 'confirmed'
-                     AND d2.id != d.id
-                     AND (d2.confidence > d.confidence
-                          OR (d2.confidence = d.confidence AND d2.id < d.id))
-                 )""",
+               ORDER BY d.identity_id, d.confidence DESC, d.id ASC""",
             (user_id, env_id),
         ).fetchall()
-    if not rows:
+
+    # For each identity, accumulate seen crop hashes in confidence order.
+    # Any crop whose hash is within threshold of a previously-seen one is a duplicate.
+    seen_hashes: dict[int, list[int]] = {}  # identity_id → [phash, ...]
+    to_dismiss: list[int] = []
+
+    for row in rows:
+        iid = int(row["identity_id"])
+        h = _phash(crops / row["crop_path"])
+        if h is None:
+            continue
+        existing = seen_hashes.get(iid, [])
+        if any(_phash_distance(h, prev) <= _PHASH_DUP_THRESHOLD for prev in existing):
+            to_dismiss.append(int(row["id"]))
+        else:
+            seen_hashes.setdefault(iid, []).append(h)
+
+    if not to_dismiss:
         return 0
-    ids = [r["id"] for r in rows]
-    return store.dismiss_detections(user_id, ids, environment_id)
+    return store.dismiss_detections(user_id, to_dismiss, environment_id)
 
 
 @router.post("/api/faces/scan", status_code=200)
