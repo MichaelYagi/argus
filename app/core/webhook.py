@@ -20,7 +20,7 @@ _TIMEOUT = 10
 def fire(user_id: int, environment_id: int, event: str, payload: dict) -> None:
     """Fire all matching active webhooks for this user/env/event in daemon threads."""
     from app.db import store
-    hooks = store.list_webhooks(user_id, environment_id, event)
+    hooks = store.list_webhooks(user_id, environment_id, event, active_only=True)
     if not hooks:
         return
     body = json.dumps({

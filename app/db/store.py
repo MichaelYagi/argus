@@ -2419,12 +2419,14 @@ def search_source_images(
 
 def list_webhooks(
     user_id: int, environment_id: int | None = None, event: str | None = None,
+    active_only: bool = False,
 ) -> list[sqlite3.Row]:
     with _connect() as conn:
         env_id = _resolve_env(conn, user_id, environment_id)
-        sql = """SELECT * FROM webhooks
-                 WHERE user_id = ? AND environment_id = ? AND is_active = 1"""
+        sql = "SELECT * FROM webhooks WHERE user_id = ? AND environment_id = ?"
         params: list = [user_id, env_id]
+        if active_only:
+            sql += " AND is_active = 1"
         if event:
             sql += " AND (',' || events || ',') LIKE ('%,' || ? || ',%')"
             params.append(event)
