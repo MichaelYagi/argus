@@ -105,11 +105,11 @@ def test_change_feed_records_identity_events(client):
     assert ev["entity_id"] == iid and ev["external_ref"] == "a1"
 
     cursor = data["next_cursor"]
-    # Rename → relabeled event after the cursor
+    # Renaming a 0-detection identity purges it → deleted event after the cursor
     client.put(f"/api/identities/{iid}", json={"label": "Ana B"}, headers=_h(key))
     data2 = client.get(f"/api/changes?since={cursor}", headers=_h(key)).json()
     assert len(data2["items"]) == 1
-    assert data2["items"][0]["action"] == "relabeled"
+    assert data2["items"][0]["action"] == "deleted"
 
 
 def test_change_feed_pagination(client):

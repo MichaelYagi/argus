@@ -693,6 +693,10 @@ def rename_identity(
 ) -> bool:
     with _connect() as conn:
         env_id = _resolve_env(conn, user_id, environment_id)
+        # Purge first — if the identity has 0 detections it should not exist; skip the rename.
+        purged = _purge_empty_identities(conn, user_id, env_id)
+        if identity_id in purged:
+            return True  # caller gets success; the identity is gone
         cur = conn.execute(
             "UPDATE identities SET label = ? WHERE id = ? AND user_id = ? AND environment_id = ?",
             (new_label, identity_id, user_id, env_id),
@@ -1750,6 +1754,7 @@ def reject_detection(detection_id: int, user_id: int, environment_id: int | None
         changed = conn.execute("SELECT changes()").fetchone()[0] > 0
         if changed:  # identity cleared — surface as a relabel for delta-sync clients
             record_change(conn, user_id, env_id, "detection", detection_id, "relabeled")
+            _purge_empty_identities(conn, user_id, env_id)
     _recompute_representative(old_id)
     return changed
 
@@ -1766,6 +1771,7 @@ def reassign_detection(detection_id: int, user_id: int, identity_id: int, enviro
         changed = conn.execute("SELECT changes()").fetchone()[0] > 0
         if changed:  # identity changed — surface as a relabel for delta-sync clients
             record_change(conn, user_id, env_id, "detection", detection_id, "relabeled")
+            _purge_empty_identities(conn, user_id, env_id)
     _recompute_representative(old_id)
     return changed
 
@@ -1852,6 +1858,7 @@ def label_detection(detection_id: int, user_id: int, identity_id: int, environme
         changed = conn.execute("SELECT changes()").fetchone()[0] > 0
         if changed:
             record_change(conn, user_id, env_id, "detection", detection_id, "relabeled")
+            _purge_empty_identities(conn, user_id, env_id)
     _recompute_representative(old_id)
     return changed
 

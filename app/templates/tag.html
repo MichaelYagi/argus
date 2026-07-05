@@ -83,16 +83,23 @@ function renderBoxes() {
     div.dataset.label = det.label;
     if (focusId && det.id === focusId) focusEl = div;
 
+    // Persistent label chip shown above the box whenever the detection has a label.
+    const chip = document.createElement('div');
+    chip.className = 't-chip';
+    chip.textContent = det.label || '';
+    chip.style.display = det.label ? 'block' : 'none';
+    div.appendChild(chip);
+
     const tip = document.createElement('div');
     tip.className = 't-tip';
     if (isFace) {
       tip.textContent = (det.label || 'Unknown')
         + (det.similarity != null ? ' (' + (det.similarity * 100).toFixed(0) + '% match)' : '');
-      div.addEventListener('click', () => labelBox(div, tip));
+      div.addEventListener('click', () => labelBox(div, tip, chip));
     } else {
       tip.textContent = (det.label || 'object')
         + (det.confidence != null ? ' (' + (det.confidence * 100).toFixed(0) + '%)' : '');
-      div.addEventListener('click', () => labelObjectBox(div, tip));
+      div.addEventListener('click', () => labelObjectBox(div, tip, chip));
     }
     div.appendChild(tip);
     wrap.appendChild(div);
@@ -100,13 +107,14 @@ function renderBoxes() {
   if (focusEl) focusEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
 }
 
-function labelObjectBox(div, tip) {
+function labelObjectBox(div, tip, chip) {
   const onUnidentify = div.dataset.label ? async () => {
     const r = await fetch('/api/review/' + div.dataset.id + '/reject', { method: 'POST' });
     if (r.ok) {
       div.dataset.label = '';
       tip.textContent = 'object';
-      div.classList.remove('labeled');
+      chip.textContent = '';
+      chip.style.display = 'none';
       setStatus('Cleared label.');
     } else {
       setStatus('Error clearing label.');
@@ -123,6 +131,8 @@ function labelObjectBox(div, tip) {
       const d = await resp.json();
       div.dataset.label = d.label;
       tip.textContent = d.label;
+      chip.textContent = d.label;
+      chip.style.display = 'block';
       setStatus('Labeled: ' + d.label);
     } else {
       setStatus('Error saving label.');
@@ -130,11 +140,13 @@ function labelObjectBox(div, tip) {
   }, 'Assign label', onUnidentify, div.dataset.label || '');
 }
 
-async function unidentifyBox(div, tip) {
+async function unidentifyBox(div, tip, chip) {
   const r = await fetch('/api/review/' + div.dataset.id + '/reject', { method: 'POST' });
   if (r.ok) {
     div.dataset.label = '';
     tip.textContent = 'Unknown';
+    chip.textContent = '';
+    chip.style.display = 'none';
     div.classList.remove('labeled');
     setStatus('Cleared label.');
   } else {
@@ -142,11 +154,11 @@ async function unidentifyBox(div, tip) {
   }
 }
 
-function labelBox(div, tip) {
-  const onUnidentify = div.dataset.label ? () => unidentifyBox(div, tip) : null;
+function labelBox(div, tip, chip) {
+  const onUnidentify = div.dataset.label ? () => unidentifyBox(div, tip, chip) : null;
   showLabelPopup(div, async label => {
     if (!label) {
-      await unidentifyBox(div, tip);
+      await unidentifyBox(div, tip, chip);
       return;
     }
     const resp = await fetch('/api/detections/' + div.dataset.id + '/label', {
@@ -158,6 +170,8 @@ function labelBox(div, tip) {
       const d = await resp.json();
       div.dataset.label = d.label;
       tip.textContent = d.label;
+      chip.textContent = d.label;
+      chip.style.display = 'block';
       div.classList.add('labeled');
       addFaceLabel(d.label);
       setStatus('Labeled: ' + d.label);

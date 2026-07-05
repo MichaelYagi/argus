@@ -297,8 +297,8 @@ def test_reassign_removes_old_identity_reference(client):
 
     r = client.post(f"/api/review/{det_id}/reassign", json={"identity_id": b}, headers=h)
     assert r.status_code == 200
-    # A loses its reference; B is unaffected here (enroll path needs an active model).
-    assert client.get(f"/api/identities/{a}", headers=h).json()["embedding_count"] == 0
+    # A had its only detection moved to B — A auto-deletes.
+    assert client.get(f"/api/identities/{a}", headers=h).status_code == 404
 
 
 def test_reject_removes_old_identity_reference(client):
@@ -310,7 +310,8 @@ def test_reject_removes_old_identity_reference(client):
 
     r = client.post(f"/api/review/{det_id}/reject", headers=h)
     assert r.status_code == 200
-    assert client.get(f"/api/identities/{a}", headers=h).json()["embedding_count"] == 0
+    # A had its only detection unlinked — A auto-deletes.
+    assert client.get(f"/api/identities/{a}", headers=h).status_code == 404
 
 
 def test_relabel_removes_old_identity_reference(client):
@@ -323,4 +324,5 @@ def test_relabel_removes_old_identity_reference(client):
 
     r = client.put(f"/api/detections/{det_id}/label", json={"identity_id": b}, headers=h)
     assert r.status_code == 200
-    assert client.get(f"/api/identities/{a}", headers=h).json()["embedding_count"] == 0
+    # A had its only detection moved to B — A auto-deletes.
+    assert client.get(f"/api/identities/{a}", headers=h).status_code == 404
