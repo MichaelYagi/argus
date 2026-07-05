@@ -251,9 +251,9 @@ def test_startup_reconciles_orphaned_references(client):
         conn.execute("DELETE FROM detections WHERE id = ?", (det_id,))
     assert client.get(f"/api/identities/{identity_id}", headers=h).json()["embedding_count"] == 1
 
-    # Startup migration removes the orphaned reference.
+    # Startup migration removes the orphaned reference and the now-empty identity.
     store.init_db()
-    assert client.get(f"/api/identities/{identity_id}", headers=h).json()["embedding_count"] == 0
+    assert client.get(f"/api/identities/{identity_id}", headers=h).status_code == 404
 
 
 def test_replace_detect_cleans_reference(client):

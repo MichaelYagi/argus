@@ -233,6 +233,14 @@ def _migrate(conn: sqlite3.Connection) -> None:
     # Reconcile orphaned references left by older builds / direct DB edits.
     _reconcile_orphan_references(conn)
 
+    # Remove identities that have zero detections (left by older builds).
+    conn.execute(
+        """DELETE FROM identities
+           WHERE id NOT IN (
+             SELECT DISTINCT identity_id FROM detections WHERE identity_id IS NOT NULL
+           )"""
+    )
+
     # Ensure FTS triggers store LOWER(label) for case-insensitive search.
     # If the existing trigger still inserts new.label (not LOWER), drop and recreate all three.
     try:
