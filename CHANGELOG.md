@@ -5,6 +5,20 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [0.1.0-alpha.9] — 2026-07-04
+
+### Fixed
+
+- **Multi-face label no longer stamps every face in a group photo.** When `POST /api/detect/faces` or `POST /api/detect/all` is called with a `label` parameter and the image contains more than one face, previously all detected faces were confirmed as that identity — silently mislabeling everyone else in the photo. Now only the highest-confidence face is confirmed and enrolled under the given label; every other face is stored as unidentified and pending, surfacing in the review queue as normal.
+- **Autocomplete dropdown no longer auto-selects on Enter.** Pressing Enter in an identity input field (tag page, review queue, suggested people) previously always selected the first item in the dropdown, even if the user had only typed without navigating. Enter now submits exactly what was typed unless the user explicitly arrow-keyed to a dropdown item. Arrow-up/down navigation and hover highlighting use a shared `activeIdx` so keyboard and mouse state stay consistent.
+- **Delete all data modal shows environment name in bold.** The confirmation message and modal now clearly distinguish which environment's data is being deleted, with the environment name rendered in bold.
+
+### Added
+
+- **Full API test coverage.** New test files cover all previously untested API modules: `GET /api/health` and `GET /api/capabilities` (health); `GET /api/activity` (activity feed); `GET /api/changes` including cursor filtering and user isolation (change feed); `/api/environments` CRUD including duplicate and delete-only-environment guards; `/api/jobs` list/get/delete with user isolation; `/api/keys` full lifecycle including revoked-key rejection; `GET /api/search` with type filter and isolation; `POST /api/export` and `POST /api/import` including round-trip, idempotency, and bad-input handling; and `/media/crops/*` and `/media/sources/*` file serving. Test suite now covers every API module.
+
+---
+
 ## [0.1.0-alpha.8] — 2026-07-01
 
 ### Added

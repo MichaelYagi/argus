@@ -73,7 +73,6 @@ def test_changes_since_filters_old(client):
 
     r2 = client.get(f"/api/changes?since={cursor}", headers={"X-API-Key": key})
     items = r2.json()["items"]
-    labels = [i["entity_type"] for i in items]
     assert len(items) >= 1
     # Only events after the cursor
     assert all(i["id"] > cursor for i in items)

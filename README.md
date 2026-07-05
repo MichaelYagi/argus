@@ -260,7 +260,7 @@ curl -X POST \
   http://localhost:8100/api/detect/faces
 ```
 
-**Example — detect with an inline label (skips review queue):**
+**Example — detect with an inline label:**
 
 ```bash
 curl -X POST \
@@ -269,6 +269,8 @@ curl -X POST \
   -d '{"image_url": "http://...", "label": "Noah"}' \
   http://localhost:8100/api/detect/faces
 ```
+
+When `label` is provided, the highest-confidence face in the image is confirmed as that person and enrolled immediately, bypassing the review queue. Any other faces in the same image are stored as pending and appear in the review queue as normal.
 
 **Example — bulk detect via URLs:**
 
