@@ -7,6 +7,7 @@ import faulthandler
 import os
 import secrets
 import sys
+import warnings
 from pathlib import Path
 
 # Dump a native + Python traceback to stderr if the process crashes
@@ -14,11 +15,9 @@ from pathlib import Path
 faulthandler.enable()
 
 # Suppress noisy third-party startup warnings before any library is imported.
-import warnings as _warnings
-_warnings.filterwarnings("ignore", message=r".*pynvml.*deprecated.*",       category=FutureWarning)
-_warnings.filterwarnings("ignore", message=r".*Importing from timm\..*",    category=FutureWarning)
-_warnings.filterwarnings("ignore", message=r".*CUDAExecutionProvider.*",    category=UserWarning)
-del _warnings
+warnings.filterwarnings("ignore", message=r".*pynvml.*deprecated.*",    category=FutureWarning)
+warnings.filterwarnings("ignore", message=r".*Importing from timm\..*", category=FutureWarning)
+warnings.filterwarnings("ignore", message=r".*CUDAExecutionProvider.*", category=UserWarning)
 
 # macOS / Apple Silicon: onnxruntime (faces), torch/YOLO (objects), and faiss
 # (matching) each bundle their own OpenMP runtime. KMP_DUPLICATE_LIB_OK stops the
