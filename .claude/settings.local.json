@@ -183,7 +183,11 @@
       "Bash(grep -i \"^food$\\\\|^food \" /mnt/c/Users/Michael/Documents/development/argus/.venv/lib/python3.13/site-packages/ram/data/ram_tag_list.txt)",
       "Bash(docker exec argus-argus-1 python3 -c ' *)",
       "Bash(xargs ls)",
-      "Bash(docker compose *)"
+      "Bash(docker compose *)",
+      "Bash(xargs -I{} basename {} .py)",
+      "Bash(.venv/bin/pytest tests/test_health_api.py tests/test_activity_api.py tests/test_changes_api.py tests/test_environments_api.py tests/test_jobs_api.py tests/test_keys_api.py tests/test_search_api.py tests/test_export_import_api.py tests/test_media_api.py -v)",
+      "Bash(.venv/bin/pytest tests/test_jobs_api.py -v)",
+      "Bash(.venv/bin/pytest -v)"
     ]
   }
 }

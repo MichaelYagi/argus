@@ -664,3 +664,111 @@ def test_test_batch_requires_input(client):
 def test_test_batch_requires_api_key(client):
     r = client.post("/api/test/batch", json={"image_urls": ["http://x/y.jpg"]})
     assert r.status_code in (401, 403)
+
+
+# ---------------------------------------------------------------------------
+# Multi-face label — only the highest-confidence face gets the label
+# ---------------------------------------------------------------------------
+
+def _make_embedding():
+    import numpy as np
+    return np.zeros(512, dtype=np.float32)
+
+
+def test_detect_faces_label_only_confirms_best_face(client):
+    """When label=X is passed with 2 faces, only the highest-confidence face is
+    confirmed as X. The other face is stored as unidentified and pending."""
+    user_id, key = _create_user_and_key()
+    _activate_face_model()
+    source_id = _insert_source_image(user_id)
+
+    low  = FaceDetection(bbox=(10, 10, 80, 80),   confidence=0.70, embedding=_make_embedding())
+    high = FaceDetection(bbox=(200, 10, 80, 80),  confidence=0.95, embedding=_make_embedding())
+
+    mock_engine = MagicMock()
+    mock_engine.detect.return_value = [low, high]
+    mock_img = _mock_image()
+
+    with patch("app.api.detect.acquire_image", return_value=b"bytes"), \
+         patch("app.api.detect.open_and_validate", return_value=mock_img), \
+         patch("app.api.detect.to_rgb_array", return_value=MagicMock()), \
+         patch("app.api.detect._save_source_image", return_value=("src.jpg", source_id)), \
+         patch("app.api.detect._save_crop", return_value="crop.jpg"), \
+         patch("app.api.enroll.enroll_from_detection", return_value=False), \
+         patch.object(registry, "get_face_engine", return_value=mock_engine):
+        r = client.post(
+            "/api/detect/faces",
+            data={"label": "Alice"},
+            files={"file": FAKE_FILE},
+            headers={"X-API-Key": key},
+        )
+
+    assert r.status_code == 200
+    faces = r.json()["faces"]
+    assert len(faces) == 2
+
+    confirmed = [f for f in faces if f["review_status"] == "confirmed"]
+    pending   = [f for f in faces if f["review_status"] == "pending"]
+
+    assert len(confirmed) == 1
+    assert len(pending) == 1
+    assert confirmed[0]["confidence"] == 0.95
+    assert confirmed[0]["label"] == "Alice"
+    assert pending[0]["identity_id"] is None
+    assert pending[0]["label"] is None
+
+
+def test_detect_faces_label_single_face_confirms(client):
+    """With a single face and label=X, that face is confirmed as X (unchanged behaviour)."""
+    user_id, key = _create_user_and_key()
+    _activate_face_model()
+    source_id = _insert_source_image(user_id)
+
+    mock_engine = MagicMock()
+    mock_engine.detect.return_value = [
+        FaceDetection(bbox=(10, 10, 80, 80), confidence=0.90, embedding=_make_embedding()),
+    ]
+
+    with patch("app.api.detect.acquire_image", return_value=b"bytes"), \
+         patch("app.api.detect.open_and_validate", return_value=_mock_image()), \
+         patch("app.api.detect.to_rgb_array", return_value=MagicMock()), \
+         patch("app.api.detect._save_source_image", return_value=("src.jpg", source_id)), \
+         patch("app.api.detect._save_crop", return_value="crop.jpg"), \
+         patch("app.api.enroll.enroll_from_detection", return_value=False), \
+         patch.object(registry, "get_face_engine", return_value=mock_engine):
+        r = client.post(
+            "/api/detect/faces",
+            data={"label": "Bob"},
+            files={"file": FAKE_FILE},
+            headers={"X-API-Key": key},
+        )
+
+    assert r.status_code == 200
+    faces = r.json()["faces"]
+    assert len(faces) == 1
+    assert faces[0]["review_status"] == "confirmed"
+    assert faces[0]["label"] == "Bob"
+
+
+def test_detect_faces_label_no_faces_returns_empty(client):
+    """label=X with no detected faces returns an empty list (not an error)."""
+    _, key = _create_user_and_key()
+    _activate_face_model()
+
+    mock_engine = MagicMock()
+    mock_engine.detect.return_value = []
+
+    with patch("app.api.detect.acquire_image", return_value=b"bytes"), \
+         patch("app.api.detect.open_and_validate", return_value=_mock_image()), \
+         patch("app.api.detect.to_rgb_array", return_value=MagicMock()), \
+         patch("app.api.detect._save_source_image", return_value=("src.jpg", 1)), \
+         patch.object(registry, "get_face_engine", return_value=mock_engine):
+        r = client.post(
+            "/api/detect/faces",
+            data={"label": "Carol"},
+            files={"file": FAKE_FILE},
+            headers={"X-API-Key": key},
+        )
+
+    assert r.status_code == 200
+    assert r.json()["faces"] == []
