@@ -35,23 +35,25 @@
   --shadow: 0 1px 3px rgba(0,0,0,.5);
 }
 
-[data-theme="ember"] {
-  --bg: #1a1612;
-  --surface: #252018;
-  --nav-bg: #0f0d0a;
-  --nav-text: #8b7355;
-  --accent: #f59e0b;
-  --text: #f0ebe3;
-  --muted: #a89988;
-  --border: #6b5a45;
-  --hover: #2d2620;
-  --placeholder: #2d2620;
-  --toggle-off: #5c4a36;
-  --danger: #ef4444;
-  --success: #4ade80;
-  --warn: #fb923c;
-  --shadow: 0 1px 3px rgba(0,0,0,.5);
+[data-theme="chocolate"] {
+  --bg:          #1a0e08;   /* 85% dark chocolate */
+  --surface:     #2c1a10;   /* dark truffle */
+  --nav-bg:      #100805;   /* espresso */
+  --nav-text:    #b8825a;   /* milk chocolate */
+  --accent:      #d4922a;   /* caramel drizzle */
+  --text:        #f5e8d5;   /* vanilla cream */
+  --muted:       #bc9272;   /* mocha latte */
+  --border:      #5c3820;   /* bitter chocolate edge */
+  --hover:       #3c2214;   /* slightly lighter truffle */
+  --placeholder: #3c2214;
+  --toggle-off:  #4e2e18;
+  --danger:      #ef4444;
+  --success:     #4ade80;
+  --warn:        #fb923c;
+  --shadow:      0 2px 8px rgba(0,0,0,.65);
 }
+/* Caramel accent is mid-luminance — dark text on accent-bg for 7:1 contrast */
+[data-theme="chocolate"] .btn-primary { color: #1a0e08; }
 
 [data-theme="garbagefire"] {
   --bg: #ffff00;
