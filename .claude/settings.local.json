@@ -187,7 +187,8 @@
       "Bash(xargs -I{} basename {} .py)",
       "Bash(.venv/bin/pytest tests/test_health_api.py tests/test_activity_api.py tests/test_changes_api.py tests/test_environments_api.py tests/test_jobs_api.py tests/test_keys_api.py tests/test_search_api.py tests/test_export_import_api.py tests/test_media_api.py -v)",
       "Bash(.venv/bin/pytest tests/test_jobs_api.py -v)",
-      "Bash(.venv/bin/pytest -v)"
+      "Bash(.venv/bin/pytest -v)",
+      "Bash(.venv/bin/ruff check *)"
     ]
   }
 }

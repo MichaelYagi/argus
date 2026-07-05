@@ -263,10 +263,6 @@ async def webhooks_page(request: Request):
 
 @router.get("/docs")
 async def api_docs(request: Request):
-    ctx = _base(request, "docs")
-    if ctx:
-        return _r(request, "api_docs.html", ctx)
-    # Not signed in — render without nav
     return templates.TemplateResponse(request, "api_docs_public.html", {})
 
 
