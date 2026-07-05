@@ -307,6 +307,7 @@ Initial alpha release.
 
 ---
 
+[0.1.0-alpha.9]: https://github.com/MichaelYagi/argus/compare/v0.1.0-alpha.8...v0.1.0-alpha.9
 [0.1.0-alpha.8]: https://github.com/MichaelYagi/argus/compare/v0.1.0-alpha.7...v0.1.0-alpha.8
 [0.1.0-alpha.7]: https://github.com/MichaelYagi/argus/compare/v0.1.0-alpha.6...v0.1.0-alpha.7
 [0.1.0-alpha.6]: https://github.com/MichaelYagi/argus/compare/v0.1.0-alpha.5...v0.1.0-alpha.6
