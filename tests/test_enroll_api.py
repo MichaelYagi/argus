@@ -231,10 +231,11 @@ def test_delete_detection_removes_its_reference(client):
     client.post(f"/api/detections/{det_id}/enroll", headers=h)
     assert client.get(f"/api/identities/{identity_id}", headers=h).json()["embedding_count"] == 1
 
-    # Deleting the detection must also drop its reference (no orphan).
+    # Deleting the detection must also drop its reference (no orphan), and the
+    # identity auto-deletes because it has no remaining detections.
     r = client.delete(f"/api/detections/{det_id}", headers=h)
     assert r.status_code == 204
-    assert client.get(f"/api/identities/{identity_id}", headers=h).json()["embedding_count"] == 0
+    assert client.get(f"/api/identities/{identity_id}", headers=h).status_code == 404
 
 
 def test_startup_reconciles_orphaned_references(client):
@@ -264,10 +265,11 @@ def test_replace_detect_cleans_reference(client):
     assert client.get(f"/api/identities/{identity_id}", headers=h).json()["embedding_count"] == 1
 
     # Find the source image id for that detection and clear it (what replace=true does).
+    # The identity auto-deletes because it has no remaining detections.
     det = store.get_detection(det_id, user_id)
     store.clear_detections_for_source(det["source_image_id"], user_id, "face")
 
-    assert client.get(f"/api/identities/{identity_id}", headers=h).json()["embedding_count"] == 0
+    assert client.get(f"/api/identities/{identity_id}", headers=h).status_code == 404
 
 
 def test_delete_source_image_cleans_references(client):
@@ -278,9 +280,10 @@ def test_delete_source_image_cleans_references(client):
     src_id = store.get_detection(det_id, user_id)["source_image_id"]
     assert client.get(f"/api/identities/{identity_id}", headers=h).json()["embedding_count"] == 1
 
+    # The identity auto-deletes because it has no remaining detections.
     r = client.delete(f"/api/images/{src_id}", headers=h)
     assert r.status_code == 200
-    assert client.get(f"/api/identities/{identity_id}", headers=h).json()["embedding_count"] == 0
+    assert client.get(f"/api/identities/{identity_id}", headers=h).status_code == 404
 
 
 def test_reassign_removes_old_identity_reference(client):

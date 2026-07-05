@@ -975,6 +975,7 @@ def delete_detections(
         for did in ids:
             record_change(conn, user_id, env_id, "detection", did, "deleted")
         _reconcile_orphan_references(conn, user_id)
+        _purge_empty_identities(conn, user_id, env_id)
         return crops
 
 
@@ -1184,6 +1185,7 @@ def clear_detections_for_source(
 
         # Drop any references whose crop was just removed, and recompute reps.
         _reconcile_orphan_references(conn, user_id)
+        _purge_empty_identities(conn, user_id, env_id)
         return crops
 
 
@@ -1218,6 +1220,7 @@ def delete_source_image(source_image_id: int, user_id: int, environment_id: int 
         # Cascade removed the detections but not their references (keyed by crop_path,
         # not an FK) — reconcile so no orphaned references remain.
         _reconcile_orphan_references(conn, user_id)
+        _purge_empty_identities(conn, user_id, env_id)
         return crops
 
 
@@ -1413,6 +1416,27 @@ def get_representative_embedding(identity_id: int, user_id: int, environment_id:
             (identity_id, user_id, env_id),
         ).fetchone()
         return bytes(row["representative_embedding"]) if row and row["representative_embedding"] else None
+
+
+def _purge_empty_identities(conn, user_id: int, env_id: int) -> list[int]:
+    """Delete identities that have no remaining detections in this environment.
+    face_embeddings are removed via FK ON DELETE CASCADE. Returns the deleted ids."""
+    empty = conn.execute(
+        """SELECT id FROM identities
+           WHERE user_id = ? AND environment_id = ?
+             AND id NOT IN (
+               SELECT DISTINCT identity_id FROM detections
+               WHERE user_id = ? AND environment_id = ? AND identity_id IS NOT NULL
+             )""",
+        (user_id, env_id, user_id, env_id),
+    ).fetchall()
+    ids = [r["id"] for r in empty]
+    if ids:
+        ph = ",".join("?" * len(ids))
+        conn.execute(f"DELETE FROM identities WHERE id IN ({ph})", ids)
+        for iid in ids:
+            record_change(conn, user_id, env_id, "identity", iid, "deleted")
+    return ids
 
 
 def _reconcile_orphan_references(conn, user_id: int | None = None) -> int:
@@ -1744,6 +1768,7 @@ def delete_detection(detection_id: int, user_id: int, environment_id: int | None
     cover photo is cleared automatically via the cover_detection_id ON DELETE SET NULL FK.
     """
     ref_identity = None
+    purged_ids: list[int] = []
     with _connect() as conn:
         env_id = _resolve_env(conn, user_id, environment_id)
         row = conn.execute(
@@ -1766,8 +1791,9 @@ def delete_detection(detection_id: int, user_id: int, environment_id: int | None
         deleted = conn.execute("SELECT changes()").fetchone()[0] > 0
         if deleted:
             record_change(conn, user_id, env_id, "detection", detection_id, "deleted")
+            purged_ids = _purge_empty_identities(conn, user_id, env_id)
 
-    if ref_identity is not None:
+    if ref_identity is not None and ref_identity not in purged_ids:
         model_row = get_active_model("face")
         if model_row:
             compute_and_store_representative(ref_identity, model_row["id"])
