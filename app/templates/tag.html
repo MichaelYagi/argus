@@ -55,7 +55,6 @@ const NAT_W = {{ nat_w }}, NAT_H = {{ nat_h }};
 const FACES = {{ faces_json | safe }};
 const OBJECTS = {{ objects_json | safe }};
 
-
 function renderBoxes() {
   const img = document.getElementById('tag-photo');
   const sx = img.clientWidth / NAT_W;
@@ -274,7 +273,7 @@ document.getElementById('delete-image-btn').addEventListener('click', () => {
   };
   const label = labels[path] || 'Back';
   link.textContent = '← ' + label;
-  link.href = path;
+  link.href = url.pathname + url.search;
 })();
 </script>
 {% endblock %}

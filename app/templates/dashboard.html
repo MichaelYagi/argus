@@ -209,6 +209,7 @@ function switchTab(type) {
   ['face', 'object'].forEach(t => {
     document.getElementById('tab-' + t).hidden = (t !== type);
   });
+  history.replaceState(null, '', type === 'face' ? '/' : '/?tab=' + type);
   if (!state[type].loaded) loadMore(type);
 }
 

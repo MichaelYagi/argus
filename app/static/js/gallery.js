@@ -8,6 +8,14 @@
   let   coverId      = container.dataset.coverId || null;
   const PAGE = 30;
 
+  // Returns true when the identity no longer exists server-side (auto-purged).
+  async function _identityGone() {
+    try {
+      const r = await fetch(`/api/identities/${identityId}/gallery?limit=1`);
+      return r.status === 404;
+    } catch (e) { return false; }
+  }
+
   function adjustRefCount(delta) {
     const el = document.getElementById('ref-count-label');
     if (!el) return;
@@ -82,11 +90,7 @@
         selected.clear();
         updateBulkBar();
         relayout();
-        if (allItems.length === 0 && !hasMore) {
-          await fetch(`/api/identities/${identityId}`, { method: 'DELETE' });
-          location.href = '/?tab=' + identityType;
-          return;
-        }
+        if (await _identityGone()) { location.href = '/?tab=' + identityType; return; }
         if (window.showToast) showToast(n + ' detection' + (n === 1 ? '' : 's') + ' removed', 'success');
       },
       { confirmText: 'Delete', danger: true }
@@ -117,11 +121,7 @@
       selected.clear();
       updateBulkBar();
       relayout();
-      if (allItems.length === 0 && !hasMore) {
-        await fetch(`/api/identities/${identityId}`, { method: 'DELETE' });
-        location.href = '/?tab=' + identityType;
-        return;
-      }
+      if (await _identityGone()) { location.href = '/?tab=' + identityType; return; }
       if (window.showToast) showToast(n + ' moved to ' + label, 'success');
     });
   };
@@ -382,7 +382,10 @@
     const params = new URLSearchParams({ limit: PAGE });
     if (cursor) params.set('cursor', cursor);
     const resp = await fetch(`/api/identities/${identityId}/gallery?${params}`);
-    if (!resp.ok) { loading = false; return; }
+    if (!resp.ok) {
+      if (resp.status === 404) { location.href = '/?tab=' + identityType; return; }
+      loading = false; return;
+    }
     const data = await resp.json();
 
     hasMore = data.has_more;
