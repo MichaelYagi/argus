@@ -210,6 +210,7 @@ function switchTab(type) {
     document.getElementById('tab-' + t).hidden = (t !== type);
   });
   history.replaceState(null, '', type === 'face' ? '/' : '/?tab=' + type);
+  try { sessionStorage.setItem('argus_last_tab', type); } catch (e) {}
   if (!state[type].loaded) loadMore(type);
 }
 
@@ -288,7 +289,8 @@ function setTabBadge(type, total) {
 refreshStats();
 setInterval(refreshStats, 30000);
 
-const _initTab = new URLSearchParams(location.search).get('tab');
+const _initTab = new URLSearchParams(location.search).get('tab')
+  || (function () { try { return sessionStorage.getItem('argus_last_tab'); } catch (e) { return null; } }());
 switchTab(_initTab === 'object' ? 'object' : 'face');
 
 window.addEventListener('pageshow', e => {
