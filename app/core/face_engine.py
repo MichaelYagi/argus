@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import contextlib
+import io
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -37,8 +39,9 @@ class FaceEngine:
         from insightface.app import FaceAnalysis
 
         self._model_name = model_name
-        self._app = FaceAnalysis(name=model_name, root=str(model_root))
-        self._app.prepare(ctx_id=_face_ctx_id(), det_size=(640, 640))
+        with contextlib.redirect_stdout(io.StringIO()):
+            self._app = FaceAnalysis(name=model_name, root=str(model_root))
+            self._app.prepare(ctx_id=_face_ctx_id(), det_size=(640, 640))
 
     @property
     def model_name(self) -> str:

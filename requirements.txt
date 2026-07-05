@@ -18,6 +18,6 @@ httpx2
 faiss-cpu          # fast face similarity search; imported as `faiss`
 python-dotenv
 itsdangerous
-pynvml         # GPU name on NVIDIA hardware; optional, graceful fallback
+nvidia-ml-py   # GPU name on NVIDIA hardware; optional, graceful fallback
 py-cpuinfo     # reliable CPU name cross-platform
 psutil         # system memory reporting

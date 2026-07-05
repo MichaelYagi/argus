@@ -13,7 +13,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
 COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+RUN pip install --no-cache-dir -r requirements.txt && \
+    # insightface depends on cpu-only onnxruntime; force the GPU build to win
+    pip install --no-cache-dir --force-reinstall --no-deps "onnxruntime-gpu"
 
 # Application source (includes templates/ and static/)
 COPY app/ app/

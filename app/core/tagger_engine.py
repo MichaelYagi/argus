@@ -20,6 +20,8 @@ _run_ram, before any ram import, and is idempotent.
 
 from __future__ import annotations
 
+import contextlib
+import io
 from pathlib import Path
 from typing import Any
 
@@ -145,13 +147,20 @@ class TaggerEngine:
                 "pip install ram @ git+https://github.com/xinyu1205/recognize-anything.git"
             ) from None
 
+        try:
+            import transformers as _tf
+            _tf.logging.set_verbosity_error()
+        except Exception:
+            pass
+
         from huggingface_hub import hf_hub_download
         ram_ckpt = hf_hub_download(
             repo_id=RAM_REPO_ID,
             filename=RAM_FILENAME,
             local_dir=str(base_dir),
         )
-        self._ram = ram_plus(pretrained=ram_ckpt, image_size=RAM_IMAGE_SIZE, vit="swin_l")
+        with contextlib.redirect_stdout(io.StringIO()):
+            self._ram = ram_plus(pretrained=ram_ckpt, image_size=RAM_IMAGE_SIZE, vit="swin_l")
         self._ram.eval()
         self._ram = self._ram.to(self._device)
 

@@ -188,7 +188,18 @@
       "Bash(.venv/bin/pytest tests/test_health_api.py tests/test_activity_api.py tests/test_changes_api.py tests/test_environments_api.py tests/test_jobs_api.py tests/test_keys_api.py tests/test_search_api.py tests/test_export_import_api.py tests/test_media_api.py -v)",
       "Bash(.venv/bin/pytest tests/test_jobs_api.py -v)",
       "Bash(.venv/bin/pytest -v)",
-      "Bash(.venv/bin/ruff check *)"
+      "Bash(.venv/bin/ruff check *)",
+      "Bash(/mnt/c/Users/Michael/Documents/development/argus/.venv/bin/pip show *)",
+      "Bash(.venv/bin/pip uninstall *)",
+      "Bash(.venv/bin/python *)",
+      "Bash(/mnt/c/Users/Michael/Documents/development/argus/.venv/bin/python *)",
+      "Bash(ldd /mnt/c/Users/Michael/Documents/development/argus/.venv/lib/python3.13/site-packages/onnxruntime/capi/libonnxruntime_providers_cuda.so)",
+      "Bash(/mnt/c/Users/Michael/Documents/development/argus/.venv/bin/pip list *)",
+      "Bash(nm -D /mnt/c/Users/Michael/Documents/development/argus/.venv/lib/python3.13/site-packages/onnxruntime/capi/libonnxruntime.so.1.27.0)",
+      "Bash(nm -D /mnt/c/Users/Michael/Documents/development/argus/.venv/lib/python3.13/site-packages/onnxruntime/capi/libonnxruntime_providers_cuda.so)",
+      "Bash(nm -D /mnt/c/Users/Michael/Documents/development/argus/.venv/lib/python3.13/site-packages/onnxruntime/capi/libonnxruntime_providers_shared.so)",
+      "Bash(LD_LIBRARY_PATH=\"/mnt/c/Users/Michael/Documents/development/argus/.venv/lib/python3.13/site-packages/nvidia/cu13/lib:/mnt/c/Users/Michael/Documents/development/argus/.venv/lib/python3.13/site-packages/nvidia/cudnn/lib\" /mnt/c/Users/Michael/Documents/development/argus/.venv/bin/python *)",
+      "Bash(nm -D /mnt/c/Users/Michael/Documents/development/argus/.venv/lib/python3.13/site-packages/onnxruntime/capi/onnxruntime_pybind11_state.cpython-313-x86_64-linux-gnu.so)"
     ]
   }
 }

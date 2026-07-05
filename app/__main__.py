@@ -13,6 +13,13 @@ from pathlib import Path
 # (segfaults from onnxruntime/faiss/torch are otherwise silent).
 faulthandler.enable()
 
+# Suppress noisy third-party startup warnings before any library is imported.
+import warnings as _warnings
+_warnings.filterwarnings("ignore", message=r".*pynvml.*deprecated.*",       category=FutureWarning)
+_warnings.filterwarnings("ignore", message=r".*Importing from timm\..*",    category=FutureWarning)
+_warnings.filterwarnings("ignore", message=r".*CUDAExecutionProvider.*",    category=UserWarning)
+del _warnings
+
 # macOS / Apple Silicon: onnxruntime (faces), torch/YOLO (objects), and faiss
 # (matching) each bundle their own OpenMP runtime. KMP_DUPLICATE_LIB_OK stops the
 # hard abort, but when these runtimes spin up competing thread pools they can
