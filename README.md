@@ -126,6 +126,17 @@ Data is stored in `./data/` and model weights in `./models/` relative to the wor
 
 Uncomment the `deploy` block in `docker-compose.yml`. Requires the NVIDIA Container Toolkit installed on the host and Docker Desktop using the WSL2 backend. The app auto-detects GPU availability at runtime — no rebuild needed.
 
+### GPU and performance
+
+A GPU materially speeds up both engines:
+
+- **Face engine (InsightFace/onnxruntime)** — moderate speedup; CPU is usable for casual use
+- **Object engine (YOLO/RAM++/torch)** — significant speedup; RAM++ in particular is a large transformer and noticeably slow on CPU under load
+
+CPU is fully functional — all detection, matching, and review features work. At low throughput (a few images at a time) the difference is small; under sustained load or with RAM++ active, GPU makes a meaningful difference.
+
+The active provider is visible in `GET /api/health` — confirm GPU is working there before running heavy workloads.
+
 ### ARM / Apple Silicon (M1/M2/M3)
 
 Works natively. The image builds for ARM64 and `onnxruntime` (CPU) is installed automatically — `onnxruntime-gpu` has no ARM64 wheels. Everything runs correctly on CPU; Apple's Neural Engine is not used.
