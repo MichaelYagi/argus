@@ -5,10 +5,12 @@ from __future__ import annotations
 from typing import Any, Optional
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query
+from fastapi.responses import FileResponse
 from pydantic import BaseModel
 
 from app.core import settings_cache
 from app.core.auth import require_auth, require_env_id
+from app.core.paths import crops_dir
 from app.db import store
 
 
@@ -192,6 +194,40 @@ async def bulk_review(
     if parts:
         _ab.emit("identity", f"Bulk review: {', '.join(parts)}")
     return results
+
+
+# ---------------------------------------------------------------------------
+# Get a single detection
+# ---------------------------------------------------------------------------
+
+@router.get("/api/detections/{detection_id}")
+async def get_detection(
+    detection_id: int,
+    user_id: int = Depends(require_auth),
+    environment_id: int = Depends(require_env_id),
+):
+    det = store.get_detection(detection_id, user_id, environment_id)
+    if not det:
+        raise HTTPException(404, "Detection not found")
+    d = dict(det)
+    d.pop("embedding", None)
+    d["crop_url"] = f"/media/crops/{d['crop_path']}" if d.get("crop_path") else None
+    return d
+
+
+@router.get("/api/detections/{detection_id}/img")
+async def get_detection_img(
+    detection_id: int,
+    user_id: int = Depends(require_auth),
+    environment_id: int = Depends(require_env_id),
+):
+    det = store.get_detection(detection_id, user_id, environment_id)
+    if not det:
+        raise HTTPException(404, "Detection not found")
+    path = crops_dir() / det["crop_path"]
+    if not path.exists():
+        raise HTTPException(404, "Crop image not found on disk")
+    return FileResponse(path, media_type="image/jpeg")
 
 
 # ---------------------------------------------------------------------------

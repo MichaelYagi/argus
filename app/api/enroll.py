@@ -7,6 +7,7 @@ import sqlite3
 from typing import Any
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request
+from fastapi.responses import FileResponse
 
 from app.core import settings_cache
 from app.core.auth import require_auth, require_env_id
@@ -14,6 +15,18 @@ from app.core.engine_registry import registry
 from app.core.image_input import decode_base64, fetch_url, open_and_validate, to_rgb_array
 from app.core.paths import crops_dir, sources_dir
 from app.db import store
+
+
+def _get_embedding_row(embedding_id: int, user_id: int):
+    with store._connect() as conn:
+        row = conn.execute(
+            """SELECT fe.id, fe.identity_id, fe.model_id, fe.source_image_path, fe.created_at
+               FROM face_embeddings fe
+               JOIN identities i ON i.id = fe.identity_id
+               WHERE fe.id = ? AND i.user_id = ?""",
+            (embedding_id, user_id),
+        ).fetchone()
+    return row
 
 router = APIRouter()
 
@@ -136,6 +149,33 @@ async def list_embeddings(
             (identity_id,),
         ).fetchall()
     return [dict(r) for r in rows]
+
+
+@router.get("/api/face_embeddings/{embedding_id}")
+async def get_embedding(
+    embedding_id: int,
+    user_id: int = Depends(require_auth),
+):
+    row = _get_embedding_row(embedding_id, user_id)
+    if not row:
+        raise HTTPException(404, "Embedding not found")
+    return dict(row)
+
+
+@router.get("/api/face_embeddings/{embedding_id}/img")
+async def get_embedding_img(
+    embedding_id: int,
+    user_id: int = Depends(require_auth),
+):
+    row = _get_embedding_row(embedding_id, user_id)
+    if not row:
+        raise HTTPException(404, "Embedding not found")
+    if not row["source_image_path"]:
+        raise HTTPException(404, "No image stored for this embedding")
+    path = crops_dir() / row["source_image_path"]
+    if not path.exists():
+        raise HTTPException(404, "Image not found on disk")
+    return FileResponse(path, media_type="image/jpeg")
 
 _FMT_EXT = {"JPEG": "jpg", "PNG": "png", "WEBP": "webp", "BMP": "bmp",
              "GIF": "gif", "TIFF": "tif", "HEIF": "heif"}
