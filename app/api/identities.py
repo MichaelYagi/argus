@@ -8,6 +8,7 @@ from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
 
+from app.api._utils import paginate
 from app.core import settings_cache
 from app.core.auth import require_auth, require_env_id
 from app.db import store
@@ -282,7 +283,7 @@ async def identity_gallery(
         rep = store.get_representative_embedding(identity_id, user_id, environment_id)
         sim_fn = lambda emb: store.cosine_similarity(emb, rep)  # noqa: E731
 
-    return _paginate(rows, page_size, lambda r: {
+    return paginate(rows, page_size, lambda r: {
         "detection_id": r["id"],
         "source_image_id": r["source_image_id"],
         "source_image_url": f"/media/sources/{r['source_image_path']}" if r["source_image_path"] else None,
@@ -408,7 +409,7 @@ async def unknown_detections(
     rows = store.get_unknown_detections(
         user_id, detection_type=type, cursor=cursor, limit=page_size, environment_id=environment_id
     )
-    return _paginate(rows, page_size, lambda r: {
+    return paginate(rows, page_size, lambda r: {
         "detection_id": r["id"],
         "type": r["type"],
         "crop_url": f"/media/crops/{r['crop_path']}",
@@ -445,8 +446,3 @@ def _safe(row, key):
         return None
 
 
-def _paginate(rows: list, limit: int, serialize) -> dict:
-    has_more = len(rows) > limit
-    items = rows[:limit]
-    next_cursor = items[-1]["detected_at"] if has_more and items else None
-    return {"items": [serialize(r) for r in items], "next_cursor": next_cursor, "has_more": has_more}

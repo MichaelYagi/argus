@@ -69,12 +69,24 @@ async def get_review_queue(
     model_row = store.get_active_model("face")
     model_id = model_row["id"] if model_row else None
 
+    # Auto-confirm pass — DB writes happen here before formatting, not inside the formatter.
+    auto_on  = settings_cache.cache.get_or("face.auto_confirm", True)
+    auto_thr = settings_cache.cache.get_or("face.auto_confirm_threshold", 0.80)
+    kept = []
+    for r in items:
+        if auto_on and model_id and not r["identity_id"] and r["embedding"]:
+            suggested = _suggested_matches(bytes(r["embedding"]), model_id, user_id, environment_id)
+            if suggested and suggested[0]["similarity"] >= auto_thr:
+                store.label_detection(r["id"], user_id, suggested[0]["identity_id"], environment_id)
+                _auto_enroll(r["id"], user_id, environment_id)
+                continue
+        kept.append(r)
+
     next_cursor = (
         f"{items[-1]['confidence']}_{items[-1]['id']}" if has_more and items else None
     )
-
     return {
-        "items": [x for x in (_fmt_review_item(r, model_id, user_id, environment_id) for r in items) if x is not None],
+        "items": [_fmt_review_item(r, model_id, user_id, environment_id) for r in kept],
         "next_cursor": next_cursor,
         "has_more": has_more,
     }
@@ -224,6 +236,8 @@ async def get_detection_img(
     det = store.get_detection(detection_id, user_id, environment_id)
     if not det:
         raise HTTPException(404, "Detection not found")
+    if not det["crop_path"]:
+        raise HTTPException(404, "No crop image for this detection")
     path = crops_dir() / det["crop_path"]
     if not path.exists():
         raise HTTPException(404, "Crop image not found on disk")
@@ -402,21 +416,10 @@ async def delete_detections(
 # Internal
 # ---------------------------------------------------------------------------
 
-def _fmt_review_item(row: Any, model_id: int | None, user_id: int, environment_id: int) -> dict | None:
+def _fmt_review_item(row: Any, model_id: int | None, user_id: int, environment_id: int) -> dict:
     suggested: list[dict] = []
     if model_id and row["embedding"]:
         suggested = _suggested_matches(bytes(row["embedding"]), model_id, user_id, environment_id)
-
-    # If no identity assigned but the top suggestion beats auto-confirm threshold,
-    # confirm it now rather than showing "No match found" with an obvious match below.
-    if not row["identity_id"] and suggested:
-        auto_on  = settings_cache.cache.get_or("face.auto_confirm", True)
-        auto_thr = settings_cache.cache.get_or("face.auto_confirm_threshold", 0.80)
-        top = suggested[0]
-        if auto_on and top["similarity"] >= auto_thr:
-            store.label_detection(row["id"], user_id, top["identity_id"], environment_id)
-            _auto_enroll(row["id"], user_id, environment_id)
-            return None  # remove from queue
 
     current = (
         {"identity_id": row["identity_id"], "label": row["current_label"]}

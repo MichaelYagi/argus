@@ -5,17 +5,33 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
-## [0.1.0-alpha.9] — 2026-07-04
+## [0.1.0-alpha.9] — 2026-07-06
+
+### Added
+
+- **Full face attribute set in API responses.** The detect, identify, and verify endpoints now return four additional face fields alongside `age`, `gender`, and `pose`: `mask` (mask-wearing probability 0–1), `kps` (5 keypoints as `[[x,y],…]`), `landmark_2d_106` (106-point 2D landmarks), and `landmark_3d_68` (68-point 3D landmarks). All four are `null` when the active model pack does not provide them — no error.
+- **`GET /api/detections/{id}`** — fetch a single detection by id (metadata, bbox, attributes, crop URL; embedding bytes stripped). Scoped to the caller's user and environment.
+- **`GET /api/detections/{id}/img`** — serve the saved crop file for a detection. Returns 404 when no crop exists.
+- **`GET /api/face_embeddings/{id}`** — fetch a single reference embedding record (without the raw vector). Scoped to the caller's user and environment.
+- **`GET /api/face_embeddings/{id}/img`** — serve the crop image associated with a reference embedding. Returns 404 when no image is stored.
+- **Full API test coverage.** New test files cover all previously untested API modules: `GET /api/health` and `GET /api/capabilities` (health); `GET /api/activity` (activity feed); `GET /api/changes` including cursor filtering and user isolation (change feed); `/api/environments` CRUD including duplicate and delete-only-environment guards; `/api/jobs` list/get/delete with user isolation; `/api/keys` full lifecycle including revoked-key rejection; `GET /api/search` with type filter and isolation; `POST /api/export` and `POST /api/import` including round-trip, idempotency, and bad-input handling; and `/media/crops/*` and `/media/sources/*` file serving. Test suite now covers every API module.
 
 ### Fixed
 
 - **Multi-face label no longer stamps every face in a group photo.** When `POST /api/detect/faces` or `POST /api/detect/all` is called with a `label` parameter and the image contains more than one face, previously all detected faces were confirmed as that identity — silently mislabeling everyone else in the photo. Now only the highest-confidence face is confirmed and enrolled under the given label; every other face is stored as unidentified and pending, surfacing in the review queue as normal.
 - **Autocomplete dropdown no longer auto-selects on Enter.** Pressing Enter in an identity input field (tag page, review queue, suggested people) previously always selected the first item in the dropdown, even if the user had only typed without navigating. Enter now submits exactly what was typed unless the user explicitly arrow-keyed to a dropdown item. Arrow-up/down navigation and hover highlighting use a shared `activeIdx` so keyboard and mouse state stay consistent.
 - **Delete all data modal shows environment name in bold.** The confirmation message and modal now clearly distinguish which environment's data is being deleted, with the environment name rendered in bold.
+- **Review queue auto-confirm no longer performs DB writes inside the response formatter.** The auto-confirm pass now runs as an explicit pre-pass loop in `get_review_queue`, filtering out auto-confirmed rows before formatting. Previously the formatter was called from a generator expression and had DB side-effects, which is a latent ordering/error-propagation hazard.
+- **`GET /api/face_embeddings/{id}` and `GET /api/face_embeddings/{id}/img` now enforce environment scoping.** The store query joins through `identities` and filters by both `user_id` and `environment_id`, preventing cross-environment reads.
+- **Enrollment cover-photo assignment now respects ownership guards.** `POST /api/faces/enroll` previously set the identity's cover via a raw SQL statement that lacked the `WHERE user_id = ? AND environment_id = ?` guard present on every other identity mutation. It now calls `store.set_identity_cover()`, which carries the same ownership check as the explicit cover-selection endpoint.
 
-### Added
+### Internal
 
-- **Full API test coverage.** New test files cover all previously untested API modules: `GET /api/health` and `GET /api/capabilities` (health); `GET /api/activity` (activity feed); `GET /api/changes` including cursor filtering and user isolation (change feed); `/api/environments` CRUD including duplicate and delete-only-environment guards; `/api/jobs` list/get/delete with user isolation; `/api/keys` full lifecycle including revoked-key rejection; `GET /api/search` with type filter and isolation; `POST /api/export` and `POST /api/import` including round-trip, idempotency, and bad-input handling; and `/media/crops/*` and `/media/sources/*` file serving. Test suite now covers every API module.
+- `enroll.py` no longer calls `store._connect()` directly. Four raw-SQL sites replaced with store-layer functions (`store.embedding_exists`, `store.list_face_embeddings`, `store.get_face_embedding`, `store.set_identity_cover`). Three new helpers added to `store.py` to close the gap.
+- `_FMT_EXT` and `_save_crop` deduplicated — `enroll.py` previously carried local copies that had silently diverged from the canonical versions in `detect.py`; both are now imported from there.
+- `_persist_enrollment()` extracted in `enroll.py` — source-image save, crop save, detection insert, embedding insert, representative recompute, and index rebuild are now shared between `enroll_new` and `enroll_existing` instead of duplicated.
+- Request body field parsing consolidated into `read_body_field(request, key)` in `image_input.py`. The three hand-rolled multipart/JSON parse blocks in `detect.py` (`_extract_label`, `_extract_external_ref`, `_extract_replace`) and the equivalent block in `enroll.py`'s `_parse_enroll_request` all call this helper instead. Starlette caches form/JSON after first access so there is no extra I/O cost.
+- Cursor pagination consolidated into a shared `paginate()` helper in `app/api/_utils.py`. The local `_paginate` in `identities.py` and the hand-rolled pagination block in `images.py` are removed; both now call the shared helper.
 
 ---
 

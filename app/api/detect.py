@@ -18,6 +18,7 @@ from app.core.image_input import (
     decode_base64,
     fetch_url,
     open_and_validate,
+    read_body_field,
     to_rgb_array,
 )
 from app.core.paths import crops_dir, sources_dir
@@ -552,36 +553,11 @@ def _run_bulk_job(
 # ---------------------------------------------------------------------------
 
 async def _extract_label(request: Request) -> str | None:
-    """Read the optional `label` field from multipart form or JSON body."""
-    ct = request.headers.get("content-type", "")
-    try:
-        if "multipart/form-data" in ct:
-            form = await request.form()
-            v = form.get("label")
-            return str(v).strip() or None if v else None
-        if "application/json" in ct:
-            body = await request.json()
-            v = body.get("label", "")
-            return str(v).strip() or None
-    except Exception:
-        pass
-    return None
+    return ((await read_body_field(request, "label")) or "").strip() or None
 
 
 async def _extract_external_ref(request: Request) -> str | None:
-    """Read the optional opaque `external_ref` (multipart form, JSON body, or query param)."""
-    raw = request.query_params.get("external_ref")
-    if raw is None:
-        ct = request.headers.get("content-type", "")
-        try:
-            if "multipart/form-data" in ct:
-                v = (await request.form()).get("external_ref")
-                raw = str(v) if v is not None else None
-            elif "application/json" in ct:
-                v = (await request.json()).get("external_ref")
-                raw = str(v) if v is not None else None
-        except Exception:
-            raw = None
+    raw = request.query_params.get("external_ref") or await read_body_field(request, "external_ref")
     return (raw or "").strip() or None
 
 
@@ -605,24 +581,9 @@ def _is_truthy(v: Any) -> bool:
 
 
 async def _extract_replace(request: Request) -> bool:
-    """Read the optional `replace` flag (multipart form, JSON body, or query param).
-
-    When true, the image's existing detections of the type being run are deleted
-    before new ones are written — making re-detection of the same image idempotent.
-    """
     if _is_truthy(request.query_params.get("replace", "")):
         return True
-    ct = request.headers.get("content-type", "")
-    try:
-        if "multipart/form-data" in ct:
-            form = await request.form()
-            return _is_truthy(form.get("replace", ""))
-        if "application/json" in ct:
-            body = await request.json()
-            return _is_truthy(body.get("replace", ""))
-    except Exception:
-        pass
-    return False
+    return _is_truthy(await read_body_field(request, "replace") or "")
 
 
 def _clear_detections(user_id: int, environment_id: int, source_id: int, det_type: str | None) -> None:

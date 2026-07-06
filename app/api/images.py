@@ -8,6 +8,7 @@ from typing import Optional
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, Request
 from pydantic import BaseModel
 
+from app.api._utils import paginate
 from app.core.auth import require_auth, require_env_id
 from app.core.paths import crops_dir, sources_dir
 from app.db import store
@@ -58,24 +59,14 @@ async def list_source_images(
         user_id, cursor=cursor, limit=limit, environment_id=environment_id,
         identity_id=identity_id, detection_type=type, since=since, until=until,
     )
-    has_more = len(rows) > limit
-    items = rows[:limit]
-    next_cursor = f"{items[-1]['uploaded_at']}_{items[-1]['id']}" if items and has_more else None
-    return {
-        "items": [
-            {
-                "source_image_id": r["id"],
-                "source_image_url": f"/media/sources/{r['file_path']}",
-                "width": r["width"],
-                "height": r["height"],
-                "detection_count": r["detection_count"],
-                "uploaded_at": r["uploaded_at"],
-            }
-            for r in items
-        ],
-        "next_cursor": next_cursor,
-        "has_more": has_more,
-    }
+    return paginate(rows, limit, lambda r: {
+        "source_image_id": r["id"],
+        "source_image_url": f"/media/sources/{r['file_path']}",
+        "width": r["width"],
+        "height": r["height"],
+        "detection_count": r["detection_count"],
+        "uploaded_at": r["uploaded_at"],
+    }, cursor_fn=lambda r: f"{r['uploaded_at']}_{r['id']}")
 
 
 def _parse_attributes(row) -> dict:

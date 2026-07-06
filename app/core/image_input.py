@@ -109,6 +109,26 @@ async def acquire_image_slot(request: Request, slot: int) -> bytes:
     return decode_base64(image_base64)  # type: ignore[arg-type]
 
 
+async def read_body_field(request: Request, key: str, default: str | None = None) -> str | None:
+    """Read one string field from a multipart form or JSON body.
+
+    Returns ``default`` when the key is absent or on any parse error.
+    Starlette caches form/JSON after first access, so calling this
+    alongside ``acquire_image`` or multiple times per request is free.
+    """
+    ct = request.headers.get("content-type", "")
+    try:
+        if "multipart/form-data" in ct:
+            v = (await request.form()).get(key)
+            return str(v) if v is not None else default
+        if "application/json" in ct:
+            v = (await request.json()).get(key)
+            return str(v) if v is not None else default
+    except Exception:
+        pass
+    return default
+
+
 def open_and_validate(image_bytes: bytes) -> Any:
     """Open image bytes with Pillow, validate format by content sniffing.
 

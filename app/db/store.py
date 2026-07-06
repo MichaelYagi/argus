@@ -1321,6 +1321,38 @@ def get_detection(detection_id: int, user_id: int, environment_id: int | None = 
         ).fetchone()
 
 
+def get_face_embedding(embedding_id: int, user_id: int, environment_id: int | None = None) -> sqlite3.Row | None:
+    """Fetch a single face embedding row, verifying ownership via the parent identity."""
+    with _connect() as conn:
+        env_id = _resolve_env(conn, user_id, environment_id)
+        return conn.execute(
+            """SELECT fe.id, fe.identity_id, fe.model_id, fe.source_image_path, fe.created_at
+               FROM face_embeddings fe
+               JOIN identities i ON i.id = fe.identity_id
+               WHERE fe.id = ? AND i.user_id = ? AND i.environment_id = ?""",
+            (embedding_id, user_id, env_id),
+        ).fetchone()
+
+
+def list_face_embeddings(identity_id: int) -> list[sqlite3.Row]:
+    """List all reference embeddings for an identity (no raw vectors)."""
+    with _connect() as conn:
+        return conn.execute(
+            """SELECT id, identity_id, model_id, source_image_path, created_at
+               FROM face_embeddings WHERE identity_id = ? ORDER BY created_at""",
+            (identity_id,),
+        ).fetchall()
+
+
+def embedding_exists(identity_id: int, source_image_path: str) -> bool:
+    """Return True if a reference embedding for this crop already exists."""
+    with _connect() as conn:
+        return conn.execute(
+            "SELECT 1 FROM face_embeddings WHERE identity_id = ? AND source_image_path = ?",
+            (identity_id, source_image_path),
+        ).fetchone() is not None
+
+
 def delete_face_embedding(embedding_id: int, user_id: int) -> bool:
     """Delete a single reference embedding. Verifies ownership via the identity's user_id."""
     with _connect() as conn:

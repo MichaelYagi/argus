@@ -201,7 +201,9 @@
       "Bash(LD_LIBRARY_PATH=\"/mnt/c/Users/Michael/Documents/development/argus/.venv/lib/python3.13/site-packages/nvidia/cu13/lib:/mnt/c/Users/Michael/Documents/development/argus/.venv/lib/python3.13/site-packages/nvidia/cudnn/lib\" /mnt/c/Users/Michael/Documents/development/argus/.venv/bin/python *)",
       "Bash(nm -D /mnt/c/Users/Michael/Documents/development/argus/.venv/lib/python3.13/site-packages/onnxruntime/capi/onnxruntime_pybind11_state.cpython-313-x86_64-linux-gnu.so)",
       "Bash(gh repo *)",
-      "WebFetch(domain:github.com)"
+      "WebFetch(domain:github.com)",
+      "Read(//usr/local/bin/**)",
+      "Read(//home/michael/.local/**)"
     ]
   }
 }

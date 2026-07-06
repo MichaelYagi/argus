@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import hashlib
 import sqlite3
 from typing import Any
 
@@ -12,28 +11,21 @@ from fastapi.responses import FileResponse
 from app.core import settings_cache
 from app.core.auth import require_auth, require_env_id
 from app.core.engine_registry import registry
-from app.core.image_input import decode_base64, fetch_url, open_and_validate, to_rgb_array
+from app.core.image_input import acquire_image, open_and_validate, read_body_field, to_rgb_array
 from app.core.paths import crops_dir, sources_dir
 from app.db import store
-
-
-def _get_embedding_row(embedding_id: int, user_id: int):
-    with store._connect() as conn:
-        row = conn.execute(
-            """SELECT fe.id, fe.identity_id, fe.model_id, fe.source_image_path, fe.created_at
-               FROM face_embeddings fe
-               JOIN identities i ON i.id = fe.identity_id
-               WHERE fe.id = ? AND i.user_id = ?""",
-            (embedding_id, user_id),
-        ).fetchone()
-    return row
 
 router = APIRouter()
 
 
 # ---------------------------------------------------------------------------
-# Shared helper — enroll from an existing detection's stored embedding
+# Shared helpers
 # ---------------------------------------------------------------------------
+
+def _active_face_model_id() -> int | None:
+    row = store.get_active_model("face")
+    return row["id"] if row else None
+
 
 def enroll_from_detection(det: Any, user_id: int, environment_id: int | None = None) -> bool:
     """Copy a detection's embedding into face_embeddings.
@@ -43,16 +35,9 @@ def enroll_from_detection(det: Any, user_id: int, environment_id: int | None = N
     if not det or not det["embedding"] or not det["identity_id"]:
         return False
 
-    model_row = store.get_active_model("face")
-    model_id  = model_row["id"] if model_row else None
+    model_id = _active_face_model_id()
 
-    # Dedup: skip if this crop is already enrolled for this identity
-    with store._connect() as conn:
-        exists = conn.execute(
-            "SELECT 1 FROM face_embeddings WHERE identity_id = ? AND source_image_path = ?",
-            (det["identity_id"], det["crop_path"]),
-        ).fetchone()
-    if exists:
+    if store.embedding_exists(det["identity_id"], det["crop_path"]):
         return False
 
     store.insert_face_embedding(
@@ -126,8 +111,7 @@ async def delete_embedding(
 ):
     if not store.delete_face_embedding(embedding_id, user_id):
         raise HTTPException(404, "Embedding not found")
-    model_row = store.get_active_model("face")
-    if model_row:
+    if _active_face_model_id():
         from app.core import face_index as _fi
         _fi.rebuild_user(user_id, environment_id)
 
@@ -139,24 +123,18 @@ async def list_embeddings(
     environment_id: int = Depends(require_env_id),
 ):
     """List reference embeddings for an identity (without the raw vectors)."""
-    from app.db import store as _s
-    if not _s.get_identity(identity_id, user_id, environment_id):
+    if not store.get_identity(identity_id, user_id, environment_id):
         raise HTTPException(404, "Identity not found")
-    with store._connect() as conn:
-        rows = conn.execute(
-            """SELECT id, identity_id, model_id, source_image_path, created_at
-               FROM face_embeddings WHERE identity_id = ? ORDER BY created_at""",
-            (identity_id,),
-        ).fetchall()
-    return [dict(r) for r in rows]
+    return [dict(r) for r in store.list_face_embeddings(identity_id)]
 
 
 @router.get("/api/face_embeddings/{embedding_id}")
 async def get_embedding(
     embedding_id: int,
     user_id: int = Depends(require_auth),
+    environment_id: int = Depends(require_env_id),
 ):
-    row = _get_embedding_row(embedding_id, user_id)
+    row = store.get_face_embedding(embedding_id, user_id, environment_id)
     if not row:
         raise HTTPException(404, "Embedding not found")
     return dict(row)
@@ -166,8 +144,9 @@ async def get_embedding(
 async def get_embedding_img(
     embedding_id: int,
     user_id: int = Depends(require_auth),
+    environment_id: int = Depends(require_env_id),
 ):
-    row = _get_embedding_row(embedding_id, user_id)
+    row = store.get_face_embedding(embedding_id, user_id, environment_id)
     if not row:
         raise HTTPException(404, "Embedding not found")
     if not row["source_image_path"]:
@@ -176,9 +155,6 @@ async def get_embedding_img(
     if not path.exists():
         raise HTTPException(404, "Image not found on disk")
     return FileResponse(path, media_type="image/jpeg")
-
-_FMT_EXT = {"JPEG": "jpg", "PNG": "png", "WEBP": "webp", "BMP": "bmp",
-             "GIF": "gif", "TIFF": "tif", "HEIF": "heif"}
 
 
 # ---------------------------------------------------------------------------
@@ -202,52 +178,23 @@ async def enroll_new(
     except sqlite3.IntegrityError:
         raise HTTPException(409, f"Identity '{name}' already exists")
 
-    model_row = store.get_active_model("face")
-    model_id  = model_row["id"] if model_row else None
-
-    source_id  = store.get_or_create_source_image(
-        user_id, source_filename, img.width, img.height, environment_id, external_ref)
-    crop_path  = _save_crop(img, face_det.bbox)
-    detection_id = store.insert_detection(
-        user_id=user_id,
-        environment_id=environment_id,
-        identity_id=identity_id,
-        source_image_id=source_id,
-        detection_type="face",
-        model_id=model_id,
-        confidence=face_det.confidence,
-        bbox_x=face_det.bbox[0], bbox_y=face_det.bbox[1],
-        bbox_w=face_det.bbox[2], bbox_h=face_det.bbox[3],
-        crop_path=crop_path,
-        embedding=_to_bytes(embedding),
-        review_status="confirmed",
+    result = _persist_enrollment(
+        identity_id, user_id, environment_id,
+        raw, img, face_det, embedding, external_ref, background_tasks,
     )
-    with store._connect() as conn:
-        conn.execute("UPDATE identities SET cover_detection_id = ? WHERE id = ?",
-                     (detection_id, identity_id))
+    store.set_identity_cover(identity_id, user_id, result["detection_id"], environment_id)
 
-    embedding_id = store.insert_face_embedding(
-        identity_id=identity_id,
-        model_id=model_id,
-        embedding_bytes=_to_bytes(embedding),
-        source_image_path=crop_path,
-        environment_id=environment_id,
-    )
-    if model_id:
-        store.compute_and_store_representative(identity_id, model_id)
-        from app.core import face_index as _fi
-        _fi.rebuild_user(user_id, environment_id)
     from app.core import activity_buffer as _ab
     _ab.emit("enrollment", f"New face enrolled: {name}")
-    from app.api.detect import scan_unidentified
-    background_tasks.add_task(scan_unidentified, user_id, environment_id)
-    return {"identity_id": identity_id, "label": name, "embeddings": 1,
-            "embedding_id": embedding_id, "detection_id": detection_id,
-            "external_ref": external_ref,
-            "source_image_id": source_id,
-            "source_image_url": f"/media/sources/{source_filename}",
-            "bbox": {"x": face_det.bbox[0], "y": face_det.bbox[1],
-                     "w": face_det.bbox[2], "h": face_det.bbox[3]}}
+    return {
+        "identity_id": identity_id, "label": name, "embeddings": 1,
+        "embedding_id": result["embedding_id"], "detection_id": result["detection_id"],
+        "external_ref": external_ref,
+        "source_image_id": result["source_id"],
+        "source_image_url": f"/media/sources/{source_filename}",
+        "bbox": {"x": face_det.bbox[0], "y": face_det.bbox[1],
+                 "w": face_det.bbox[2], "h": face_det.bbox[3]},
+    }
 
 
 @router.post("/api/identities/{identity_id}/enroll", status_code=201)
@@ -264,14 +211,60 @@ async def enroll_existing(
 
     raw, _name, _ext = await _parse_enroll_request(request, name_required=False)
     img = open_and_validate(raw)
-    embedding, source_filename, face_det = _extract_embedding(raw, img)
+    embedding, _source_filename, face_det = _extract_embedding(raw, img)
 
-    model_row = store.get_active_model("face")
-    model_id  = model_row["id"] if model_row else None
+    result = _persist_enrollment(
+        identity_id, user_id, environment_id,
+        raw, img, face_det, embedding, None, background_tasks,
+    )
+    identity = store.get_identity(identity_id, user_id, environment_id)
+    from app.core import activity_buffer as _ab
+    _ab.emit("enrollment", f"Face sample added to {identity['label'] if identity else identity_id}")
+    return {
+        "embedding_id": result["embedding_id"],
+        "identity_id": identity_id,
+        "label": identity["label"] if identity else None,
+    }
 
-    source_id  = store.get_or_create_source_image(user_id, source_filename, img.width, img.height, environment_id)
-    crop_path  = _save_crop(img, face_det.bbox)
-    store.insert_detection(
+
+# ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
+
+def _persist_enrollment(
+    identity_id: int,
+    user_id: int,
+    environment_id: int,
+    raw: bytes,
+    img: Any,
+    face_det: Any,
+    embedding: Any,
+    external_ref: str | None,
+    background_tasks: BackgroundTasks,
+) -> dict:
+    """Save source image + crop, insert detection + embedding, rebuild index.
+
+    Returns {detection_id, embedding_id, source_id, crop_path}.
+    """
+    from app.api.detect import _FMT_EXT, _save_crop
+
+    model_id = _active_face_model_id()
+
+    content_hash = __import__("hashlib").sha256(raw).hexdigest()
+    ext = _FMT_EXT.get(img.format or "JPEG", "jpg")
+    source_filename = f"{content_hash}.{ext}"
+    dest = sources_dir() / source_filename
+    if not dest.exists():
+        sources_dir().mkdir(parents=True, exist_ok=True)
+        dest.write_bytes(raw)
+
+    source_id = store.get_or_create_source_image(
+        user_id, source_filename, img.width, img.height, environment_id, external_ref,
+    )
+    padding = settings_cache.cache.get_or("system.crop_padding", 0.2)
+    crop_path = _save_crop(img, face_det.bbox, padding)
+
+    detection_id = store.insert_detection(
         user_id=user_id,
         environment_id=environment_id,
         identity_id=identity_id,
@@ -285,7 +278,6 @@ async def enroll_existing(
         embedding=_to_bytes(embedding),
         review_status="confirmed",
     )
-
     embedding_id = store.insert_face_embedding(
         identity_id=identity_id,
         model_id=model_id,
@@ -297,69 +289,32 @@ async def enroll_existing(
         store.compute_and_store_representative(identity_id, model_id)
         from app.core import face_index as _fi
         _fi.rebuild_user(user_id, environment_id)
-    identity = store.get_identity(identity_id, user_id, environment_id)
-    from app.core import activity_buffer as _ab
-    _ab.emit("enrollment", f"Face sample added to {identity['label'] if identity else identity_id}")
     from app.api.detect import scan_unidentified
     background_tasks.add_task(scan_unidentified, user_id, environment_id)
     return {
+        "detection_id": detection_id,
         "embedding_id": embedding_id,
-        "identity_id": identity_id,
-        "label": identity["label"] if identity else None,
+        "source_id": source_id,
+        "crop_path": crop_path,
     }
 
-
-# ---------------------------------------------------------------------------
-# Helpers
-# ---------------------------------------------------------------------------
 
 async def _parse_enroll_request(
     request: Request, name_required: bool = True
 ) -> tuple[bytes, str, str | None]:
-    """Extract image bytes, optional name, and optional external_ref from the request."""
-    content_type = request.headers.get("content-type", "")
-    name = ""
-    external_ref: str | None = None
-    file_bytes: bytes | None = None
-    image_url: str | None = None
-    image_base64: str | None = None
+    """Extract image bytes, optional name, and optional external_ref from the request.
 
-    if "multipart/form-data" in content_type:
-        form = await request.form()
-        name = str(form.get("name") or form.get("label") or "").strip()
-        external_ref = (str(form.get("external_ref")).strip() or None) if form.get("external_ref") else None
-        file_field = form.get("file")
-        if file_field is not None and hasattr(file_field, "read"):
-            file_bytes = await file_field.read() or None
-        raw_url = form.get("image_url")
-        image_url = str(raw_url) if raw_url else None
-        raw_b64 = form.get("image_base64")
-        image_base64 = str(raw_b64) if raw_b64 else None
-    elif "application/json" in content_type:
-        try:
-            body = await request.json()
-        except Exception:
-            raise HTTPException(400, "Invalid JSON body")
-        name = str(body.get("name") or body.get("label") or "").strip()
-        external_ref = (str(body.get("external_ref")).strip() or None) if body.get("external_ref") else None
-        image_url = body.get("image_url")
-        image_base64 = body.get("image_base64")
-    else:
-        raise HTTPException(400, "Content-Type must be multipart/form-data or application/json")
+    acquire_image validates Content-Type and the one-of-three image input rule.
+    Starlette caches form/JSON after first parse, so the read_body_field calls below are free.
+    """
+    raw = await acquire_image(request)
+    name_v = await read_body_field(request, "name") or await read_body_field(request, "label")
+    name = (name_v or "").strip()
+    ext_v = await read_body_field(request, "external_ref")
+    external_ref = (ext_v or "").strip() or None
 
     if name_required and not name:
         raise HTTPException(400, "'name' is required")
-
-    provided = sum(x is not None for x in [file_bytes, image_url, image_base64])
-    if provided != 1:
-        raise HTTPException(400, "Provide exactly one of: file, image_url, image_base64")
-
-    if file_bytes is not None:
-        raw = file_bytes
-    elif image_url is not None:
-        raw = await fetch_url(image_url)
-    else:
-        raw = decode_base64(image_base64)  # type: ignore[arg-type]
 
     return raw, name, external_ref
 
@@ -385,26 +340,9 @@ def _extract_embedding(raw: bytes, img: Any) -> tuple[Any, str | None, Any]:
     return best.embedding, source_path, best
 
 
-def _save_crop(img: Any, bbox: tuple) -> str:
-    import uuid
-    x, y, w, h = bbox
-    padding = settings_cache.cache.get_or("system.crop_padding", 0.2)
-    pad_x = int(w * padding)
-    pad_y = int(h * padding)
-    x1 = max(0, x - pad_x)
-    y1 = max(0, y - pad_y)
-    x2 = min(img.width,  x + w + pad_x)
-    y2 = min(img.height, y + h + pad_y)
-    crop = img.crop((x1, y1, x2, y2))
-    crop_dir = crops_dir()
-    crop_dir.mkdir(parents=True, exist_ok=True)
-    filename = f"{uuid.uuid4().hex}.jpg"
-    crop.convert("RGB").save(crop_dir / filename, "JPEG")
-    return filename
-
-
 def _save_source(raw: bytes, img: Any) -> str:
-    content_hash = hashlib.sha256(raw).hexdigest()
+    from app.api.detect import _FMT_EXT
+    content_hash = __import__("hashlib").sha256(raw).hexdigest()
     ext = _FMT_EXT.get(img.format or "JPEG", "jpg")
     filename = f"{content_hash}.{ext}"
     dest = sources_dir() / filename
