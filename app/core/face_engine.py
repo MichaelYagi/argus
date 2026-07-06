@@ -16,11 +16,14 @@ class FaceDetection:
     bbox: tuple[int, int, int, int]  # (x, y, w, h)
     confidence: float
     embedding: Any  # numpy float32 array, shape (embedding_dim,)
-    # Optional facial attributes from the model pack (genderage + 3d68 pose).
-    # None when a model/face object doesn't provide them — never required.
+    # Optional facial attributes — None when the loaded model pack doesn't provide them.
     age: int | None = None
-    gender: str | None = None            # 'M' or 'F'
-    pose: tuple[float, float, float] | None = None  # (pitch, yaw, roll), degrees
+    gender: str | None = None                        # 'M' or 'F'
+    pose: tuple[float, float, float] | None = None   # (pitch, yaw, roll), degrees
+    mask: float | None = None                        # mask-wearing probability [0, 1]
+    kps: list[list[float]] | None = None             # 5 keypoints [[x,y], ...]
+    landmark_2d_106: list[list[float]] | None = None # 106 2D landmarks
+    landmark_3d_68: list[list[float]] | None = None  # 68 3D landmarks
 
 
 def _face_ctx_id() -> int:
@@ -68,6 +71,10 @@ class FaceEngine:
                 age=_attr_age(face),
                 gender=_attr_gender(face),
                 pose=_attr_pose(face),
+                mask=_attr_mask(face),
+                kps=_attr_landmarks(face, "kps"),
+                landmark_2d_106=_attr_landmarks(face, "landmark_2d_106"),
+                landmark_3d_68=_attr_landmarks(face, "landmark_3d_68"),
             ))
         return detections
 
@@ -107,5 +114,25 @@ def _attr_pose(face: Any) -> tuple[float, float, float] | None:
         if len(vals) != 3:
             return None
         return (vals[0], vals[1], vals[2])
+    except (TypeError, ValueError):
+        return None
+
+
+def _attr_mask(face: Any) -> float | None:
+    try:
+        mask = getattr(face, "mask", None)
+        if mask is None:
+            return None
+        return round(float(mask), 4)
+    except (TypeError, ValueError):
+        return None
+
+
+def _attr_landmarks(face: Any, attr: str) -> list[list[float]] | None:
+    try:
+        pts = getattr(face, attr, None)
+        if pts is None:
+            return None
+        return [[round(float(v), 2) for v in pt] for pt in pts]
     except (TypeError, ValueError):
         return None
