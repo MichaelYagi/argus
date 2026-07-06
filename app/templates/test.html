@@ -102,7 +102,7 @@
     e.preventDefault(); dropZone.classList.remove('over');
     fileList = [...fileList, ...e.dataTransfer.files]; updateQueue();
   });
-  fileInput.addEventListener('change', () => { fileList = [...fileList, ...fileInput.files]; updateQueue(); });
+  fileInput.addEventListener('change', () => { if (fileInput.files.length) { fileList = [...fileInput.files]; updateQueue(); } });
   document.getElementById('test-camera')
     ?.addEventListener('click', () => capturePhoto(file => { fileList.push(file); updateQueue(); }));
   urlInput.addEventListener('input', updateQueue);

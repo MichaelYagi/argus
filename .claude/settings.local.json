@@ -214,7 +214,8 @@
       "Bash(grep -v \"def \\\\|class \\\\|#\\\\|except.*:\\\\s*$\\\\|^\\\\s*#\")",
       "Bash(awk -F: '{print $1, $3}')",
       "Bash(grep -rn \"if.*is not None.*return\\\\|return.*if.*is not None\\\\|or \\\\[\\\\]$\\\\|or {}\" /mnt/c/Users/Michael/Documents/development/argus/app/api/)",
-      "Bash(.venv/bin/pytest -v tests/test_detect_api.py::test_detect_faces_replace_clears_prior)"
+      "Bash(.venv/bin/pytest -v tests/test_detect_api.py::test_detect_faces_replace_clears_prior)",
+      "Bash(grep -v \"^$\")"
     ]
   }
 }

@@ -43,7 +43,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - `import uuid` and `import json` moved to module-level in `store.py`; deferred `import uuid as _uuid` and `import json as _json` inside `create_job`/`update_job` removed.
 - `face_index.py` faiss fallback now logs a warning with `exc_info=True` instead of silently setting `used_faiss = False`.
 - `main.py` object-model load failure now passes `exc_info=True`, consistent with the face-model warning on the same code path.
-- Removed `httpx2` from `requirements.txt` (never imported anywhere; erroneous duplicate entry).
+- Replaced `httpx` with `httpx2` in `requirements.txt`. `httpx2` is a drop-in replacement (same `import httpx` namespace) required by newer starlette versions for `TestClient`; the old `httpx` entry caused a metaclass conflict in `starlette.testclient.WebSocketDenialResponse` in CI.
 - 400 error message for unknown detection type normalized from `"type must be face or object"` to `"type must be 'face' or 'object'"` in `images.py` and `identities.py`.
 
 ---
