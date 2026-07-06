@@ -63,7 +63,8 @@ async def acquire_image(request: Request) -> bytes:
         return file_bytes
     if image_url is not None:
         return await fetch_url(image_url)
-    return decode_base64(image_base64)  # type: ignore[arg-type]
+    assert image_base64 is not None  # exactly-one guard above ensures this
+    return decode_base64(image_base64)
 
 
 async def acquire_image_slot(request: Request, slot: int) -> bytes:
@@ -106,7 +107,8 @@ async def acquire_image_slot(request: Request, slot: int) -> bytes:
         return file_bytes
     if image_url is not None:
         return await fetch_url(image_url)
-    return decode_base64(image_base64)  # type: ignore[arg-type]
+    assert image_base64 is not None  # exactly-one guard above ensures this
+    return decode_base64(image_base64)
 
 
 async def read_body_field(request: Request, key: str, default: str | None = None) -> str | None:

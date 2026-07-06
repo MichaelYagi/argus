@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-from typing import Optional
-
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, HttpUrl
 
@@ -30,15 +28,15 @@ class _CreateBody(BaseModel):
     url: HttpUrl
     events: list[str] = ["job.done"]
     label: str = ""
-    secret: Optional[str] = None
+    secret: str | None = None
 
 
 class _UpdateBody(BaseModel):
-    url: Optional[HttpUrl] = None
-    events: Optional[list[str]] = None
-    label: Optional[str] = None
-    secret: Optional[str] = None
-    is_active: Optional[bool] = None
+    url: HttpUrl | None = None
+    events: list[str] | None = None
+    label: str | None = None
+    secret: str | None = None
+    is_active: bool | None = None
 
 
 @router.get("/api/webhooks")

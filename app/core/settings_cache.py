@@ -8,7 +8,7 @@ from typing import Any
 from app.db import store
 
 
-def _coerce(value: str, value_type: str) -> Any:
+def coerce_setting(value: str, value_type: str) -> Any:
     if value_type == "float":
         return float(value)
     if value_type == "int":
@@ -21,15 +21,13 @@ def _coerce(value: str, value_type: str) -> Any:
 class SettingsCache:
     def __init__(self) -> None:
         self._data: dict[str, Any] = {}
-        self._types: dict[str, str] = {}
         self._lock = threading.Lock()
 
     def load(self) -> None:
         """Reload all settings from DB. Call at startup and after any PUT /api/settings/*."""
         rows = store.get_all_settings()
         with self._lock:
-            self._data = {r["key"]: _coerce(r["value"], r["value_type"]) for r in rows}
-            self._types = {r["key"]: r["value_type"] for r in rows}
+            self._data = {r["key"]: coerce_setting(r["value"], r["value_type"]) for r in rows}
 
     def get(self, key: str) -> Any:
         with self._lock:
@@ -42,8 +40,7 @@ class SettingsCache:
     def set(self, key: str, raw_value: str, value_type: str) -> None:
         """Update a single entry without a full reload. Call after writing to DB."""
         with self._lock:
-            self._data[key] = _coerce(raw_value, value_type)
-            self._types[key] = value_type
+            self._data[key] = coerce_setting(raw_value, value_type)
 
     def all(self) -> dict[str, Any]:
         with self._lock:

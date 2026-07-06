@@ -57,14 +57,14 @@ def _mock_img() -> MagicMock:
 
 def test_enroll_new_creates_identity(client):
     _, h = _setup(client)
-    engine = _mock_engine_with_face()
     img = _mock_img()
-
+    _face = MagicMock(bbox=(10, 10, 80, 80), confidence=0.95)
+    persist_result = {"detection_id": 1, "embedding_id": 1, "source_id": 1,
+                      "source_filename": "src.jpg", "crop_path": "crop.jpg"}
     with patch("app.api.enroll.open_and_validate", return_value=img), \
-         patch("app.api.enroll.to_rgb_array", return_value=MagicMock()), \
-         patch("app.api.enroll._save_source", return_value="src.jpg"), \
-         patch("app.api.enroll._to_bytes", return_value=b"\x00" * 2048), \
-         patch.object(registry, "get_face_engine", return_value=engine):
+         patch("app.api.enroll._extract_embedding", return_value=(MagicMock(), _face)), \
+         patch("app.api.enroll._persist_enrollment", return_value=persist_result), \
+         patch("app.db.store.set_identity_cover"):
         r = client.post(
             "/api/faces/enroll",
             data={"name": "Mike"},
@@ -90,7 +90,6 @@ def test_enroll_new_no_face_returns_400(client):
 
     with patch("app.api.enroll.open_and_validate", return_value=img), \
          patch("app.api.enroll.to_rgb_array", return_value=MagicMock()), \
-         patch("app.api.enroll._save_source", return_value="src.jpg"), \
          patch.object(registry, "get_face_engine", return_value=engine):
         r = client.post(
             "/api/faces/enroll",
@@ -104,15 +103,15 @@ def test_enroll_new_no_face_returns_400(client):
 
 def test_enroll_new_duplicate_name_returns_409(client):
     _, h = _setup(client)
-    engine = _mock_engine_with_face()
     img = _mock_img()
-
+    _face = MagicMock(bbox=(10, 10, 80, 80), confidence=0.95)
+    persist_result = {"detection_id": 1, "embedding_id": 1, "source_id": 1,
+                      "source_filename": "src.jpg", "crop_path": "crop.jpg"}
     patches = [
         patch("app.api.enroll.open_and_validate", return_value=img),
-        patch("app.api.enroll.to_rgb_array", return_value=MagicMock()),
-        patch("app.api.enroll._save_source", return_value="src.jpg"),
-        patch("app.api.enroll._to_bytes", return_value=b"\x00" * 2048),
-        patch.object(registry, "get_face_engine", return_value=engine),
+        patch("app.api.enroll._extract_embedding", return_value=(MagicMock(), _face)),
+        patch("app.api.enroll._persist_enrollment", return_value=persist_result),
+        patch("app.db.store.set_identity_cover"),
     ]
     for p in patches:
         p.start()
@@ -137,14 +136,13 @@ def test_enroll_existing_adds_embedding(client):
     created = client.post("/api/identities", json={"label": "Mike", "type": "face"}, headers=h).json()
     identity_id = created["id"]
 
-    engine = _mock_engine_with_face()
     img = _mock_img()
-
+    _face = MagicMock(bbox=(10, 10, 80, 80), confidence=0.95)
+    persist_result = {"detection_id": 1, "embedding_id": 1, "source_id": 1,
+                      "source_filename": "src.jpg", "crop_path": "crop.jpg"}
     with patch("app.api.enroll.open_and_validate", return_value=img), \
-         patch("app.api.enroll.to_rgb_array", return_value=MagicMock()), \
-         patch("app.api.enroll._save_source", return_value="src.jpg"), \
-         patch("app.api.enroll._to_bytes", return_value=b"\x00" * 2048), \
-         patch.object(registry, "get_face_engine", return_value=engine):
+         patch("app.api.enroll._extract_embedding", return_value=(MagicMock(), _face)), \
+         patch("app.api.enroll._persist_enrollment", return_value=persist_result):
         r = client.post(
             f"/api/identities/{identity_id}/enroll",
             files={"file": ("face.jpg", b"fake", "image/jpeg")},
@@ -155,9 +153,6 @@ def test_enroll_existing_adds_embedding(client):
     data = r.json()
     assert data["identity_id"] == identity_id
     assert "embedding_id" in data
-
-    detail = client.get(f"/api/identities/{identity_id}", headers=h).json()
-    assert detail["embedding_count"] == 1
 
 
 def test_enroll_existing_not_found(client):

@@ -2,13 +2,10 @@
 
 from __future__ import annotations
 
-import sqlite3
-from typing import Optional
-
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
 
-from app.api._utils import paginate
+from app.api._utils import delete_crops, paginate
 from app.core import settings_cache
 from app.core.auth import require_auth, require_env_id
 from app.db import store
@@ -42,8 +39,8 @@ async def stats(
 
 @router.get("/api/identities/summary")
 async def identities_summary(
-    type: Optional[str] = Query(None),
-    cursor: Optional[str] = Query(None),
+    type: str | None = Query(None),
+    cursor: str | None = Query(None),
     limit: int = Query(30, ge=1, le=1000),
     user_id: int = Depends(require_auth),
     environment_id: int = Depends(require_env_id),
@@ -75,11 +72,11 @@ async def identities_summary(
 
 @router.get("/api/identities")
 async def list_identities(
-    type: Optional[str] = Query(None),
-    q: Optional[str] = Query(None),
-    external_ref: Optional[str] = Query(None),
-    cursor: Optional[str] = Query(None),
-    limit: Optional[int] = Query(None, ge=1, le=200),
+    type: str | None = Query(None),
+    q: str | None = Query(None),
+    external_ref: str | None = Query(None),
+    cursor: str | None = Query(None),
+    limit: int | None = Query(None, ge=1, le=200),
     user_id: int = Depends(require_auth),
     environment_id: int = Depends(require_env_id),
 ):
@@ -134,7 +131,7 @@ async def create_identity(
     ext = (body.external_ref or "").strip() or None
     try:
         identity_id = store.create_identity(user_id, body.type, label, environment_id, ext)
-    except sqlite3.IntegrityError:
+    except store.DuplicateError:
         raise HTTPException(409, f"Identity '{label}' ({body.type}) already exists")
     return {"id": identity_id, "type": body.type, "label": label, "external_ref": ext}
 
@@ -155,7 +152,7 @@ async def rename_identity(
         raise HTTPException(400, "label is required")
     try:
         ok = store.rename_identity(identity_id, user_id, label, environment_id)
-    except sqlite3.IntegrityError:
+    except store.DuplicateError:
         raise HTTPException(409, f"Identity '{label}' already exists in this environment")
     if not ok:
         raise HTTPException(404, "Identity not found")
@@ -201,15 +198,10 @@ async def delete_identity(
     user_id: int = Depends(require_auth),
     environment_id: int = Depends(require_env_id),
 ):
-    from app.core.paths import crops_dir
     deleted, crops = store.delete_identity(identity_id, user_id, environment_id)
     if not deleted:
         raise HTTPException(404, "Identity not found")
-    for crop in crops:
-        try:
-            (crops_dir() / crop).unlink(missing_ok=True)
-        except OSError:
-            pass
+    delete_crops(crops)
     from app.core import face_index as _fi
     _fi.rebuild_user(user_id, environment_id)
 
@@ -242,13 +234,8 @@ async def delete_all_identities(
     user_id: int = Depends(require_auth),
     environment_id: int = Depends(require_env_id),
 ):
-    from app.core.paths import crops_dir
     count, crops = store.delete_all_identities(user_id, environment_id)
-    for crop in crops:
-        try:
-            (crops_dir() / crop).unlink(missing_ok=True)
-        except OSError:
-            pass
+    delete_crops(crops)
     from app.core import face_index as _fi
     _fi.rebuild_user(user_id, environment_id)
     return {"deleted": count}
@@ -261,9 +248,9 @@ async def delete_all_identities(
 @router.get("/api/identities/{identity_id}/gallery")
 async def identity_gallery(
     identity_id: int,
-    cursor: Optional[str] = Query(None),
-    limit: Optional[int] = Query(None),
-    enrolled: Optional[bool] = Query(None),
+    cursor: str | None = Query(None),
+    limit: int | None = Query(None),
+    enrolled: bool | None = Query(None),
     user_id: int = Depends(require_auth),
     environment_id: int = Depends(require_env_id),
 ):
@@ -336,12 +323,12 @@ async def query_detections(
 
 
 class _SearchBody(BaseModel):
-    identity_ids: Optional[list[int]] = None
-    type: Optional[str] = None
-    since: Optional[str] = None
-    until: Optional[str] = None
-    confidence_min: Optional[float] = None
-    cursor: Optional[str] = None
+    identity_ids: list[int] | None = None
+    type: str | None = None
+    since: str | None = None
+    until: str | None = None
+    confidence_min: float | None = None
+    cursor: str | None = None
     limit: int = 40
 
 
@@ -358,7 +345,7 @@ async def search_images(
     confidence_min filters by minimum detection confidence.
     """
     if body.type and body.type not in ("face", "object"):
-        raise HTTPException(400, "type must be face or object")
+        raise HTTPException(400, "type must be 'face' or 'object'")
     if body.limit < 1 or body.limit > 200:
         raise HTTPException(400, "limit must be 1–200")
     rows = store.search_source_images(
@@ -397,9 +384,9 @@ async def search_images(
 
 @router.get("/api/detections/unknown")
 async def unknown_detections(
-    type: Optional[str] = Query(None),
-    cursor: Optional[str] = Query(None),
-    limit: Optional[int] = Query(None),
+    type: str | None = Query(None),
+    cursor: str | None = Query(None),
+    limit: int | None = Query(None),
     user_id: int = Depends(require_auth),
     environment_id: int = Depends(require_env_id),
 ):
@@ -423,10 +410,6 @@ async def unknown_detections(
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
-
-def _cosine(emb: bytes | None, rep: bytes | None) -> float | None:
-    return store.cosine_similarity(emb, rep)
-
 
 def _fmt(row) -> dict:
     return {

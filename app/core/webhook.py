@@ -12,6 +12,8 @@ from datetime import datetime, timezone
 
 import httpx
 
+from app.db import store
+
 log = logging.getLogger(__name__)
 
 _TIMEOUT = 10
@@ -19,7 +21,6 @@ _TIMEOUT = 10
 
 def fire(user_id: int, environment_id: int, event: str, payload: dict) -> None:
     """Fire all matching active webhooks for this user/env/event in daemon threads."""
-    from app.db import store
     hooks = store.list_webhooks(user_id, environment_id, event, active_only=True)
     if not hooks:
         return
@@ -38,7 +39,6 @@ def fire(user_id: int, environment_id: int, event: str, payload: dict) -> None:
 
 def fire_test(webhook_id: int, user_id: int) -> dict | None:
     """Send a synthetic ping to the webhook synchronously; return outcome or None if not found."""
-    from app.db import store
     hook = store.get_webhook(webhook_id, user_id)
     if not hook:
         return None
@@ -59,7 +59,6 @@ def fire_test(webhook_id: int, user_id: int) -> dict | None:
 def _deliver(webhook_id: int, url: str, secret: str | None, body: bytes, event: str) -> None:
     status_code, duration_ms, error = _send(url, secret, body)
     try:
-        from app.db import store
         store.log_delivery(webhook_id, event, status_code, duration_ms, error)
     except Exception:
         pass

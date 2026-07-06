@@ -2,7 +2,26 @@
 
 from __future__ import annotations
 
-from typing import Callable
+from typing import Any, Callable
+
+from app.core.paths import crops_dir
+
+
+def is_truthy(v: Any) -> bool:
+    """Return True for string values that represent a truthy flag (1/true/yes/on)."""
+    return str(v).strip().lower() in ("1", "true", "yes", "on")
+
+
+def delete_crops(crops: list[str]) -> int:
+    """Delete crop files from disk; return the count successfully removed."""
+    removed = 0
+    for crop in crops:
+        try:
+            (crops_dir() / crop).unlink(missing_ok=True)
+            removed += 1
+        except OSError:
+            pass
+    return removed
 
 
 def paginate(rows: list, limit: int, serialize: Callable, cursor_fn: Callable | None = None) -> dict:

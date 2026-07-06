@@ -2,12 +2,13 @@
 
 from __future__ import annotations
 
-from typing import Any, Optional
+from typing import Any
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
 
+from app.api._utils import delete_crops
 from app.core import settings_cache
 from app.core.auth import require_auth, require_env_id
 from app.core.paths import crops_dir
@@ -56,8 +57,8 @@ async def review_count(
 
 @router.get("/api/review")
 async def get_review_queue(
-    cursor: Optional[str] = Query(None),
-    limit: Optional[int] = Query(None),
+    cursor: str | None = Query(None),
+    limit: int | None = Query(None),
     user_id: int = Depends(require_auth),
     environment_id: int = Depends(require_env_id),
 ):
@@ -123,8 +124,8 @@ async def reject(
 
 
 class _ReassignBody(BaseModel):
-    identity_id: Optional[int] = None
-    label: Optional[str] = None
+    identity_id: int | None = None
+    label: str | None = None
 
 
 @router.post("/api/review/{detection_id}/reassign", status_code=200)
@@ -138,7 +139,8 @@ async def reassign(
 
     identity_id = body.identity_id
     if not identity_id:
-        identity_id = store.get_or_create_identity(user_id, "face", body.label.strip(), environment_id)  # type: ignore[union-attr]
+        assert body.label  # guard above ensures label is truthy when identity_id is absent
+        identity_id = store.get_or_create_identity(user_id, "face", body.label.strip(), environment_id)
 
     det = store.get_detection(detection_id, user_id, environment_id)
     if not det:
@@ -155,8 +157,8 @@ async def reassign(
 class _BulkItem(BaseModel):
     detection_id: int
     action: str  # confirm | reject | reassign
-    identity_id: Optional[int] = None
-    label: Optional[str] = None
+    identity_id: int | None = None
+    label: str | None = None
 
 
 @router.post("/api/review/bulk", status_code=200)
@@ -266,8 +268,8 @@ async def delete_detection(
 # ---------------------------------------------------------------------------
 
 class _LabelBody(BaseModel):
-    identity_id: Optional[int] = None
-    label: Optional[str] = None
+    identity_id: int | None = None
+    label: str | None = None
 
 
 @router.put("/api/detections/{detection_id}/label", status_code=200)
@@ -286,8 +288,9 @@ async def label_detection(
 
     identity_id = body.identity_id
     if not identity_id:
+        assert body.label  # guard above ensures label is truthy when identity_id is absent
         identity_id = store.get_or_create_identity(
-            user_id, det["type"], body.label.strip(), environment_id  # type: ignore[union-attr]
+            user_id, det["type"], body.label.strip(), environment_id
         )
 
     store.label_detection(detection_id, user_id, identity_id, environment_id)
@@ -313,8 +316,8 @@ _BATCH_MAX = 500
 
 class _BatchLabelItem(BaseModel):
     detection_id: int
-    identity_id: Optional[int] = None
-    label: Optional[str] = None
+    identity_id: int | None = None
+    label: str | None = None
 
 
 class _BatchLabelBody(BaseModel):
@@ -348,8 +351,9 @@ async def label_detections_batch(
             continue
         identity_id = item.identity_id
         if not identity_id:
+            assert item.label  # loop guard above ensures label is truthy when identity_id is absent
             identity_id = store.get_or_create_identity(
-                user_id, det["type"], item.label.strip(), environment_id  # type: ignore[union-attr]
+                user_id, det["type"], item.label.strip(), environment_id
             )
         store.label_detection(item.detection_id, user_id, identity_id, environment_id)
         _enroll_confirmed(item.detection_id, user_id, environment_id)
@@ -394,19 +398,12 @@ async def delete_detections(
     environment_id: int = Depends(require_env_id),
 ):
     """Permanently delete detections and their crop files. For junk crops you never want."""
-    from app.core.paths import crops_dir
     if not body.detection_ids:
         raise HTTPException(400, "detection_ids is required")
     if len(body.detection_ids) > _BATCH_MAX:
         raise HTTPException(400, f"Too many items (max {_BATCH_MAX})")
     crops = store.delete_detections(user_id, body.detection_ids, environment_id)
-    removed = 0
-    for crop in crops:
-        try:
-            (crops_dir() / crop).unlink(missing_ok=True)
-            removed += 1
-        except OSError:
-            pass
+    removed = delete_crops(crops)
     from app.core import face_index as _fi
     _fi.rebuild_user(user_id, environment_id)
     return {"deleted": len(crops), "crops_removed": removed}

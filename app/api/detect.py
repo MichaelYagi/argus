@@ -9,6 +9,7 @@ from typing import Any
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request
 
+from app.api._utils import delete_crops, is_truthy
 from app.core import settings_cache
 from app.core.auth import require_auth, require_env_id
 from app.core.engine_registry import registry
@@ -41,7 +42,7 @@ async def detect_faces(
     user_id: int = Depends(require_auth),
     environment_id: int = Depends(require_env_id),
 ):
-    run_async = _is_truthy(request.query_params.get("async", ""))
+    run_async = is_truthy(request.query_params.get("async", ""))
     raw = await acquire_image(request)
     label = await _extract_label(request)
     replace = await _extract_replace(request)
@@ -52,7 +53,7 @@ async def detect_faces(
             _run_detection_job, job_id, user_id, environment_id, raw, label, replace, "face", external_ref)
         return {"job_id": job_id, "status": "pending"}
     img = open_and_validate(raw)
-    source_filename, source_id = _save_source_image(user_id, environment_id, raw, img, external_ref)
+    _, source_id = _save_source_image(user_id, environment_id, raw, img, external_ref)
     if replace:
         _clear_detections(user_id, environment_id, source_id, "face")
     result = {"source_image_id": source_id, "external_ref": external_ref,
@@ -71,7 +72,7 @@ async def detect_objects(
     user_id: int = Depends(require_auth),
     environment_id: int = Depends(require_env_id),
 ):
-    run_async = _is_truthy(request.query_params.get("async", ""))
+    run_async = is_truthy(request.query_params.get("async", ""))
     raw = await acquire_image(request)
     replace = await _extract_replace(request)
     external_ref = await _extract_external_ref(request)
@@ -81,7 +82,7 @@ async def detect_objects(
             _run_detection_job, job_id, user_id, environment_id, raw, None, replace, "object", external_ref)
         return {"job_id": job_id, "status": "pending"}
     img = open_and_validate(raw)
-    source_filename, source_id = _save_source_image(user_id, environment_id, raw, img, external_ref)
+    _, source_id = _save_source_image(user_id, environment_id, raw, img, external_ref)
     if replace:
         _clear_detections(user_id, environment_id, source_id, "object")
     objs, img_tags = _run_objects(user_id, environment_id, img, source_id)
@@ -102,7 +103,7 @@ async def detect_all(
     user_id: int = Depends(require_auth),
     environment_id: int = Depends(require_env_id),
 ):
-    run_async = _is_truthy(request.query_params.get("async", ""))
+    run_async = is_truthy(request.query_params.get("async", ""))
     raw = await acquire_image(request)
     label = await _extract_label(request)
     replace = await _extract_replace(request)
@@ -113,7 +114,7 @@ async def detect_all(
             _run_detection_job, job_id, user_id, environment_id, raw, label, replace, "all", external_ref)
         return {"job_id": job_id, "status": "pending"}
     img = open_and_validate(raw)
-    source_filename, source_id = _save_source_image(user_id, environment_id, raw, img, external_ref)
+    _, source_id = _save_source_image(user_id, environment_id, raw, img, external_ref)
     if replace:
         _clear_detections(user_id, environment_id, source_id, None)  # both faces and objects
     objs, img_tags = _run_objects(user_id, environment_id, img, source_id)
@@ -176,7 +177,7 @@ async def detect_bulk(
     if detect_type not in ("faces", "objects", "all"):
         raise HTTPException(400, "type must be faces, objects, or all")
 
-    if _is_truthy(request.query_params.get("async", "")):
+    if is_truthy(request.query_params.get("async", "")):
         job_id = store.create_job(user_id, "detect_bulk", environment_id)
         background_tasks.add_task(_run_bulk_job, job_id, user_id, environment_id, jobs, detect_type)
         return {"job_id": job_id, "status": "pending", "total": len(jobs)}
@@ -576,14 +577,10 @@ def _emit_det(nf: int, no: int, ref: str | None = None) -> None:
     _ab.emit("detection", msg)
 
 
-def _is_truthy(v: Any) -> bool:
-    return str(v).strip().lower() in ("1", "true", "yes", "on")
-
-
 async def _extract_replace(request: Request) -> bool:
-    if _is_truthy(request.query_params.get("replace", "")):
+    if is_truthy(request.query_params.get("replace", "")):
         return True
-    return _is_truthy(await read_body_field(request, "replace") or "")
+    return is_truthy(await read_body_field(request, "replace") or "")
 
 
 def _clear_detections(user_id: int, environment_id: int, source_id: int, det_type: str | None) -> None:
@@ -591,11 +588,7 @@ def _clear_detections(user_id: int, environment_id: int, source_id: int, det_typ
     References enrolled from those crops are dropped too (in the store call), so
     refresh the match index to drop them before re-detecting."""
     crops = store.clear_detections_for_source(source_id, user_id, det_type, environment_id)
-    for crop in crops:
-        try:
-            (crops_dir() / crop).unlink(missing_ok=True)
-        except OSError:
-            pass
+    delete_crops(crops)
     if det_type != "object":
         from app.core import face_index
         face_index.rebuild_user(user_id, environment_id)
@@ -826,20 +819,8 @@ def _face_summary(face: Any) -> dict:
 
 
 async def _extract_threshold(request: Request) -> float | None:
-    """Read an optional `threshold` override (query param, multipart form, or JSON)."""
-    raw = request.query_params.get("threshold")
-    if raw is None:
-        ct = request.headers.get("content-type", "")
-        try:
-            if "multipart/form-data" in ct:
-                v = (await request.form()).get("threshold")
-                raw = str(v) if v is not None else None
-            elif "application/json" in ct:
-                v = (await request.json()).get("threshold")
-                raw = str(v) if v is not None else None
-        except Exception:
-            raw = None
-    if raw is None or str(raw).strip() == "":
+    raw = request.query_params.get("threshold") or await read_body_field(request, "threshold")
+    if not raw or not str(raw).strip():
         return None
     try:
         val = float(raw)
@@ -851,20 +832,8 @@ async def _extract_threshold(request: Request) -> float | None:
 
 
 async def _extract_top_n(request: Request, default: int = 5) -> int:
-    """Read an optional `top_n` for the identify suggestion list (1..20)."""
-    raw = request.query_params.get("top_n")
-    if raw is None:
-        ct = request.headers.get("content-type", "")
-        try:
-            if "multipart/form-data" in ct:
-                v = (await request.form()).get("top_n")
-                raw = str(v) if v is not None else None
-            elif "application/json" in ct:
-                v = (await request.json()).get("top_n")
-                raw = str(v) if v is not None else None
-        except Exception:
-            raw = None
-    if raw is None or str(raw).strip() == "":
+    raw = request.query_params.get("top_n") or await read_body_field(request, "top_n")
+    if not raw or not str(raw).strip():
         return default
     try:
         return max(1, min(20, int(raw)))

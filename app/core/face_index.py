@@ -76,13 +76,7 @@ def build_for_user(model_id: int, user_id: int, environment_id: int) -> None:
         # Always recompute centroids for this model — the NULL-check optimisation
         # misses stale representatives (computed for a different model or before
         # the current embeddings existed), leaving the index empty or wrong.
-        with store._connect() as conn:
-            identity_ids = [r[0] for r in conn.execute(
-                """SELECT DISTINCT fe.identity_id FROM face_embeddings fe
-                   JOIN identities i ON i.id = fe.identity_id
-                   WHERE fe.model_id = ? AND i.user_id = ? AND i.environment_id = ?""",
-                (model_id, user_id, environment_id),
-            ).fetchall()]
+        identity_ids = store.list_identity_ids_for_model(model_id, user_id, environment_id)
         for iid in identity_ids:
             store.compute_and_store_representative(iid, model_id)
         rows = [
@@ -132,30 +126,26 @@ def build_all(model_id: int) -> None:
     if _try_import_faiss() is None:
         log.warning("faiss disabled or unavailable — using numpy similarity search")
 
-    # Record the active model even when there are no enrolled faces yet, so a later
-    # rebuild_user() (the first enrollment) isn't a no-op. Otherwise the index only
-    # comes alive after a restart on a freshly-activated model.
-    global _current_model_id
-    with _lock:
-        _current_model_id = model_id
-
     from app.db import store
-    with store._connect() as conn:
-        pairs = [(r[0], r[1]) for r in conn.execute(
-            """SELECT DISTINCT i.user_id, i.environment_id FROM identities i
-               JOIN face_embeddings fe ON fe.identity_id = i.id
-               WHERE fe.model_id = ?""",
-            (model_id,),
-        ).fetchall()]
+    pairs = store.list_user_env_pairs_for_model(model_id)
     for uid, env_id in pairs:
         build_for_user(model_id, uid, env_id)
+    # build_for_user sets _current_model_id under lock for each pair it processes.
+    # If there are no enrolled faces yet, set it explicitly so rebuild_user() on the
+    # first enrollment knows which model to use.
+    if not pairs:
+        global _current_model_id
+        with _lock:
+            _current_model_id = model_id
     log.info("Face index built for model_id=%s (%d environments)", model_id, len(pairs))
 
 
 def rebuild_user(user_id: int, environment_id: int) -> None:
     """Rebuild index for one (user, environment) using the current active model."""
-    if _current_model_id is not None:
-        build_for_user(_current_model_id, user_id, environment_id)
+    with _lock:
+        model_id = _current_model_id
+    if model_id is not None:
+        build_for_user(model_id, user_id, environment_id)
 
 
 def clear_environment(user_id: int, environment_id: int) -> None:
@@ -207,6 +197,7 @@ def search(
                 pairs = [(id_map[i], float(s)) for s, i in zip(scores[0], idxs[0]) if i >= 0]
                 used_faiss = True
         except Exception:
+            log.warning("faiss search failed, falling back to numpy", exc_info=True)
             used_faiss = False
 
     if not used_faiss:

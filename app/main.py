@@ -87,7 +87,7 @@ def _autoload_engines() -> None:
                 registry.swap_object_engine(ObjectEngine(name, path))
             log.info("Loaded object model: %s", obj_row["name"])
         except Exception as exc:
-            log.warning("Failed to load object model %s: %s", obj_row["name"], exc)
+            log.warning("Failed to load object model %s: %s", obj_row["name"], exc, exc_info=True)
 
 
 app = FastAPI(title="Argus", version=__version__, lifespan=lifespan, docs_url=None)

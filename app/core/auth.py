@@ -3,8 +3,6 @@
 from __future__ import annotations
 
 import os
-import sqlite3
-from typing import Optional
 
 from fastapi import Depends, HTTPException, Request, Security
 from fastapi.security import APIKeyHeader
@@ -17,8 +15,8 @@ _scheme = APIKeyHeader(name="X-API-Key", auto_error=False)
 
 async def _resolve_api_key(
     request: Request,
-    api_key: Optional[str] = Security(_scheme),
-) -> sqlite3.Row | None:
+    api_key: str | None = Security(_scheme),
+) -> store.Row | None:
     """Return the api_keys row for the given key, or None for session-auth requests."""
     if api_key:
         key_hash = hash_api_key(api_key)
@@ -32,7 +30,7 @@ async def _resolve_api_key(
 
 async def require_auth(
     request: Request,
-    key_row: sqlite3.Row | None = Depends(_resolve_api_key),
+    key_row: store.Row | None = Depends(_resolve_api_key),
 ) -> int:
     """Returns user_id. Accepts API key or browser session."""
     if key_row:
@@ -45,7 +43,7 @@ async def require_auth(
 
 async def require_env_id(
     request: Request,
-    key_row: sqlite3.Row | None = Depends(_resolve_api_key),
+    key_row: store.Row | None = Depends(_resolve_api_key),
 ) -> int:
     """Returns environment_id. API key -> key's environment. Browser session -> session env."""
     if key_row:

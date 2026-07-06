@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import Any
 
 from app.core import settings_cache
+from app.core.device import torch_device
 
 
 @dataclass
@@ -17,22 +18,11 @@ class ObjectDetection:
     class_id: int
 
 
-def _object_device() -> str:
-    """Return torch device string: 'cuda:0' or 'cpu'."""
-    if not settings_cache.cache.get_or("system.use_gpu", True):
-        return "cpu"
-    try:
-        import torch
-        return "cuda:0" if torch.cuda.is_available() else "cpu"
-    except ImportError:
-        return "cpu"
-
-
 class ObjectEngine:
     def __init__(self, model_name: str, model_path: Path) -> None:
         self._model_name = model_name
         self._is_world   = "world" in model_name.lower()
-        self._device     = _object_device()
+        self._device     = torch_device(mps=False)
 
         if self._is_world:
             from ultralytics import YOLOWorld

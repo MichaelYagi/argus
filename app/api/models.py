@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 import shutil
 import threading
-from typing import Any, Optional
+from typing import Any
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query
 
@@ -37,7 +37,7 @@ def downloading_ids() -> set[int]:
 
 @router.get("/api/models")
 async def list_models(
-    type: Optional[str] = Query(None),
+    type: str | None = Query(None),
     user_id: int = Depends(require_admin),
 ):
     if type and type not in ("face", "object"):

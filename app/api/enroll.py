@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import sqlite3
 from typing import Any
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request
@@ -12,7 +11,7 @@ from app.core import settings_cache
 from app.core.auth import require_auth, require_env_id
 from app.core.engine_registry import registry
 from app.core.image_input import acquire_image, open_and_validate, read_body_field, to_rgb_array
-from app.core.paths import crops_dir, sources_dir
+from app.core.paths import crops_dir
 from app.db import store
 
 router = APIRouter()
@@ -171,11 +170,11 @@ async def enroll_new(
     """Create a new face identity and store its first embedding in one call."""
     raw, name, external_ref = await _parse_enroll_request(request)
     img = open_and_validate(raw)
-    embedding, source_filename, face_det = _extract_embedding(raw, img)
+    embedding, face_det = _extract_embedding(raw, img)
 
     try:
         identity_id = store.create_identity(user_id, "face", name, environment_id, external_ref)
-    except sqlite3.IntegrityError:
+    except store.DuplicateError:
         raise HTTPException(409, f"Identity '{name}' already exists")
 
     result = _persist_enrollment(
@@ -191,7 +190,7 @@ async def enroll_new(
         "embedding_id": result["embedding_id"], "detection_id": result["detection_id"],
         "external_ref": external_ref,
         "source_image_id": result["source_id"],
-        "source_image_url": f"/media/sources/{source_filename}",
+        "source_image_url": f"/media/sources/{result['source_filename']}",
         "bbox": {"x": face_det.bbox[0], "y": face_det.bbox[1],
                  "w": face_det.bbox[2], "h": face_det.bbox[3]},
     }
@@ -211,7 +210,7 @@ async def enroll_existing(
 
     raw, _name, _ext = await _parse_enroll_request(request, name_required=False)
     img = open_and_validate(raw)
-    embedding, _source_filename, face_det = _extract_embedding(raw, img)
+    embedding, face_det = _extract_embedding(raw, img)
 
     result = _persist_enrollment(
         identity_id, user_id, environment_id,
@@ -246,21 +245,11 @@ def _persist_enrollment(
 
     Returns {detection_id, embedding_id, source_id, crop_path}.
     """
-    from app.api.detect import _FMT_EXT, _save_crop
+    from app.api.detect import _save_crop, _save_source_image
 
     model_id = _active_face_model_id()
 
-    content_hash = __import__("hashlib").sha256(raw).hexdigest()
-    ext = _FMT_EXT.get(img.format or "JPEG", "jpg")
-    source_filename = f"{content_hash}.{ext}"
-    dest = sources_dir() / source_filename
-    if not dest.exists():
-        sources_dir().mkdir(parents=True, exist_ok=True)
-        dest.write_bytes(raw)
-
-    source_id = store.get_or_create_source_image(
-        user_id, source_filename, img.width, img.height, environment_id, external_ref,
-    )
+    source_filename, source_id = _save_source_image(user_id, environment_id, raw, img, external_ref)
     padding = settings_cache.cache.get_or("system.crop_padding", 0.2)
     crop_path = _save_crop(img, face_det.bbox, padding)
 
@@ -295,6 +284,7 @@ def _persist_enrollment(
         "detection_id": detection_id,
         "embedding_id": embedding_id,
         "source_id": source_id,
+        "source_filename": source_filename,
         "crop_path": crop_path,
     }
 
@@ -319,8 +309,8 @@ async def _parse_enroll_request(
     return raw, name, external_ref
 
 
-def _extract_embedding(raw: bytes, img: Any) -> tuple[Any, str | None, Any]:
-    """Run face detection, return (embedding, source_filename, face_detection).
+def _extract_embedding(raw: bytes, img: Any) -> tuple[Any, Any]:
+    """Run face detection, return (embedding, face_detection).
 
     Uses the highest-confidence face if multiple are detected.
     Raises 503 if no engine is loaded, 400 if no face is found.
@@ -336,20 +326,7 @@ def _extract_embedding(raw: bytes, img: Any) -> tuple[Any, str | None, Any]:
         raise HTTPException(400, "No face detected in this image.")
 
     best = max(faces, key=lambda f: f.confidence)
-    source_path = _save_source(raw, img)
-    return best.embedding, source_path, best
-
-
-def _save_source(raw: bytes, img: Any) -> str:
-    from app.api.detect import _FMT_EXT
-    content_hash = __import__("hashlib").sha256(raw).hexdigest()
-    ext = _FMT_EXT.get(img.format or "JPEG", "jpg")
-    filename = f"{content_hash}.{ext}"
-    dest = sources_dir() / filename
-    if not dest.exists():
-        sources_dir().mkdir(parents=True, exist_ok=True)
-        dest.write_bytes(raw)
-    return filename
+    return best.embedding, best
 
 
 def _to_bytes(embedding: Any) -> bytes:

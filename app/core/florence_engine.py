@@ -26,6 +26,7 @@ from pathlib import Path
 from typing import Any
 
 from app.core import settings_cache
+from app.core.device import torch_device
 from app.core.object_engine import ObjectDetection
 
 # Hub repo and the on-disk directory name under models_dir().
@@ -41,22 +42,6 @@ NUM_BEAMS = 3
 MAX_NEW_TOKENS = 1024
 
 
-def _florence_device() -> str:
-    """Return a torch device string honoring system.use_gpu: cuda, mps, or cpu."""
-    if not settings_cache.cache.get_or("system.use_gpu", True):
-        return "cpu"
-    try:
-        import torch
-    except ImportError:
-        return "cpu"
-    if torch.cuda.is_available():
-        return "cuda:0"
-    mps = getattr(torch.backends, "mps", None)
-    if mps is not None and mps.is_available():
-        return "mps"
-    return "cpu"
-
-
 class FlorenceEngine:
     def __init__(
         self,
@@ -68,7 +53,7 @@ class FlorenceEngine:
     ) -> None:
         # model/processor injection is a test seam and lets a preloaded instance
         # be reused; normal callers pass only models_dir.
-        self._device = device or _florence_device()
+        self._device = device or torch_device()
         if model is not None and processor is not None:
             self._model = model
             self._processor = processor

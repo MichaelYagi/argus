@@ -9,6 +9,7 @@ from fastapi.responses import RedirectResponse
 from fastapi.templating import Jinja2Templates
 
 from app import __version__
+from app.api._utils import delete_crops
 from app.core.auth import get_session_env, get_session_user
 from app.db import store
 
@@ -303,7 +304,7 @@ async def environment_create(request: Request, name: str = Form(...)):
     if name:
         try:
             store.create_environment(ctx["user_id"], name)
-        except Exception:
+        except store.DuplicateError:
             pass
     # Back to wherever the action came from (modal on any page, or the /environments page).
     return RedirectResponse(request.headers.get("referer", "/environments"), status_code=303)
@@ -318,7 +319,7 @@ async def environment_rename(env_id: int, request: Request, name: str = Form(...
     if name:
         try:
             store.rename_environment(env_id, ctx["user_id"], name)
-        except Exception:
+        except store.DuplicateError:
             pass
     return RedirectResponse(request.headers.get("referer", "/environments"), status_code=303)
 
@@ -326,7 +327,6 @@ async def environment_rename(env_id: int, request: Request, name: str = Form(...
 @router.post("/environments/{env_id}/delete")
 async def environment_delete(env_id: int, request: Request):
     from app.core import face_index as _fi
-    from app.core.paths import crops_dir
     ctx = _base(request)
     if not ctx:
         return RedirectResponse("/login")
@@ -334,11 +334,7 @@ async def environment_delete(env_id: int, request: Request):
     if len(envs) > 1:
         deleted, crops = store.delete_environment(env_id, ctx["user_id"])
         if deleted:
-            for crop in crops:
-                try:
-                    (crops_dir() / crop).unlink(missing_ok=True)
-                except OSError:
-                    pass
+            delete_crops(crops)
             _fi.clear_environment(ctx["user_id"], env_id)
             if request.session.get("environment_id") == env_id:
                 remaining = store.list_environments(ctx["user_id"])

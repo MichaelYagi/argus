@@ -14,7 +14,6 @@ numpy
 pillow
 pillow-heif
 httpx
-httpx2
 faiss-cpu          # fast face similarity search; imported as `faiss`
 python-dotenv
 itsdangerous

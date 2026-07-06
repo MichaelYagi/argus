@@ -4,8 +4,8 @@ from __future__ import annotations
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
+from app.api._utils import delete_crops
 from app.core.auth import require_auth
-from app.core.paths import crops_dir
 from app.db import store
 
 router = APIRouter()
@@ -36,7 +36,7 @@ async def create_environment(body: EnvCreate, user_id: int = Depends(require_aut
         raise HTTPException(400, "Name is required")
     try:
         env_id = store.create_environment(user_id, name)
-    except Exception:
+    except store.DuplicateError:
         raise HTTPException(409, "An environment with that name already exists")
     env = store.get_environment(env_id, user_id)
     return {"id": env["id"], "name": env["name"], "created_at": env["created_at"],
@@ -62,7 +62,7 @@ async def rename_environment(env_id: int, body: EnvRename, user_id: int = Depend
         raise HTTPException(404, "Environment not found")
     try:
         store.rename_environment(env_id, user_id, name)
-    except Exception:
+    except store.DuplicateError:
         raise HTTPException(409, "An environment with that name already exists")
     return {"id": env_id, "name": name}
 
@@ -76,10 +76,6 @@ async def delete_environment(env_id: int, user_id: int = Depends(require_auth)):
     deleted, crops = store.delete_environment(env_id, user_id)
     if not deleted:
         raise HTTPException(404, "Environment not found")
-    for crop in crops:
-        try:
-            (crops_dir() / crop).unlink(missing_ok=True)
-        except OSError:
-            pass
+    delete_crops(crops)
     from app.core import face_index as _fi
     _fi.clear_environment(user_id, env_id)

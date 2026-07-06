@@ -4,7 +4,8 @@ from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 from app.core import settings_cache
-from app.core.object_engine import ObjectDetection, ObjectEngine, _object_device
+from app.core.device import torch_device
+from app.core.object_engine import ObjectDetection, ObjectEngine
 
 
 def _fake_box(x1: float, y1: float, x2: float, y2: float, conf: float, cls_id: int) -> MagicMock:
@@ -28,19 +29,19 @@ def _make_engine(tmp_path: Path) -> ObjectEngine:
 
 def test_device_cpu_when_use_gpu_false():
     settings_cache.cache.set("system.use_gpu", "false", "bool")
-    assert _object_device() == "cpu"
+    assert torch_device(mps=False) == "cpu"
 
 
 def test_device_cuda_when_available():
     settings_cache.cache.set("system.use_gpu", "true", "bool")
     with patch("torch.cuda.is_available", return_value=True):
-        assert _object_device() == "cuda:0"
+        assert torch_device(mps=False) == "cuda:0"
 
 
 def test_device_cpu_when_cuda_unavailable():
     settings_cache.cache.set("system.use_gpu", "true", "bool")
     with patch("torch.cuda.is_available", return_value=False):
-        assert _object_device() == "cpu"
+        assert torch_device(mps=False) == "cpu"
 
 
 # ---------------------------------------------------------------------------

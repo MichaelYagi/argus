@@ -1,6 +1,6 @@
 import pytest
 
-from app.core.settings_cache import SettingsCache, _coerce
+from app.core.settings_cache import SettingsCache, coerce_setting
 from app.db import store
 
 
@@ -16,27 +16,27 @@ def isolated_db(tmp_path):
 # Type coercion
 # ---------------------------------------------------------------------------
 
-def test_coerce_float():
-    assert _coerce("0.5", "float") == 0.5
-    assert isinstance(_coerce("0.5", "float"), float)
+def testcoerce_setting_float():
+    assert coerce_setting("0.5", "float") == 0.5
+    assert isinstance(coerce_setting("0.5", "float"), float)
 
 
-def test_coerce_int():
-    assert _coerce("40", "int") == 40
-    assert isinstance(_coerce("40", "int"), int)
+def testcoerce_setting_int():
+    assert coerce_setting("40", "int") == 40
+    assert isinstance(coerce_setting("40", "int"), int)
 
 
-def test_coerce_bool_true():
-    assert _coerce("true", "bool") is True
-    assert _coerce("True", "bool") is True
+def testcoerce_setting_bool_true():
+    assert coerce_setting("true", "bool") is True
+    assert coerce_setting("True", "bool") is True
 
 
-def test_coerce_bool_false():
-    assert _coerce("false", "bool") is False
+def testcoerce_setting_bool_false():
+    assert coerce_setting("false", "bool") is False
 
 
-def test_coerce_string():
-    assert _coerce("*", "string") == "*"
+def testcoerce_setting_string():
+    assert coerce_setting("*", "string") == "*"
 
 
 # ---------------------------------------------------------------------------
@@ -93,7 +93,7 @@ def test_set_updates_value():
     assert c.get("face.match_threshold") == 0.7
 
 
-def test_set_coerces_type():
+def test_setcoerce_settings_type():
     c = SettingsCache()
     c.load()
     c.set("system.save_unknown_detections", "false", "bool")

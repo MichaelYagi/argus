@@ -2,14 +2,27 @@
 
 from __future__ import annotations
 
+import base64
+import json
+import logging
 import os
 import sqlite3
+import uuid
 from contextlib import contextmanager
 from pathlib import Path
+
+log = logging.getLogger(__name__)
 
 _SCHEMA_PATH = Path(__file__).parent / "schema.sql"
 
 _DB_PATH: Path | None = None
+
+
+Row = sqlite3.Row
+
+
+class DuplicateError(Exception):
+    """Raised when an INSERT or UPDATE violates a uniqueness constraint."""
 
 
 def configure(db_path: str | Path | None) -> None:
@@ -58,13 +71,6 @@ def _migrate(conn: sqlite3.Connection) -> None:
     """Additive migrations for columns not covered by CREATE TABLE IF NOT EXISTS."""
     # Environments: create table (handled by schema.sql), add column to data tables,
     # create default environment per user, backfill existing rows.
-    existing_env_tables = {r[0] for r in conn.execute(
-        "SELECT name FROM sqlite_master WHERE type='table' AND name='environments'"
-    ).fetchall()}
-    if not existing_env_tables:
-        # schema.sql executescript already ran — the table exists but may be empty
-        pass
-
     for tbl, col in [
         ("api_keys",       "environment_id"),
         ("identities",     "environment_id"),
@@ -199,13 +205,11 @@ def _migrate(conn: sqlite3.Connection) -> None:
     existing_user_cols = {r[1] for r in conn.execute("PRAGMA table_info(users)")}
     if "is_approved" not in existing_user_cols:
         conn.execute("ALTER TABLE users ADD COLUMN is_approved INTEGER NOT NULL DEFAULT 1")
-
-    existing_user_pref_cols = {r[1] for r in conn.execute("PRAGMA table_info(users)")}
-    if "timezone" not in existing_user_pref_cols:
+    if "timezone" not in existing_user_cols:
         conn.execute("ALTER TABLE users ADD COLUMN timezone TEXT NOT NULL DEFAULT 'UTC'")
-    if "locale" not in existing_user_pref_cols:
+    if "locale" not in existing_user_cols:
         conn.execute("ALTER TABLE users ADD COLUMN locale TEXT NOT NULL DEFAULT 'en-US'")
-    if "last_environment_id" not in existing_user_pref_cols:
+    if "last_environment_id" not in existing_user_cols:
         conn.execute("ALTER TABLE users ADD COLUMN last_environment_id INTEGER")
 
     existing_identity_cols = {r[1] for r in conn.execute("PRAGMA table_info(identities)")}
@@ -275,7 +279,7 @@ def _migrate(conn: sqlite3.Connection) -> None:
                 "INSERT INTO identities_fts(rowid, label) SELECT id, LOWER(label) FROM identities"
             )
     except Exception:
-        pass
+        log.warning("FTS trigger migration failed — search may not be case-insensitive", exc_info=True)
 
     # Populate FTS index for new installations (identities exist but index is empty).
     try:
@@ -286,7 +290,7 @@ def _migrate(conn: sqlite3.Connection) -> None:
                 "INSERT INTO identities_fts(rowid, label) SELECT id, LOWER(label) FROM identities"
             )
     except Exception:
-        pass
+        log.warning("FTS index population failed — search index may be empty", exc_info=True)
 
 
 # ---------------------------------------------------------------------------
@@ -677,33 +681,39 @@ def create_identity(
     user_id: int, identity_type: str, label: str,
     environment_id: int | None = None, external_ref: str | None = None,
 ) -> int:
-    with _connect() as conn:
-        env_id = _resolve_env(conn, user_id, environment_id)
-        conn.execute(
-            "INSERT INTO identities (user_id, environment_id, type, label, external_ref) VALUES (?, ?, ?, ?, ?)",
-            (user_id, env_id, identity_type, label, external_ref),
-        )
-        new_id = conn.execute("SELECT last_insert_rowid()").fetchone()[0]
-        record_change(conn, user_id, env_id, "identity", new_id, "created", external_ref)
-        return new_id
+    try:
+        with _connect() as conn:
+            env_id = _resolve_env(conn, user_id, environment_id)
+            conn.execute(
+                "INSERT INTO identities (user_id, environment_id, type, label, external_ref) VALUES (?, ?, ?, ?, ?)",
+                (user_id, env_id, identity_type, label, external_ref),
+            )
+            new_id = conn.execute("SELECT last_insert_rowid()").fetchone()[0]
+            record_change(conn, user_id, env_id, "identity", new_id, "created", external_ref)
+            return new_id
+    except sqlite3.IntegrityError as exc:
+        raise DuplicateError(label) from exc
 
 
 def rename_identity(
     identity_id: int, user_id: int, new_label: str, environment_id: int | None = None
 ) -> bool:
-    with _connect() as conn:
-        env_id = _resolve_env(conn, user_id, environment_id)
-        # Purge first — if the identity has 0 detections it should not exist; skip the rename.
-        purged = _purge_empty_identities(conn, user_id, env_id)
-        if identity_id in purged:
-            return True  # caller gets success; the identity is gone
-        cur = conn.execute(
-            "UPDATE identities SET label = ? WHERE id = ? AND user_id = ? AND environment_id = ?",
-            (new_label, identity_id, user_id, env_id),
-        )
-        if cur.rowcount > 0:
-            record_change(conn, user_id, env_id, "identity", identity_id, "relabeled")
-        return cur.rowcount > 0
+    try:
+        with _connect() as conn:
+            env_id = _resolve_env(conn, user_id, environment_id)
+            # Purge first — if the identity has 0 detections it should not exist; skip the rename.
+            purged = _purge_empty_identities(conn, user_id, env_id)
+            if identity_id in purged:
+                return True  # caller gets success; the identity is gone
+            cur = conn.execute(
+                "UPDATE identities SET label = ? WHERE id = ? AND user_id = ? AND environment_id = ?",
+                (new_label, identity_id, user_id, env_id),
+            )
+            if cur.rowcount > 0:
+                record_change(conn, user_id, env_id, "identity", identity_id, "relabeled")
+            return cur.rowcount > 0
+    except sqlite3.IntegrityError as exc:
+        raise DuplicateError(new_label) from exc
 
 
 def set_identity_external_ref(
@@ -1065,10 +1075,20 @@ def get_or_create_identity(
                     "UPDATE identities SET external_ref = ? WHERE id = ?", (external_ref, existing["id"]),
                 )
             return existing["id"]
-        conn.execute(
-            "INSERT INTO identities (user_id, environment_id, type, label, external_ref) VALUES (?, ?, ?, ?, ?)",
-            (user_id, env_id, identity_type, label, external_ref),
-        )
+        try:
+            conn.execute(
+                "INSERT INTO identities (user_id, environment_id, type, label, external_ref) VALUES (?, ?, ?, ?, ?)",
+                (user_id, env_id, identity_type, label, external_ref),
+            )
+        except sqlite3.IntegrityError:
+            # Concurrent INSERT from another request beat us to the UNIQUE constraint.
+            row = conn.execute(
+                """SELECT id FROM identities
+                   WHERE user_id = ? AND environment_id = ? AND type = ? AND LOWER(label) = LOWER(?)
+                   ORDER BY id ASC LIMIT 1""",
+                (user_id, env_id, identity_type, label),
+            ).fetchone()
+            return row["id"]
         new_id = conn.execute("SELECT last_insert_rowid()").fetchone()[0]
         record_change(conn, user_id, env_id, "identity", new_id, "created", external_ref)
         return new_id
@@ -1578,6 +1598,28 @@ def get_representative_embeddings(model_id: int, user_id: int, environment_id: i
                  )""",
             (user_id, env_id, model_id),
         ).fetchall()
+
+
+def list_identity_ids_for_model(model_id: int, user_id: int, environment_id: int) -> list[int]:
+    """Return distinct identity IDs that have face embeddings for this model/user/env."""
+    with _connect() as conn:
+        return [r[0] for r in conn.execute(
+            """SELECT DISTINCT fe.identity_id FROM face_embeddings fe
+               JOIN identities i ON i.id = fe.identity_id
+               WHERE fe.model_id = ? AND i.user_id = ? AND i.environment_id = ?""",
+            (model_id, user_id, environment_id),
+        ).fetchall()]
+
+
+def list_user_env_pairs_for_model(model_id: int) -> list[tuple[int, int]]:
+    """Return all (user_id, environment_id) pairs that have face embeddings for this model."""
+    with _connect() as conn:
+        return [(r[0], r[1]) for r in conn.execute(
+            """SELECT DISTINCT i.user_id, i.environment_id FROM identities i
+               JOIN face_embeddings fe ON fe.identity_id = i.id
+               WHERE fe.model_id = ?""",
+            (model_id,),
+        ).fetchall()]
 
 
 def get_face_embeddings_for_model(model_id: int, user_id: int, environment_id: int | None = None) -> list[sqlite3.Row]:
@@ -2175,8 +2217,7 @@ def get_settings_defaults() -> dict[str, str]:
 # ---------------------------------------------------------------------------
 
 def create_job(user_id: int, job_type: str, environment_id: int | None = None) -> str:
-    import uuid as _uuid
-    job_id = _uuid.uuid4().hex
+    job_id = uuid.uuid4().hex
     with _connect() as conn:
         env_id = _resolve_env(conn, user_id, environment_id)
         conn.execute(
@@ -2187,12 +2228,11 @@ def create_job(user_id: int, job_type: str, environment_id: int | None = None) -
 
 
 def update_job(job_id: str, status: str, result: object = None) -> None:
-    import json as _json
     with _connect() as conn:
         conn.execute(
             """UPDATE jobs SET status = ?, result = ?, updated_at = datetime('now')
                WHERE id = ?""",
-            (status, _json.dumps(result) if result is not None else None, job_id),
+            (status, json.dumps(result) if result is not None else None, job_id),
         )
 
 
@@ -2229,12 +2269,15 @@ def delete_job(job_id: str, user_id: int, environment_id: int | None = None) -> 
 # ---------------------------------------------------------------------------
 
 def create_environment(user_id: int, name: str) -> int:
-    with _connect() as conn:
-        conn.execute(
-            "INSERT INTO environments (user_id, name) VALUES (?, ?)",
-            (user_id, name),
-        )
-        return conn.execute("SELECT last_insert_rowid()").fetchone()[0]
+    try:
+        with _connect() as conn:
+            conn.execute(
+                "INSERT INTO environments (user_id, name) VALUES (?, ?)",
+                (user_id, name),
+            )
+            return conn.execute("SELECT last_insert_rowid()").fetchone()[0]
+    except sqlite3.IntegrityError as exc:
+        raise DuplicateError(name) from exc
 
 
 def list_environments(user_id: int) -> list[sqlite3.Row]:
@@ -2270,12 +2313,15 @@ def get_default_environment_id(user_id: int) -> int | None:
 
 
 def rename_environment(env_id: int, user_id: int, name: str) -> bool:
-    with _connect() as conn:
-        cur = conn.execute(
-            "UPDATE environments SET name = ? WHERE id = ? AND user_id = ?",
-            (name, env_id, user_id),
-        )
-        return cur.rowcount > 0
+    try:
+        with _connect() as conn:
+            cur = conn.execute(
+                "UPDATE environments SET name = ? WHERE id = ? AND user_id = ?",
+                (name, env_id, user_id),
+            )
+            return cur.rowcount > 0
+    except sqlite3.IntegrityError as exc:
+        raise DuplicateError(name) from exc
 
 
 def delete_environment(env_id: int, user_id: int) -> tuple[bool, list[str]]:
@@ -2540,6 +2586,178 @@ def list_deliveries(webhook_id: int, user_id: int, limit: int = 50) -> list:
             "ORDER BY d.id DESC LIMIT ?",
             (webhook_id, user_id, limit),
         ).fetchall()
+
+
+# ---------------------------------------------------------------------------
+# Export / Import
+# ---------------------------------------------------------------------------
+
+def export_identity_data(user_id: int, identity_ids: list[int]) -> list[dict]:
+    """Return serializable data for the requested identities (owned by user_id).
+
+    Each entry contains the identity's type/label, its face embeddings (with
+    model name), and its detections (with source image path/dimensions).
+    Unknown identity ids are silently skipped.
+    """
+    result = []
+    with _connect() as conn:
+        for iid in identity_ids:
+            row = conn.execute(
+                "SELECT * FROM identities WHERE id = ? AND user_id = ?",
+                (iid, user_id),
+            ).fetchone()
+            if not row:
+                continue
+
+            embeddings = conn.execute(
+                """SELECT fe.embedding, fe.source_image_path, m.name AS model_name
+                   FROM face_embeddings fe
+                   LEFT JOIN models m ON m.id = fe.model_id
+                   WHERE fe.identity_id = ?""",
+                (iid,),
+            ).fetchall()
+
+            detections = conn.execute(
+                """SELECT d.confidence, d.bbox_x, d.bbox_y, d.bbox_w, d.bbox_h,
+                          d.crop_path, d.detected_at, d.review_status,
+                          si.file_path AS source_image, si.width, si.height
+                   FROM detections d
+                   JOIN source_images si ON si.id = d.source_image_id
+                   WHERE d.identity_id = ? AND d.user_id = ?""",
+                (iid, user_id),
+            ).fetchall()
+
+            result.append({
+                "type": row["type"],
+                "label": row["label"],
+                "embeddings": [
+                    {
+                        "model_name": e["model_name"] or "unknown",
+                        "embedding_b64": base64.b64encode(bytes(e["embedding"])).decode(),
+                        "source_image": e["source_image_path"],
+                    }
+                    for e in embeddings
+                ],
+                "detections": [
+                    {
+                        "source_image":  d["source_image"],
+                        "source_width":  d["width"],
+                        "source_height": d["height"],
+                        "crop":          d["crop_path"],
+                        "confidence":    d["confidence"],
+                        "bbox": {"x": d["bbox_x"], "y": d["bbox_y"],
+                                 "w": d["bbox_w"], "h": d["bbox_h"]},
+                        "detected_at":   d["detected_at"],
+                        "review_status": d["review_status"],
+                    }
+                    for d in detections
+                ],
+            })
+    return result
+
+
+def import_identity_data(user_id: int, identities: list[dict]) -> dict:
+    """Merge exported identities into this user's data (no environment scoping —
+    imports land in the default scope, same as before environments were added).
+
+    Returns a stats dict: identities_created, identities_merged,
+    embeddings_imported, embeddings_skipped, detections_imported, detections_skipped.
+    """
+    stats = {
+        "identities_created": 0,
+        "identities_merged": 0,
+        "embeddings_imported": 0,
+        "embeddings_skipped": 0,
+        "detections_imported": 0,
+        "detections_skipped": 0,
+    }
+    with _connect() as conn:
+        for id_data in identities:
+            itype = id_data["type"]
+            label = id_data["label"]
+
+            existing = conn.execute(
+                "SELECT id FROM identities WHERE user_id = ? AND type = ? AND label = ?",
+                (user_id, itype, label),
+            ).fetchone()
+
+            if existing:
+                identity_id = existing["id"]
+                stats["identities_merged"] += 1
+            else:
+                conn.execute(
+                    "INSERT INTO identities (user_id, type, label) VALUES (?, ?, ?)",
+                    (user_id, itype, label),
+                )
+                identity_id = conn.execute("SELECT last_insert_rowid()").fetchone()[0]
+                stats["identities_created"] += 1
+
+            for emb in id_data.get("embeddings", []):
+                model_name   = emb.get("model_name", "unknown")
+                source_image = emb.get("source_image")
+                dup = conn.execute(
+                    """SELECT fe.id FROM face_embeddings fe
+                       LEFT JOIN models m ON m.id = fe.model_id
+                       WHERE fe.identity_id = ? AND fe.source_image_path = ?
+                         AND (m.name = ? OR (fe.model_id IS NULL AND ? = 'unknown'))""",
+                    (identity_id, source_image, model_name, model_name),
+                ).fetchone()
+                if dup:
+                    stats["embeddings_skipped"] += 1
+                    continue
+                model_row = conn.execute(
+                    "SELECT id FROM models WHERE name = ?", (model_name,)
+                ).fetchone()
+                conn.execute(
+                    """INSERT INTO face_embeddings
+                       (identity_id, model_id, embedding, source_image_path)
+                       VALUES (?, ?, ?, ?)""",
+                    (identity_id, model_row["id"] if model_row else None,
+                     base64.b64decode(emb["embedding_b64"]), source_image),
+                )
+                stats["embeddings_imported"] += 1
+
+            for det in id_data.get("detections", []):
+                source_image = det["source_image"]
+                bbox = det.get("bbox", {})
+                bx, by, bw, bh = bbox.get("x", 0), bbox.get("y", 0), bbox.get("w", 0), bbox.get("h", 0)
+                src_row = conn.execute(
+                    "SELECT id FROM source_images WHERE user_id = ? AND file_path = ?",
+                    (user_id, source_image),
+                ).fetchone()
+                if src_row:
+                    source_image_id = src_row["id"]
+                else:
+                    w = det.get("source_width", 0)
+                    h = det.get("source_height", 0)
+                    conn.execute(
+                        "INSERT INTO source_images (user_id, file_path, width, height) VALUES (?,?,?,?)",
+                        (user_id, source_image, w, h),
+                    )
+                    source_image_id = conn.execute("SELECT last_insert_rowid()").fetchone()[0]
+                dup = conn.execute(
+                    """SELECT id FROM detections
+                       WHERE identity_id = ? AND user_id = ? AND source_image_id = ?
+                         AND bbox_x = ? AND bbox_y = ? AND bbox_w = ? AND bbox_h = ?""",
+                    (identity_id, user_id, source_image_id, bx, by, bw, bh),
+                ).fetchone()
+                if dup:
+                    stats["detections_skipped"] += 1
+                    continue
+                conn.execute(
+                    """INSERT INTO detections
+                       (user_id, identity_id, source_image_id, type, confidence,
+                        bbox_x, bbox_y, bbox_w, bbox_h, crop_path,
+                        review_status, detected_at)
+                       VALUES (?,?,?,?,?,?,?,?,?,?,?,?)""",
+                    (user_id, identity_id, source_image_id, itype,
+                     det.get("confidence", 0.0), bx, by, bw, bh,
+                     det.get("crop", ""),
+                     det.get("review_status", "confirmed"),
+                     det.get("detected_at")),
+                )
+                stats["detections_imported"] += 1
+    return stats
 
 
 def _seed_models(conn: sqlite3.Connection) -> None:

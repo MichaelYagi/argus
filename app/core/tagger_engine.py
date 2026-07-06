@@ -25,7 +25,7 @@ import io
 from pathlib import Path
 from typing import Any
 
-from app.core import settings_cache
+from app.core.device import torch_device
 from app.core.object_engine import ObjectDetection
 
 DIR_NAME = "ram-plus-plus-grounding-dino"
@@ -36,22 +36,6 @@ DINO_DIR_NAME = "grounding-dino-base"
 RAM_IMAGE_SIZE = 384
 BOX_THRESHOLD = 0.35
 TEXT_THRESHOLD = 0.25
-
-
-def _tagger_device() -> str:
-    """Return a torch device string honoring system.use_gpu."""
-    if not settings_cache.cache.get_or("system.use_gpu", True):
-        return "cpu"
-    try:
-        import torch
-    except ImportError:
-        return "cpu"
-    if torch.cuda.is_available():
-        return "cuda:0"
-    mps = getattr(torch.backends, "mps", None)
-    if mps is not None and mps.is_available():
-        return "mps"
-    return "cpu"
 
 
 def _patch_ram_source() -> None:
@@ -122,7 +106,7 @@ class TaggerEngine:
         dino_processor: Any = None,
         device: str | None = None,
     ) -> None:
-        self._device = device or _tagger_device()
+        self._device = device or torch_device()
 
         # Test-seam: accept pre-loaded models to avoid disk I/O in tests.
         if ram_model is not None and dino_model is not None and dino_processor is not None:

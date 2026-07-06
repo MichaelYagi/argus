@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-from typing import Optional
-
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
 
@@ -72,8 +70,8 @@ async def update_setting(key: str, body: _UpdateBody, user_id: int = Depends(req
 
 @router.post("/api/settings/reset")
 async def reset_settings(
-    key: Optional[str] = Query(None),
-    category: Optional[str] = Query(None),
+    key: str | None = Query(None),
+    category: str | None = Query(None),
     user_id: int = Depends(require_admin),
 ):
     """Reset one key (?key=…) or an entire category (?category=…) to defaults."""
@@ -163,10 +161,10 @@ def _apply_reset(key: str, default_value: str) -> None:
 
 
 def _fmt(row) -> dict:
-    from app.core.settings_cache import _coerce
+    from app.core.settings_cache import coerce_setting
     return {
         "key": row["key"],
-        "value": _coerce(row["value"], row["value_type"]),
+        "value": coerce_setting(row["value"], row["value_type"]),
         "value_type": row["value_type"],
         "category": row["category"],
         "description": row["description"],

@@ -1,8 +1,6 @@
 """Admin-only log viewer API — replays the in-memory ring buffer."""
 from __future__ import annotations
 
-from typing import Optional
-
 from fastapi import APIRouter, Depends, Query
 
 from app.core import log_buffer
@@ -14,8 +12,8 @@ router = APIRouter()
 
 @router.get("/api/logs")
 async def get_logs(
-    limit: Optional[int] = Query(None, ge=1, le=log_buffer.MAX_SIZE),
-    level: Optional[str] = Query(None),
+    limit: int | None = Query(None, ge=1, le=log_buffer.MAX_SIZE),
+    level: str | None = Query(None),
     user_id: int = Depends(require_admin),
 ):
     """Return the buffered log lines (oldest first). Optional ?level= and ?limit=."""

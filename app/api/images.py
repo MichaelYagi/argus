@@ -3,14 +3,13 @@
 from __future__ import annotations
 
 import json
-from typing import Optional
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, Request
 from pydantic import BaseModel
 
-from app.api._utils import paginate
+from app.api._utils import delete_crops, is_truthy, paginate
 from app.core.auth import require_auth, require_env_id
-from app.core.paths import crops_dir, sources_dir
+from app.core.paths import sources_dir
 from app.db import store
 
 router = APIRouter()
@@ -42,19 +41,19 @@ async def list_images_by_ref(
 
 @router.get("/api/source-images")
 async def list_source_images(
-    cursor: Optional[str] = Query(None),
+    cursor: str | None = Query(None),
     limit: int = Query(40, ge=1, le=200),
-    identity_id: Optional[int] = Query(None),
-    type: Optional[str] = Query(None, description="Filter by detection type: face or object"),
-    since: Optional[str] = Query(None, description="ISO timestamp — images uploaded at or after"),
-    until: Optional[str] = Query(None, description="ISO timestamp — images uploaded at or before"),
+    identity_id: int | None = Query(None),
+    type: str | None = Query(None, description="Filter by detection type: face or object"),
+    since: str | None = Query(None, description="ISO timestamp — images uploaded at or after"),
+    until: str | None = Query(None, description="ISO timestamp — images uploaded at or before"),
     user_id: int = Depends(require_auth),
     environment_id: int = Depends(require_env_id),
 ):
     """Paginated list of all processed source images (one row per image), newest first.
     Optional filters: identity_id, type (face/object), since, until."""
     if type and type not in ("face", "object"):
-        raise HTTPException(400, "type must be face or object")
+        raise HTTPException(400, "type must be 'face' or 'object'")
     rows = store.list_source_images(
         user_id, cursor=cursor, limit=limit, environment_id=environment_id,
         identity_id=identity_id, detection_type=type, since=since, until=until,
@@ -127,17 +126,11 @@ async def delete_source_image(
     Use this before re-detecting a photo to avoid duplicate detections. References
     enrolled from the removed crops are dropped too, so no orphaned references remain.
     """
-    crops = store.delete_source_image(source_image_id, user_id)
+    crops = store.delete_source_image(source_image_id, user_id, environment_id)
     if crops is None:
         raise HTTPException(404, "Source image not found")
 
-    removed = 0
-    for crop in crops:
-        try:
-            (crops_dir() / crop).unlink(missing_ok=True)
-            removed += 1
-        except OSError:
-            pass
+    removed = delete_crops(crops)
 
     # References enrolled from the removed crops were dropped too — refresh the index.
     from app.core import face_index
@@ -145,10 +138,6 @@ async def delete_source_image(
 
     return {"source_image_id": source_image_id, "detections_deleted": len(crops),
             "crops_removed": removed}
-
-
-def _is_truthy(val: str) -> bool:
-    return val.lower() in ("1", "true", "yes")
 
 
 @router.post("/api/images/{source_image_id}/reprocess", status_code=200)
@@ -173,8 +162,8 @@ async def reprocess_source_image(
     det_type = request.query_params.get("type", "all")
     if det_type not in ("faces", "objects", "all"):
         raise HTTPException(400, "type must be faces, objects, or all")
-    replace = _is_truthy(request.query_params.get("replace", "false"))
-    run_async = _is_truthy(request.query_params.get("async", "false"))
+    replace = is_truthy(request.query_params.get("replace", "false"))
+    run_async = is_truthy(request.query_params.get("async", "false"))
 
     source_path = sources_dir() / src["file_path"]
     if not source_path.exists():
@@ -194,20 +183,24 @@ async def reprocess_source_image(
     from app.core.image_input import open_and_validate
 
     img = open_and_validate(raw)
+    _DET_TYPE_SINGULAR = {"faces": "face", "objects": "object", "all": None}
     if replace:
-        _clear_detections(user_id, environment_id, source_image_id, None if det_type == "all" else det_type)
+        _clear_detections(user_id, environment_id, source_image_id, _DET_TYPE_SINGULAR[det_type])
     result: dict = {"source_image_id": source_image_id}
     if det_type in ("faces", "all"):
         result["faces"] = _run_faces(user_id, environment_id, img, source_image_id)
     if det_type in ("objects", "all"):
-        result["objects"] = _run_objects(user_id, environment_id, img, source_image_id)
+        objs, img_tags = _run_objects(user_id, environment_id, img, source_image_id)
+        result["objects"] = objs
+        if img_tags is not None:
+            result["image_tags"] = img_tags
     return result
 
 
 class _TagItem(BaseModel):
     detection_id: int
-    identity_id: Optional[int] = None
-    label: Optional[str] = None
+    identity_id: int | None = None
+    label: str | None = None
 
 
 @router.post("/api/images/{source_image_id}/tag", status_code=200)
@@ -215,28 +208,29 @@ async def tag_image(
     source_image_id: int,
     items: list[_TagItem],
     user_id: int = Depends(require_auth),
+    environment_id: int = Depends(require_env_id),
 ):
-    src = store.get_source_image(source_image_id, user_id)
+    src = store.get_source_image(source_image_id, user_id, environment_id)
     if not src:
         raise HTTPException(404, "Source image not found")
 
     results = []
     for item in items:
-        det = store.get_detection(item.detection_id, user_id)
+        det = store.get_detection(item.detection_id, user_id, environment_id)
         if not det or det["source_image_id"] != source_image_id:
             results.append({"detection_id": item.detection_id, "status": "not_found"})
             continue
 
         identity_id = item.identity_id
         if not identity_id and item.label:
-            identity_id = store.get_or_create_identity(user_id, det["type"], item.label.strip())
+            identity_id = store.get_or_create_identity(user_id, det["type"], item.label.strip(), environment_id)
         if not identity_id:
             results.append({"detection_id": item.detection_id, "status": "error",
                              "detail": "Provide identity_id or label"})
             continue
 
-        store.label_detection(item.detection_id, user_id, identity_id)
-        identity = store.get_identity(identity_id, user_id)
+        store.label_detection(item.detection_id, user_id, identity_id, environment_id)
+        identity = store.get_identity(identity_id, user_id, environment_id)
         results.append({
             "detection_id": item.detection_id,
             "identity_id": identity_id,

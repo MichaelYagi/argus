@@ -30,8 +30,21 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - `enroll.py` no longer calls `store._connect()` directly. Four raw-SQL sites replaced with store-layer functions (`store.embedding_exists`, `store.list_face_embeddings`, `store.get_face_embedding`, `store.set_identity_cover`). Three new helpers added to `store.py` to close the gap.
 - `_FMT_EXT` and `_save_crop` deduplicated — `enroll.py` previously carried local copies that had silently diverged from the canonical versions in `detect.py`; both are now imported from there.
 - `_persist_enrollment()` extracted in `enroll.py` — source-image save, crop save, detection insert, embedding insert, representative recompute, and index rebuild are now shared between `enroll_new` and `enroll_existing` instead of duplicated.
-- Request body field parsing consolidated into `read_body_field(request, key)` in `image_input.py`. The three hand-rolled multipart/JSON parse blocks in `detect.py` (`_extract_label`, `_extract_external_ref`, `_extract_replace`) and the equivalent block in `enroll.py`'s `_parse_enroll_request` all call this helper instead. Starlette caches form/JSON after first access so there is no extra I/O cost.
+- Request body field parsing consolidated into `read_body_field(request, key)` in `image_input.py`. The five hand-rolled multipart/JSON parse blocks in `detect.py` (`_extract_label`, `_extract_external_ref`, `_extract_replace`, `_extract_threshold`, `_extract_top_n`) and the equivalent block in `enroll.py`'s `_parse_enroll_request` all call this helper instead. Starlette caches form/JSON after first access so there is no extra I/O cost.
+- Torch device selection consolidated into `torch_device(mps=True/False)` in `app/core/device.py`. The three private `_florence_device`, `_tagger_device`, and `_object_device` functions were identical (or near-identical) copies; all three engines now import from the shared module. `mps=False` is passed by the YOLO engine, which has no MPS code path.
+- `store._connect()` removed from `export_import.py`. Two new store-layer functions — `store.export_identity_data(user_id, identity_ids)` and `store.import_identity_data(user_id, identities)` — encapsulate the complex queries and the import transaction; the route handlers are now thin wrappers around those calls.
 - Cursor pagination consolidated into a shared `paginate()` helper in `app/api/_utils.py`. The local `_paginate` in `identities.py` and the hand-rolled pagination block in `images.py` are removed; both now call the shared helper.
+- `is_truthy` and `delete_crops` extracted to `app/api/_utils.py`. Seven identical crop-deletion loops across `detect.py`, `images.py`, `environments.py`, `identities.py`, and `review.py` replaced by the shared helper; two copies of `_is_truthy` in `detect.py` and `images.py` replaced by the shared one.
+- `settings_cache._coerce` renamed to `coerce_setting` (was already imported externally by `settings.py`, so the private naming was misleading).
+- `store.create_environment` and `store.rename_environment` now raise `store.DuplicateError` on a `UNIQUE` constraint violation instead of leaking `sqlite3.IntegrityError`. Callers in `main_pages.py` and `environments.py` now catch `store.DuplicateError` instead of `Exception`.
+- FTS exception handlers in `store.py` now log a warning with `exc_info=True` instead of silently swallowing failures.
+- Duplicate `PRAGMA table_info(users)` call in the `init_db` migration block merged into one — four column-existence checks now share a single query result.
+- No-op `if not existing_env_tables: pass` block (which ran a DB query and discarded the result) removed from `init_db`.
+- `import uuid` and `import json` moved to module-level in `store.py`; deferred `import uuid as _uuid` and `import json as _json` inside `create_job`/`update_job` removed.
+- `face_index.py` faiss fallback now logs a warning with `exc_info=True` instead of silently setting `used_faiss = False`.
+- `main.py` object-model load failure now passes `exc_info=True`, consistent with the face-model warning on the same code path.
+- Removed `httpx2` from `requirements.txt` (never imported anywhere; erroneous duplicate entry).
+- 400 error message for unknown detection type normalized from `"type must be face or object"` to `"type must be 'face' or 'object'"` in `images.py` and `identities.py`.
 
 ---
 

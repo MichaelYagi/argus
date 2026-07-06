@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 
 from app.core.auth import require_auth, require_env_id
 from app.db import store
@@ -19,7 +19,6 @@ async def search_identities(
     environment_id: int = Depends(require_env_id),
 ):
     if type and type not in ("face", "object"):
-        from fastapi import HTTPException
         raise HTTPException(400, "type must be 'face' or 'object'")
     rows = store.search_identities(
         user_id, q, environment_id, limit=limit, identity_type=type

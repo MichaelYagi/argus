@@ -5,6 +5,7 @@ import platform
 from fastapi import APIRouter
 
 from app import __version__
+from app.core import settings_cache
 from app.core.engine_registry import registry
 from app.db import store
 
@@ -60,7 +61,8 @@ async def health():
 
         providers = ort.get_available_providers()
         gpu_available = "CUDAExecutionProvider" in providers
-        active_provider = "cuda" if gpu_available else "cpu"
+        use_gpu = settings_cache.cache.get_or("system.use_gpu", True)
+        active_provider = "cuda" if (gpu_available and use_gpu) else "cpu"
     except ImportError:
         gpu_available = None
         active_provider = None
@@ -90,7 +92,8 @@ async def capabilities():
     try:
         import onnxruntime as ort
         gpu_available = "CUDAExecutionProvider" in ort.get_available_providers()
-        active_provider = "cuda" if gpu_available else "cpu"
+        use_gpu = settings_cache.cache.get_or("system.use_gpu", True)
+        active_provider = "cuda" if (gpu_available and use_gpu) else "cpu"
     except ImportError:
         gpu_available = None
         active_provider = None
