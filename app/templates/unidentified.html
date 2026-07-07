@@ -15,262 +15,116 @@
 
 {% block scripts %}
 <script>
-(() => {
-  const container = document.getElementById('up-gallery');
-  const emptyEl   = document.getElementById('up-empty');
-  const loadingEl = document.getElementById('up-loading');
-  const GAP = 4;
-  const TARGET_H = 200;
-  const PAGE = 40;
+ArgusGallery({
+  container: document.getElementById('up-gallery'),
+  emptyEl:   document.getElementById('up-empty'),
+  loadingEl: document.getElementById('up-loading'),
+  stateKey:  '_argus_unidentified',
 
-  let items = [], cursor = null, hasMore = true, loading = false, sentinelVisible = false;
-  let pending = [];
-  let tailEl = null;
+  ar: item => item.ar || 1,
 
-  function buildRow(rowItems, height) {
-    const rowEl = document.createElement('div');
-    rowEl.className = 'g-row';
-    rowItems.forEach(item => {
-      const ar = item.ar || 1;
-      const w  = Math.floor(ar * height);
-      const h  = Math.floor(height);
+  buildItem(item, { saveState, removeItem }) {
+    const el = document.createElement('div');
+    el.className = 'g-item';
+    el.dataset.id = item.detection_id;
 
-      const el = document.createElement('div');
-      el.className = 'g-item';
-      el.style.width  = w + 'px';
-      el.style.height = h + 'px';
-      el.dataset.id   = item.detection_id;
-
-      const img = document.createElement('img');
-      img.src = item.crop_url;
-      img.loading = 'lazy';
-      img.alt = '';
-      if (item.source_image_url) {
-        img.style.cursor = 'zoom-in';
-        img.addEventListener('click', e => {
-          e.stopPropagation();
-          openSourceModal(item.source_image_url);
-        });
-      }
-      el.appendChild(img);
-
-      // Confidence badge (bottom-left)
-      if (item.confidence != null) {
-        const badge = document.createElement('div');
-        badge.className = 'g-badge';
-        badge.textContent = (item.confidence * 100).toFixed(0) + '%';
-        badge.title = 'Detection confidence';
-        el.appendChild(badge);
-      }
-
-      // Tag link (top-right)
-      if (item.source_image_id) {
-        const tagLink = document.createElement('a');
-        tagLink.className = 'g-tag-link';
-        tagLink.href = '/tag/' + item.source_image_id + '?focus=' + item.detection_id;
-        tagLink.textContent = 'Tag';
-        tagLink.addEventListener('click', e => {
-          e.stopPropagation();
-          saveState(item.detection_id);
-        });
-        el.appendChild(tagLink);
-      }
-
-      // Delete button (top-left)
-      const delBtn = document.createElement('button');
-      delBtn.className = 'g-del-btn';
-      delBtn.title = 'Delete this detection';
-      delBtn.textContent = '✕';
-      delBtn.addEventListener('click', e => {
-        e.stopPropagation();
-        showConfirm('Delete this detection permanently?', async () => {
-          let resp;
-          try {
-            resp = await fetch('/api/detections/' + item.detection_id, { method: 'DELETE' });
-          } catch (_) {
-            if (window.showToast) showToast('Could not delete the detection (network error).', 'error');
-            return;
-          }
-          if (resp.ok || resp.status === 204) {
-            removeItem(item.detection_id);
-            if (window.showToast) showToast('Detection deleted', 'success');
-          } else if (window.showToast) {
-            showToast('Could not delete the detection.', 'error');
-          }
-        }, { confirmText: 'Delete', danger: true });
-      });
-      el.appendChild(delBtn);
-
-      // Assign button (bottom-right) — no cover star here, so sit flush at right: 5px
-      const assignBtn = document.createElement('button');
-      assignBtn.className = 'g-enroll-btn';
-      assignBtn.style.right = '5px';
-      assignBtn.title = 'Assign to a person';
-      assignBtn.textContent = '+';
-      assignBtn.addEventListener('click', e => {
-        e.stopPropagation();
-        showLabelPopup(assignBtn, async label => {
-          if (!label) return;
-          let resp;
-          try {
-            resp = await fetch('/api/detections/' + item.detection_id + '/label', {
-              method: 'PUT',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ label }),
-            });
-          } catch (_) {
-            if (window.showToast) showToast('Could not assign (network error).', 'error');
-            return;
-          }
-          if (resp.ok) {
-            const d = await resp.json();
-            removeItem(item.detection_id);
-            if (window.showToast) showToast('Assigned to ' + d.label, 'success');
-          } else if (window.showToast) {
-            showToast('Could not assign the detection.', 'error');
-          }
-        }, 'Person name…');
-      });
-      el.appendChild(assignBtn);
-
-      rowEl.appendChild(el);
-    });
-    return rowEl;
-  }
-
-  function flushRows(work) {
-    const W = container.clientWidth;
-    let cur = [], sumAR = 0;
-    work.forEach(raw => {
-      const item = { ...raw };
-      cur.push(item);
-      sumAR += item.ar;
-      if (sumAR * TARGET_H + GAP * (cur.length - 1) >= W) {
-        container.appendChild(buildRow(cur, (W - GAP * (cur.length - 1)) / sumAR));
-        cur = []; sumAR = 0;
-      }
-    });
-    return cur;
-  }
-
-  function appendItems(newItems) {
-    if (tailEl) { tailEl.remove(); tailEl = null; }
-    pending = flushRows(pending.concat(newItems));
-    if (pending.length) {
-      tailEl = buildRow(pending, TARGET_H);
-      container.appendChild(tailEl);
+    const img = document.createElement('img');
+    img.src = item.crop_url;
+    img.loading = 'lazy';
+    img.alt = '';
+    if (item.source_image_url) {
+      img.style.cursor = 'zoom-in';
+      img.addEventListener('click', e => { e.stopPropagation(); openSourceModal(item.source_image_url); });
     }
-  }
+    el.appendChild(img);
 
-  function relayout() {
-    container.innerHTML = '';
-    tailEl = null;
-    pending = [];
-    appendItems(items);
-  }
-
-  function removeItem(detectionId) {
-    const idx = items.findIndex(i => i.detection_id === detectionId);
-    if (idx !== -1) items.splice(idx, 1);
-    // Also remove from pending
-    const pi = pending.findIndex(i => i.detection_id === detectionId);
-    if (pi !== -1) pending.splice(pi, 1);
-    relayout();
-    if (items.length === 0 && !hasMore) {
-      emptyEl.hidden = false;
+    if (item.confidence != null) {
+      const badge = document.createElement('div');
+      badge.className = 'g-badge';
+      badge.textContent = (item.confidence * 100).toFixed(0) + '%';
+      badge.title = 'Detection confidence';
+      el.appendChild(badge);
     }
-  }
 
-  async function loadPage() {
-    if (loading || !hasMore) return;
-    loading = true;
-    if (loadingEl) loadingEl.hidden = false;
+    if (item.source_image_id) {
+      const tagLink = document.createElement('a');
+      tagLink.className = 'g-tag-link';
+      tagLink.href = '/tag/' + item.source_image_id + '?focus=' + item.detection_id;
+      tagLink.textContent = 'Tag';
+      tagLink.addEventListener('click', e => { e.stopPropagation(); saveState(item.detection_id); });
+      el.appendChild(tagLink);
+    }
 
-    const params = new URLSearchParams({ type: 'face', limit: PAGE });
+    const delBtn = document.createElement('button');
+    delBtn.className = 'g-del-btn';
+    delBtn.title = 'Delete this detection';
+    delBtn.textContent = '✕';
+    delBtn.addEventListener('click', e => {
+      e.stopPropagation();
+      showConfirm('Delete this detection permanently?', async () => {
+        let resp;
+        try { resp = await fetch('/api/detections/' + item.detection_id, { method: 'DELETE' }); }
+        catch (_) { if (window.showToast) showToast('Could not delete the detection (network error).', 'error'); return; }
+        if (resp.ok || resp.status === 204) {
+          removeItem(i => i.detection_id === item.detection_id);
+          if (window.showToast) showToast('Detection deleted', 'success');
+        } else if (window.showToast) {
+          showToast('Could not delete the detection.', 'error');
+        }
+      }, { confirmText: 'Delete', danger: true });
+    });
+    el.appendChild(delBtn);
+
+    const assignBtn = document.createElement('button');
+    assignBtn.className = 'g-enroll-btn';
+    assignBtn.style.right = '5px';
+    assignBtn.title = 'Assign to a person';
+    assignBtn.textContent = '+';
+    assignBtn.addEventListener('click', e => {
+      e.stopPropagation();
+      showLabelPopup(assignBtn, async label => {
+        if (!label) return;
+        let resp;
+        try {
+          resp = await fetch('/api/detections/' + item.detection_id + '/label', {
+            method: 'PUT', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ label }),
+          });
+        } catch (_) { if (window.showToast) showToast('Could not assign (network error).', 'error'); return; }
+        if (resp.ok) {
+          const d = await resp.json();
+          removeItem(i => i.detection_id === item.detection_id);
+          if (window.showToast) showToast('Assigned to ' + d.label, 'success');
+        } else if (window.showToast) {
+          showToast('Could not assign the detection.', 'error');
+        }
+      }, 'Person name…');
+    });
+    el.appendChild(assignBtn);
+
+    return el;
+  },
+
+  findEl: (c, id) => c.querySelector('[data-id="' + id + '"]'),
+
+  async fetchPage(cursor) {
+    const params = new URLSearchParams({ type: 'face', limit: 40 });
     if (cursor) params.set('cursor', cursor);
     const resp = await fetch('/api/detections/unknown?' + params);
-    if (!resp.ok) { loading = false; if (loadingEl) loadingEl.hidden = true; return; }
+    if (!resp.ok) throw new Error('fetch failed');
     const data = await resp.json();
-
-    hasMore = data.has_more;
-    cursor  = data.next_cursor;
-
-    if (!items.length && !data.items.length) {
-      emptyEl.hidden = false;
-      if (loadingEl) loadingEl.hidden = true;
-      loading = false;
-      return;
-    }
-
-    const loaded = await Promise.all(data.items.map(item => new Promise(resolve => {
+    const items = await Promise.all(data.items.map(item => new Promise(resolve => {
       const img = new Image();
       img.onload  = () => resolve({ ...item, ar: img.naturalWidth / (img.naturalHeight || 1) });
       img.onerror = () => resolve({ ...item, ar: 1 });
       img.src = item.crop_url;
     })));
+    return { items, nextCursor: data.next_cursor, hasMore: data.has_more };
+  },
 
-    items.push(...loaded);
-    appendItems(loaded);
-
-    loading = false;
-    if (loadingEl) loadingEl.hidden = true;
-    if (!hasMore) sentinel.remove();
-    else if (sentinelVisible) loadPage();
-  }
-
-  function saveState(clickedId) {
-    try {
-      history.replaceState({ _argus_unidentified: { clickedId, cursor, hasMore, items } }, '');
-    } catch (_) {}
-  }
-
-  const sentinel = document.createElement('div');
-  sentinel.style.height = '1px';
-  container.after(sentinel);
-
-  function observe() {
-    new IntersectionObserver(([e]) => {
-      sentinelVisible = e.isIntersecting;
-      if (e.isIntersecting) loadPage();
-    }, { rootMargin: '300px' }).observe(sentinel);
-  }
-
-  const savedState = history.state?._argus_unidentified ?? null;
-
-  if (savedState) {
-    cursor  = savedState.cursor  ?? null;
-    hasMore = savedState.hasMore ?? true;
-    requestAnimationFrame(() => {
-      items.push(...savedState.items);
-      appendItems(savedState.items);
-      if (loadingEl) loadingEl.hidden = true;
-      if (!hasMore) sentinel.remove();
-      observe();
-      if (savedState.clickedId) {
-        requestAnimationFrame(() => {
-          const el = container.querySelector('[data-id="' + savedState.clickedId + '"]');
-          if (el) el.scrollIntoView({ block: 'center' });
-        });
-      }
-    });
-  } else {
-    async function init() {
-      try { await fetch('/api/faces/scan', { method: 'POST' }); } catch (_) {}
-      loadPage();
-    }
-    init();
-    observe();
-  }
-
-  let resizeT, lastW = 0;
-  window.addEventListener('resize', () => {
-    if (!items.length) return;
-    const w = container.clientWidth;
-    if (w === lastW) return;
-    lastW = w;
-    clearTimeout(resizeT);
-    resizeT = setTimeout(relayout, 150);
-  });
-})();
+  async preInit() {
+    try { await fetch('/api/faces/scan', { method: 'POST' }); } catch (_) {}
+  },
+});
 </script>
 {% endblock %}
