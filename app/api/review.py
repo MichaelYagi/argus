@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 from typing import Any
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query
@@ -13,6 +14,8 @@ from app.core import settings_cache
 from app.core.auth import require_auth, require_env_id
 from app.core.paths import crops_dir
 from app.db import store
+
+log = logging.getLogger(__name__)
 
 
 def _auto_enroll(detection_id: int, user_id: int, environment_id: int) -> None:
@@ -35,10 +38,20 @@ def _enroll_confirmed(detection_id: int, user_id: int, environment_id: int) -> b
     embedding was added. Ground truth — not gated on the detection-quality threshold.
     """
     det = store.get_detection(detection_id, user_id, environment_id)
-    if det and det["type"] == "face":
-        from app.api.enroll import enroll_from_detection
-        return enroll_from_detection(det, user_id, environment_id)
-    return False
+    if not det:
+        log.warning("enroll requested for detection %d but not found (user=%d env=%d)",
+                    detection_id, user_id, environment_id)
+        return False
+    if det["type"] != "face":
+        log.warning("enroll requested for detection %d but type=%s (only face detections can be enrolled)",
+                    detection_id, det["type"])
+        return False
+    if not det["embedding"]:
+        log.warning("enroll requested for detection %d but embedding is null — "
+                    "was a face model active when this detection was created?", detection_id)
+        return False
+    from app.api.enroll import enroll_from_detection
+    return enroll_from_detection(det, user_id, environment_id)
 
 router = APIRouter()
 
