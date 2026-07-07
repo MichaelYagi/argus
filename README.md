@@ -94,7 +94,14 @@ Port 8100 — Argus had 100 eyes.
 Requires Python 3.11+.
 
 ```bash
+cd argus
+python3 -m venv .venv
+source .venv/bin/activate       # Linux/macOS
+.venv\Scripts\activate          # Windows PowerShell
 pip install -r requirements.txt
+```
+
+```bash
 python -m app
 ```
 
