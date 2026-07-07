@@ -143,7 +143,8 @@ window.ArgusGallery = function ArgusGallery(opts) {
     }, { rootMargin: '300px' }).observe(sentinel);
   }
 
-  const savedState = history.state?.[stateKey] ?? null;
+  const navType    = performance.getEntriesByType('navigation')[0]?.type;
+  const savedState = navType === 'back_forward' ? (history.state?.[stateKey] ?? null) : null;
 
   if (savedState) {
     cursor  = savedState.cursor  ?? null;
