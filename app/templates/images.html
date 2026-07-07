@@ -92,10 +92,10 @@
   window.filterSince = '';
   window.filterUntil = '';
 
-  function saveState() {
+  function saveState(clickedId) {
     try {
       sessionStorage.setItem('images_state', JSON.stringify({
-        scrollY: window.scrollY, cursor, hasMore, items,
+        clickedId, cursor, hasMore, items,
         filterIdentityId: window.filterIdentityId,
         filterIdentityLabel: document.getElementById('filter-identity')?.value || '',
         filterType:  window.filterType,
@@ -114,7 +114,7 @@
       const a = document.createElement('a');
       a.className = 'g-item';
       a.href = '/tag/' + item.source_image_id;
-      a.addEventListener('click', saveState);
+      a.addEventListener('click', () => saveState(item.source_image_id));
       a.style.width  = Math.floor(ar * height) + 'px';
       a.style.height = Math.floor(height) + 'px';
 
@@ -286,7 +286,12 @@
       appendItems(state.items);
       if (loadingEl) loadingEl.hidden = true;
       if (!hasMore) sentinel.remove();
-      requestAnimationFrame(() => window.scrollTo(0, state.scrollY || 0));
+      if (state.clickedId) {
+        requestAnimationFrame(() => {
+          const el = container.querySelector('a[href="/tag/' + state.clickedId + '"]');
+          if (el) el.scrollIntoView({ block: 'center' });
+        });
+      }
     } catch (_) {
       loadPage();
     }
