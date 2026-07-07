@@ -30,15 +30,15 @@ def _auto_enroll(detection_id: int, user_id: int, environment_id: int) -> None:
     enroll_from_detection(det, user_id, environment_id)
 
 
-def _enroll_confirmed(detection_id: int, user_id: int, environment_id: int) -> None:
-    """Human asserted this identity (confirm / reassign / label) — enroll the
-    embedding unconditionally so the reference set actually improves. This is
-    ground truth, so it is NOT gated on the detection-quality threshold.
+def _enroll_confirmed(detection_id: int, user_id: int, environment_id: int) -> bool:
+    """Enroll the embedding for a human-confirmed detection. Returns True if a new
+    embedding was added. Ground truth — not gated on the detection-quality threshold.
     """
     det = store.get_detection(detection_id, user_id, environment_id)
     if det and det["type"] == "face":
         from app.api.enroll import enroll_from_detection
-        enroll_from_detection(det, user_id, environment_id)
+        return enroll_from_detection(det, user_id, environment_id)
+    return False
 
 router = APIRouter()
 
@@ -270,6 +270,7 @@ async def delete_detection(
 class _LabelBody(BaseModel):
     identity_id: int | None = None
     label: str | None = None
+    enroll: bool = False
 
 
 @router.put("/api/detections/{detection_id}/label", status_code=200)
@@ -294,7 +295,9 @@ async def label_detection(
         )
 
     store.label_detection(detection_id, user_id, identity_id, environment_id)
-    _enroll_confirmed(detection_id, user_id, environment_id)
+    enrolled = False
+    if body.enroll:
+        enrolled = _enroll_confirmed(detection_id, user_id, environment_id)
     identity = store.get_identity(identity_id, user_id, environment_id)
     from app.core import activity_buffer as _ab
     lbl = identity["label"] if identity else str(identity_id)
@@ -308,6 +311,7 @@ async def label_detection(
         "identity_id": identity_id,
         "label": identity["label"] if identity else None,
         "review_status": "confirmed",
+        "enrolled": enrolled,
     }
 
 
@@ -318,6 +322,7 @@ class _BatchLabelItem(BaseModel):
     detection_id: int
     identity_id: int | None = None
     label: str | None = None
+    enroll: bool = False
 
 
 class _BatchLabelBody(BaseModel):
@@ -356,7 +361,7 @@ async def label_detections_batch(
                 user_id, det["type"], item.label.strip(), environment_id
             )
         store.label_detection(item.detection_id, user_id, identity_id, environment_id)
-        _enroll_confirmed(item.detection_id, user_id, environment_id)
+        enrolled = _enroll_confirmed(item.detection_id, user_id, environment_id) if item.enroll else False
         if det["type"] == "face":
             has_face = True
         identity = store.get_identity(identity_id, user_id, environment_id)
@@ -364,6 +369,7 @@ async def label_detections_batch(
             "detection_id": item.detection_id, "ok": True,
             "identity_id": identity_id,
             "label": identity["label"] if identity else None,
+            "enrolled": enrolled,
         })
     if has_face:
         from app.api.detect import scan_unidentified
