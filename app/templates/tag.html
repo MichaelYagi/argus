@@ -8,10 +8,6 @@
     Click a box to assign or correct a label. Faces: orange = unlabeled, green = labeled. Objects: blue.
   </span>
   <span class="nav-spacer"></span>
-  <span id="vis-toggles" style="display:none;gap:4px;margin-right:8px">
-    <button id="toggle-faces" class="btn btn-ghost tag-toggle active">Faces</button>
-    <button id="toggle-objects" class="btn btn-ghost tag-toggle active">Objects</button>
-  </span>
   <span id="tag-status" class="muted" style="font-size:12px"></span>
   <button class="btn btn-ghost" id="reprocess-btn" style="margin-left:8px">Reprocess</button>
   <button class="btn btn-danger" id="delete-image-btn" style="margin-left:8px">Delete image</button>
@@ -50,6 +46,10 @@
 
 <div id="tag-wrap">
   <img id="tag-photo" src="{{ image_url }}" alt="" onload="renderBoxes()">
+</div>
+<div id="vis-toggles" style="display:none;gap:8px;margin-top:10px">
+  <button id="toggle-faces" class="btn btn-ghost tag-toggle active">Faces</button>
+  <button id="toggle-objects" class="btn btn-ghost tag-toggle active">Objects</button>
 </div>
 {% endblock %}
 
