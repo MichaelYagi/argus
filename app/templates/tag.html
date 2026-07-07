@@ -245,8 +245,7 @@ document.getElementById('delete-image-btn').addEventListener('click', () => {
   // bfcache — scroll position AND lazily-loaded rows intact — instead of a fresh
   // load that resets to the top. Falls through to the href (set below) when there
   // is no in-app history to return to (opened directly or in a new tab).
-  // Exception: /unidentified always needs a fresh load so newly-tagged faces are gone.
-  if (url.origin === location.origin && history.length > 1 && path !== '/unidentified') {
+  if (url.origin === location.origin && history.length > 1) {
     link.addEventListener('click', e => { e.preventDefault(); history.back(); });
   }
 
@@ -270,6 +269,8 @@ document.getElementById('delete-image-btn').addEventListener('click', () => {
     '/': 'Dashboard',
     '/detect': 'Detect',
     '/review': 'Review',
+    '/unidentified': 'Unidentified',
+    '/images': 'Images',
   };
   const label = labels[path] || 'Back';
   link.textContent = '← ' + label;
