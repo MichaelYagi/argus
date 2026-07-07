@@ -282,24 +282,28 @@
       if (_ft) _ft.value = state.filterType          || '';
       if (_fs) _fs.value = state.filterSince         || '';
       if (_fu) _fu.value = state.filterUntil         || '';
-      items.push(...state.items);
-      appendItems(state.items);
-      if (loadingEl) loadingEl.hidden = true;
-      if (!hasMore) sentinel.remove();
-      if (state.clickedId) {
-        requestAnimationFrame(() => {
-          const el = container.querySelector('a[href="/tag/' + state.clickedId + '"]');
-          if (el) el.scrollIntoView({ block: 'center' });
-        });
-      }
+      // Defer render to rAF so container.clientWidth is valid (0 during sync script parse)
+      requestAnimationFrame(() => {
+        items.push(...state.items);
+        appendItems(state.items);
+        if (loadingEl) loadingEl.hidden = true;
+        if (!hasMore) sentinel.remove();
+        observe();
+        if (state.clickedId) {
+          requestAnimationFrame(() => {
+            const el = container.querySelector('a[href="/tag/' + state.clickedId + '"]');
+            if (el) el.scrollIntoView({ block: 'center' });
+          });
+        }
+      });
     } catch (_) {
       loadPage();
+      observe();
     }
   } else {
     loadPage();
+    observe();
   }
-
-  observe();
 
   let resizeT, lastW = 0;
   window.addEventListener('resize', () => {
