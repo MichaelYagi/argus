@@ -283,11 +283,12 @@ async def settings_page(request: Request):
         gpu_available = "CUDAExecutionProvider" in ort.get_available_providers()
     except Exception:
         gpu_available = False
-    ctx["settings"]        = grouped
-    ctx["slider_ranges"]   = SLIDER_RANGES
-    ctx["setting_choices"] = SETTING_CHOICES
-    ctx["gpu_available"]   = gpu_available
-    ctx["managed_users"]   = [dict(u) for u in store.list_managed_users(ctx["user_id"])]
+    ctx["settings"]          = grouped
+    ctx["slider_ranges"]     = SLIDER_RANGES
+    ctx["setting_choices"]   = SETTING_CHOICES
+    ctx["gpu_available"]     = gpu_available
+    ctx["settings_defaults"] = store.get_settings_defaults()
+    ctx["managed_users"]     = [dict(u) for u in store.list_managed_users(ctx["user_id"])]
     return _r(request, "settings.html", ctx)
 
 

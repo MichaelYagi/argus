@@ -24,6 +24,11 @@
       {% set parts = s.description.split('|') if s.description and '|' in s.description else [s.description or s.key, ''] %}
       <strong>{{ parts[0].strip() }}</strong>
       {% if parts[1].strip() %}<small>{{ parts[1].strip() }}</small>{% endif %}
+      {% set dv = settings_defaults.get(s.key, '') %}
+      {% if dv %}
+        {% set dv_display = 'on' if dv == 'true' else ('off' if dv == 'false' else dv) %}
+        <small class="muted" style="font-size:11px">Default: {{ dv_display }}</small>
+      {% endif %}
     </div>
     <div class="s-ctrl">
       {% if s.value_type == 'bool' %}
