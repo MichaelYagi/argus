@@ -399,7 +399,7 @@ async def unknown_detections(
     return paginate(rows, page_size, lambda r: {
         "detection_id": r["id"],
         "type": r["type"],
-        "crop_url": f"/media/crops/{r['crop_path']}",
+        "crop_url": f"/media/crops/{r['crop_path']}?h=300",
         "confidence": r["confidence"],
         "detected_at": r["detected_at"],
         "source_image_id": r["source_image_id"],

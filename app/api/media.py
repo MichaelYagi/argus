@@ -12,27 +12,12 @@ from app.core.paths import crops_dir, sources_dir
 router = APIRouter()
 
 
-@router.get("/media/crops/{filename}")
-async def serve_crop(filename: str):
-    path = crops_dir() / filename
-    if not path.exists():
-        raise HTTPException(404, "Crop not found")
-    return FileResponse(path)
-
-
-@router.get("/media/sources/{filename}")
-async def serve_source(filename: str, h: int | None = Query(None, ge=10, le=4000)):
-    path = sources_dir() / filename
-    if not path.exists():
-        raise HTTPException(404, "Source image not found")
-    if not h:
-        return FileResponse(path)
-
-    thumb_dir = sources_dir().parent / "thumbs"
-    thumb_dir.mkdir(exist_ok=True)
-    stem = Path(filename).stem
-    cache_path = thumb_dir / f"{stem}_h{h}.jpg"
-
+def _thumbnail(path: Path, h: int) -> Path:
+    """Return path to a cached JPEG thumbnail at max height h, generating if needed.
+    Cache lives in a 'thumbs' subdirectory alongside the originals."""
+    cache_dir = path.parent / "thumbs"
+    cache_dir.mkdir(exist_ok=True)
+    cache_path = cache_dir / f"{path.stem}_h{h}.jpg"
     if not cache_path.exists():
         from PIL import Image, ImageOps
         img = Image.open(path)
@@ -43,5 +28,24 @@ async def serve_source(filename: str, h: int | None = Query(None, ge=10, le=4000
         if img.mode != "RGB":
             img = img.convert("RGB")
         img.save(cache_path, "JPEG", quality=85)
+    return cache_path
 
-    return FileResponse(cache_path, media_type="image/jpeg")
+
+@router.get("/media/crops/{filename}")
+async def serve_crop(filename: str, h: int | None = Query(None, ge=10, le=4000)):
+    path = crops_dir() / filename
+    if not path.exists():
+        raise HTTPException(404, "Crop not found")
+    if not h:
+        return FileResponse(path)
+    return FileResponse(_thumbnail(path, h), media_type="image/jpeg")
+
+
+@router.get("/media/sources/{filename}")
+async def serve_source(filename: str, h: int | None = Query(None, ge=10, le=4000)):
+    path = sources_dir() / filename
+    if not path.exists():
+        raise HTTPException(404, "Source image not found")
+    if not h:
+        return FileResponse(path)
+    return FileResponse(_thumbnail(path, h), media_type="image/jpeg")

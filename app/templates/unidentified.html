@@ -69,7 +69,10 @@
         tagLink.className = 'g-tag-link';
         tagLink.href = '/tag/' + item.source_image_id + '?focus=' + item.detection_id;
         tagLink.textContent = 'Tag';
-        tagLink.addEventListener('click', e => e.stopPropagation());
+        tagLink.addEventListener('click', e => {
+          e.stopPropagation();
+          saveState(item.detection_id);
+        });
         el.appendChild(tagLink);
       }
 
@@ -215,31 +218,49 @@
     else if (sentinelVisible) loadPage();
   }
 
+  function saveState(clickedId) {
+    try {
+      history.replaceState({ _argus_unidentified: { clickedId, cursor, hasMore, items } }, '');
+    } catch (_) {}
+  }
+
   const sentinel = document.createElement('div');
   sentinel.style.height = '1px';
   container.after(sentinel);
-  new IntersectionObserver(([e]) => {
-    sentinelVisible = e.isIntersecting;
-    if (e.isIntersecting) loadPage();
-  }, { rootMargin: '300px' }).observe(sentinel);
 
-  function reset() {
-    items = []; pending = []; cursor = null; hasMore = true; loading = false;
-    if (tailEl) { tailEl.remove(); tailEl = null; }
-    container.innerHTML = '';
-    emptyEl.hidden = true;
-    if (loadingEl) loadingEl.hidden = false;
-    if (!sentinel.parentNode) container.after(sentinel);
-    loadPage();
+  function observe() {
+    new IntersectionObserver(([e]) => {
+      sentinelVisible = e.isIntersecting;
+      if (e.isIntersecting) loadPage();
+    }, { rootMargin: '300px' }).observe(sentinel);
   }
 
-  async function init() {
-    try { await fetch('/api/faces/scan', { method: 'POST' }); } catch (_) {}
-    loadPage();
-  }
-  init();
+  const savedState = history.state?._argus_unidentified ?? null;
 
-  window.addEventListener('pageshow', e => { if (e.persisted) reset(); });
+  if (savedState) {
+    cursor  = savedState.cursor  ?? null;
+    hasMore = savedState.hasMore ?? true;
+    requestAnimationFrame(() => {
+      items.push(...savedState.items);
+      appendItems(savedState.items);
+      if (loadingEl) loadingEl.hidden = true;
+      if (!hasMore) sentinel.remove();
+      observe();
+      if (savedState.clickedId) {
+        requestAnimationFrame(() => {
+          const el = container.querySelector('[data-id="' + savedState.clickedId + '"]');
+          if (el) el.scrollIntoView({ block: 'center' });
+        });
+      }
+    });
+  } else {
+    async function init() {
+      try { await fetch('/api/faces/scan', { method: 'POST' }); } catch (_) {}
+      loadPage();
+    }
+    init();
+    observe();
+  }
 
   let resizeT, lastW = 0;
   window.addEventListener('resize', () => {
