@@ -88,7 +88,12 @@
     input.addEventListener('input', () => {
       const q = input.value.trim().toLowerCase();
       if (!q) return hide();
-      show(faceLabels.filter(l => l.toLowerCase().includes(q)));
+      const matches = faceLabels.filter(l => l.toLowerCase().includes(q));
+      matches.sort((a, b) => {
+        const ai = a.toLowerCase().indexOf(q), bi = b.toLowerCase().indexOf(q);
+        return ai !== bi ? ai - bi : a.localeCompare(b);
+      });
+      show(matches);
     });
     input.addEventListener('focus', () => {
       if (!input.value.trim()) show(faceLabels.slice(0, 12));
