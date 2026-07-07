@@ -64,12 +64,29 @@
 <script>
 const PAGE = 30;
 const state = {
-  face:   { cursor: null, hasMore: true, loading: false, loaded: false, selected: new Set() },
-  object: { cursor: null, hasMore: true, loading: false, loaded: false, selected: new Set() },
+  face:   { cursor: null, hasMore: true, loading: false, loaded: false, selected: new Set(), items: [] },
+  object: { cursor: null, hasMore: true, loading: false, loaded: false, selected: new Set(), items: [] },
 };
 const sentinels = {};
 const sentinelVisible = { face: false, object: false };
 let activeTab = 'face';
+
+// ---------------------------------------------------------------------------
+// History state
+// ---------------------------------------------------------------------------
+
+function saveState(clickedId) {
+  try {
+    history.replaceState({
+      _argus_dashboard: {
+        clickedId,
+        activeTab,
+        face:   { items: state.face.items,   cursor: state.face.cursor,   hasMore: state.face.hasMore },
+        object: { items: state.object.items, cursor: state.object.cursor, hasMore: state.object.hasMore },
+      },
+    }, '');
+  } catch (_) {}
+}
 
 // ---------------------------------------------------------------------------
 // Bulk selection
@@ -122,10 +139,10 @@ function deleteSelected() {
       ids.forEach(id => {
         const card = document.querySelector(`#grid-${activeTab} [data-id="${id}"]`);
         if (card) card.remove();
+        state[activeTab].items = state[activeTab].items.filter(i => i.id !== id);
       });
       s.selected.clear();
       updateBulkBar();
-      // Update badge
       const badge = document.getElementById('badge-' + activeTab);
       if (badge) {
         const cur = parseInt(badge.textContent) || 0;
@@ -153,7 +170,6 @@ function makeCard(d, type) {
     `<div class="it-name">${d.label}</div>` +
     `<div class="it-count">${countLine}</div>`;
 
-  // Checkbox overlay
   const cb = document.createElement('input');
   cb.type = 'checkbox';
   cb.className = 'card-cb';
@@ -161,7 +177,6 @@ function makeCard(d, type) {
     'width:16px;height:16px;cursor:pointer;accent-color:var(--accent)';
   a.prepend(cb);
 
-  // Show checkbox on hover
   a.addEventListener('mouseenter', () => { cb.style.opacity = '1'; });
   a.addEventListener('mouseleave', () => {
     if (!cb.checked && !state[type].selected.size) cb.style.opacity = '0';
@@ -181,23 +196,47 @@ function makeCard(d, type) {
       a.classList.remove('selected');
       if (!s.selected.size) cb.style.opacity = '0';
     }
-    // Show all checkboxes when any selected
     document.querySelectorAll(`#grid-${type} .card-cb`).forEach(c => {
       if (!c.checked) c.style.opacity = s.selected.size ? '1' : '0';
     });
     updateBulkBar();
   });
 
-  // Intercept navigation when in select mode
   a.addEventListener('click', e => {
     if (state[type].selected.size || cb.checked) {
       e.preventDefault();
       cb.checked = !cb.checked;
       cb.dispatchEvent(new Event('change'));
+    } else {
+      saveState(d.id);
     }
   });
 
   return a;
+}
+
+function renderGrid(type, items) {
+  const grid = document.getElementById('grid-' + type);
+  grid.innerHTML = '';
+  if (!items.length) {
+    grid.innerHTML = type === 'face'
+      ? '<p class="muted" style="grid-column:1/-1">No people enrolled yet. <a href="/enroll">Enroll a face</a> to get started.</p>'
+      : '<p class="muted" style="grid-column:1/-1">No objects detected yet. Run detection on some photos first.</p>';
+    return;
+  }
+  items.forEach(d => grid.appendChild(makeCard(d, type)));
+}
+
+function setupSentinel(type) {
+  if (sentinels[type]) return;
+  const sv = document.createElement('div');
+  sv.style.height = '1px';
+  document.getElementById('tab-' + type).appendChild(sv);
+  sentinels[type] = sv;
+  new IntersectionObserver(([e]) => {
+    sentinelVisible[type] = e.isIntersecting;
+    if (e.isIntersecting) loadMore(type);
+  }, { rootMargin: '300px' }).observe(sv);
 }
 
 function switchTab(type) {
@@ -209,9 +248,12 @@ function switchTab(type) {
   ['face', 'object'].forEach(t => {
     document.getElementById('tab-' + t).hidden = (t !== type);
   });
-  history.replaceState(null, '', type === 'face' ? '/' : '/?tab=' + type);
+  history.replaceState(history.state, '', type === 'face' ? '/' : '/?tab=' + type);
   try { sessionStorage.setItem('argus_last_tab', type); } catch (e) {}
-  if (!state[type].loaded) loadMore(type);
+  if (!state[type].loaded) {
+    setupSentinel(type);
+    loadMore(type);
+  }
 }
 
 async function loadMore(type) {
@@ -226,17 +268,19 @@ async function loadMore(type) {
   if (!resp.ok) { s.loading = false; return; }
   const data = await resp.json();
 
-  s.hasMore   = data.has_more;
-  s.cursor    = data.next_cursor;
-  s.loaded    = true;
-  s.loading   = false;
+  s.hasMore = data.has_more;
+  s.cursor  = data.next_cursor;
+  s.loaded  = true;
+  s.loading = false;
 
   if (data.total != null) setTabBadge(type, data.total);
+
+  s.items.push(...data.items);
 
   const grid = document.getElementById('grid-' + type);
   if (grid.querySelector('.loading')) grid.innerHTML = '';
 
-  if (!data.items.length && !grid.children.length) {
+  if (!s.items.length) {
     grid.innerHTML = type === 'face'
       ? '<p class="muted" style="grid-column:1/-1">No people enrolled yet. <a href="/enroll">Enroll a face</a> to get started.</p>'
       : '<p class="muted" style="grid-column:1/-1">No objects detected yet. Run detection on some photos first.</p>';
@@ -253,18 +297,6 @@ async function loadMore(type) {
   }
 }
 
-// Set up infinite scroll sentinels for both tabs
-['face', 'object'].forEach(type => {
-  const sentinel = document.createElement('div');
-  sentinel.style.height = '1px';
-  document.getElementById('tab-' + type).appendChild(sentinel);
-  sentinels[type] = sentinel;
-  new IntersectionObserver(([e]) => {
-    sentinelVisible[type] = e.isIntersecting;
-    if (e.isIntersecting) loadMore(type);
-  }, { rootMargin: '300px' }).observe(sentinel);
-});
-
 // Stats — refreshed on load, every 30s, and after bulk actions
 async function refreshStats() {
   const resp = await fetch('/api/stats');
@@ -274,8 +306,6 @@ async function refreshStats() {
   document.getElementById('s-objects').textContent = d.objects  ?? 0;
   document.getElementById('s-images').textContent  = d.images   ?? 0;
   document.getElementById('s-review').textContent  = d.pending_review ?? 0;
-
-  // Populate both tab badges on load so Objects isn't blank until first visited
   setTabBadge('face',   d.people  ?? 0);
   setTabBadge('object', d.objects ?? 0);
 }
@@ -286,33 +316,55 @@ function setTabBadge(type, total) {
   badge.textContent = total > 99 ? '99+' : total;
   badge.style.display = total > 0 ? 'inline' : 'none';
 }
+
 refreshStats();
 setInterval(refreshStats, 30000);
 
-const _initTab = new URLSearchParams(location.search).get('tab')
-  || (function () { try { return sessionStorage.getItem('argus_last_tab'); } catch (e) { return null; } }());
-switchTab(_initTab === 'object' ? 'object' : 'face');
+// ---------------------------------------------------------------------------
+// Init — restore from history.state on back navigation, else fresh load
+// ---------------------------------------------------------------------------
 
-window.addEventListener('pageshow', e => {
-  if (!e.persisted) return;
+const navType    = performance.getEntriesByType('navigation')[0]?.type;
+const savedState = navType === 'back_forward' ? history.state?._argus_dashboard : null;
+
+if (savedState) {
   ['face', 'object'].forEach(type => {
-    const s = state[type];
-    s.cursor = null; s.hasMore = true; s.loading = false; s.loaded = false;
-    s.selected.clear();
-    document.getElementById('grid-' + type).innerHTML = '<p class="muted loading">Loading…</p>';
-    if (!sentinels[type]) {
-      const sv = document.createElement('div');
-      sv.style.height = '1px';
-      document.getElementById('tab-' + type).appendChild(sv);
-      sentinels[type] = sv;
-      new IntersectionObserver(([ev]) => {
-        sentinelVisible[type] = ev.isIntersecting;
-        if (ev.isIntersecting) loadMore(type);
-      }, { rootMargin: '300px' }).observe(sv);
-    }
+    const saved = savedState[type];
+    if (!saved) return;
+    state[type].items   = saved.items   || [];
+    state[type].cursor  = saved.cursor  ?? null;
+    state[type].hasMore = saved.hasMore ?? true;
+    state[type].loaded  = true;
+    renderGrid(type, state[type].items);
+    if (state[type].hasMore) setupSentinel(type);
   });
-  updateBulkBar();
-  loadMore(activeTab);
+
+  const tab = savedState.activeTab || 'face';
+  activeTab = tab;
+  document.querySelectorAll('.tab-btn').forEach(b =>
+    b.classList.toggle('active', b.dataset.type === tab));
+  ['face', 'object'].forEach(t => {
+    document.getElementById('tab-' + t).hidden = t !== tab;
+  });
+
+  if (savedState.clickedId != null) {
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        const el = document.querySelector(`#grid-${tab} [data-id="${savedState.clickedId}"]`);
+        if (el) el.scrollIntoView({ block: 'center' });
+      });
+    });
+  }
+} else {
+  const _initTab = new URLSearchParams(location.search).get('tab')
+    || (function () { try { return sessionStorage.getItem('argus_last_tab'); } catch (e) { return null; } }());
+  switchTab(_initTab === 'object' ? 'object' : 'face');
+}
+
+// Bfcache restore: page is thawed; script doesn't re-run.
+// Keep existing DOM and scroll intact — just refresh stats in the background.
+window.addEventListener('pageshow', e => {
+  if (e.persisted) refreshStats();
 });
 </script>
 {% endblock %}
