@@ -3,7 +3,7 @@
 
 {% block content %}
 <div class="page-header">
-  <a href="/?tab={{ identity.type }}" style="font-size:13px;margin-right:4px">&larr;</a>
+  <a id="back-link" href="/?tab={{ identity.type }}" style="font-size:13px;margin-right:4px">&larr;</a>
   <h1>{{ identity.label }}</h1>
   <span class="badge badge-{{ identity.type }}">{{ identity.type }}</span>
   <span class="muted" style="font-size:12px">

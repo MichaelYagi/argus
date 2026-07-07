@@ -46,6 +46,15 @@
   let cursor = null, hasMore = true, loading = false;
   const allItems = [];
   const selected = new Set();
+  const STATE_KEY = '_argus_gallery_' + identityId;
+
+  function saveState(clickedId) {
+    try {
+      history.replaceState({
+        [STATE_KEY]: { clickedId, cursor, hasMore, items: allItems },
+      }, '');
+    } catch (_) {}
+  }
 
   // Incremental layout state — avoids full DOM rebuild on each page load
   let pending = [];
@@ -144,6 +153,7 @@
 
     const el = document.createElement('div');
     el.className = 'g-item' + (isSelected ? ' selected' : '');
+    el.dataset.id = item.detection_id;
     el.style.width  = w + 'px';
     el.style.height = Math.floor(height) + 'px';
 
@@ -182,7 +192,7 @@
     tagLink.className = 'g-tag-link';
     tagLink.href = '/tag/' + item.source_image_id;
     tagLink.textContent = 'Tag';
-    tagLink.addEventListener('click', e => e.stopPropagation());
+    tagLink.addEventListener('click', e => { e.stopPropagation(); saveState(item.detection_id); });
     el.appendChild(tagLink);
 
     const delBtn = document.createElement('button');
@@ -432,10 +442,13 @@
   const sentinel = document.createElement('div');
   sentinel.style.height = '1px';
   container.after(sentinel);
-  new IntersectionObserver(([e]) => {
-    sentinelVisible = e.isIntersecting;
-    if (e.isIntersecting) loadPage();
-  }, { rootMargin: '300px' }).observe(sentinel);
+
+  function observe() {
+    new IntersectionObserver(([e]) => {
+      sentinelVisible = e.isIntersecting;
+      if (e.isIntersecting) loadPage();
+    }, { rootMargin: '300px' }).observe(sentinel);
+  }
 
   function reset() {
     allItems.length = 0;
@@ -451,8 +464,40 @@
     loadPage();
   }
 
-  loadPage();
-  window.addEventListener('pageshow', e => { if (e.persisted) reset(); });
+  const navType    = performance.getEntriesByType('navigation')[0]?.type;
+  const savedState = navType === 'back_forward' ? history.state?.[STATE_KEY] : null;
+
+  if (savedState) {
+    allItems.push(...savedState.items);
+    cursor  = savedState.cursor  ?? null;
+    hasMore = savedState.hasMore ?? true;
+    loading = true;
+    requestAnimationFrame(() => {
+      appendItems(savedState.items);
+      loading = false;
+      if (loadingEl) loadingEl.hidden = true;
+      if (!hasMore) sentinel.remove();
+      observe();
+      if (savedState.clickedId != null) {
+        requestAnimationFrame(() => {
+          const el = container.querySelector('[data-id="' + savedState.clickedId + '"]');
+          if (el) el.scrollIntoView({ block: 'center' });
+        });
+      }
+    });
+  } else {
+    observe();
+    loadPage();
+  }
+
+  // Bfcache restore: keep existing DOM and scroll intact.
+  window.addEventListener('pageshow', e => { if (e.persisted) { /* no-op — bfcache handles scroll */ } });
+
+  // Wire back arrow to history.back() so the dashboard restores scroll on return.
+  const backLink = document.getElementById('back-link');
+  if (backLink && history.length > 1) {
+    backLink.addEventListener('click', e => { e.preventDefault(); history.back(); });
+  }
 
   // Only relayout when the container WIDTH changes — mobile toolbar show/hide
   // changes viewport HEIGHT only and doesn't affect the justified row packing.
