@@ -100,11 +100,11 @@
   dropZone.addEventListener('dragleave', () => dropZone.classList.remove('over'));
   dropZone.addEventListener('drop', e => {
     e.preventDefault(); dropZone.classList.remove('over');
-    fileList = [...fileList, ...e.dataTransfer.files]; updateQueue();
+    fileList = [...e.dataTransfer.files]; updateQueue();
   });
   fileInput.addEventListener('change', () => { if (fileInput.files.length) { fileList = [...fileInput.files]; updateQueue(); } });
   document.getElementById('test-camera')
-    ?.addEventListener('click', () => capturePhoto(file => { fileList.push(file); updateQueue(); }));
+    ?.addEventListener('click', () => capturePhoto(file => { fileList = [file]; updateQueue(); }));
   urlInput.addEventListener('input', updateQueue);
   b64Input.addEventListener('input', updateQueue);
 

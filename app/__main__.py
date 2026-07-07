@@ -18,6 +18,7 @@ faulthandler.enable()
 warnings.filterwarnings("ignore", message=r".*pynvml.*deprecated.*",    category=FutureWarning)
 warnings.filterwarnings("ignore", message=r".*Importing from timm\..*", category=FutureWarning)
 warnings.filterwarnings("ignore", message=r".*CUDAExecutionProvider.*", category=UserWarning)
+warnings.filterwarnings("ignore", message=r".*`estimate` is deprecated.*", category=FutureWarning)
 
 # macOS / Apple Silicon: onnxruntime (faces), torch/YOLO (objects), and faiss
 # (matching) each bundle their own OpenMP runtime. KMP_DUPLICATE_LIB_OK stops the
