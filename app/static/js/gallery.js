@@ -48,10 +48,10 @@
   const selected = new Set();
   const STATE_KEY = '_argus_gallery_' + identityId;
 
-  function saveState(clickedId) {
+  function saveState() {
     try {
       history.replaceState({
-        [STATE_KEY]: { clickedId, cursor, hasMore, items: allItems },
+        [STATE_KEY]: { scrollY: Math.round(window.scrollY), cursor, hasMore, items: allItems },
       }, '');
     } catch (_) {}
   }
@@ -192,7 +192,7 @@
     tagLink.className = 'g-tag-link';
     tagLink.href = '/tag/' + item.source_image_id;
     tagLink.textContent = 'Tag';
-    tagLink.addEventListener('click', e => { e.stopPropagation(); saveState(item.detection_id); });
+    tagLink.addEventListener('click', e => { e.stopPropagation(); saveState(); });
     el.appendChild(tagLink);
 
     const delBtn = document.createElement('button');
@@ -478,12 +478,9 @@
       if (loadingEl) loadingEl.hidden = true;
       if (!hasMore) sentinel.remove();
       observe();
-      if (savedState.clickedId != null) {
-        requestAnimationFrame(() => {
-          const el = container.querySelector('[data-id="' + savedState.clickedId + '"]');
-          if (el) el.scrollIntoView({ block: 'center' });
-        });
-      }
+      requestAnimationFrame(() => {
+        if (savedState.scrollY) window.scrollTo(0, savedState.scrollY);
+      });
     });
   } else {
     observe();
