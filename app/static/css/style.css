@@ -556,6 +556,10 @@ input[type=range] { width: 150px; cursor: pointer; }
 .t-chip { position: absolute; top: 100%; left: -1px; background: rgba(0,0,0,.72); color: #fff; font-size: 11px; padding: 1px 5px; white-space: nowrap; pointer-events: none; max-width: 180px; overflow: hidden; text-overflow: ellipsis; }
 .t-tip { position: absolute; bottom: 100%; left: 0; background: rgba(0,0,0,.75); color: #fff; font-size: 11px; padding: 2px 6px; white-space: nowrap; pointer-events: none; display: none; }
 .t-box:hover .t-tip { display: block; }
+#tag-wrap.hide-faces .t-box:not(.object) { display: none; }
+#tag-wrap.hide-objects .t-box.object { display: none; }
+.tag-toggle { font-size: 12px; padding: 3px 10px; opacity: 0.4; }
+.tag-toggle.active { opacity: 1; }
 
 /* ---------- Docs page — always white regardless of theme ---------- */
 .docs-page { background: #fff !important; }

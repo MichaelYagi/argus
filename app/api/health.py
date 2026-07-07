@@ -81,7 +81,7 @@ async def health():
 
 
 # Formats Argus can decode (Pillow-detected on input; never trusts extension).
-_SUPPORTED_FORMATS = ["JPEG", "PNG", "WEBP", "BMP", "GIF", "TIFF", "HEIC", "HEIF", "MPO"]
+_SUPPORTED_FORMATS = ["JPEG", "PNG", "WEBP", "BMP", "GIF", "TIFF", "HEIC", "HEIF", "AVIF", "MPO"]
 
 
 @router.get("/api/capabilities")

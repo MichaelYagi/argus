@@ -28,7 +28,7 @@ from app.db import store
 router = APIRouter()
 
 _FMT_EXT = {"JPEG": "jpg", "PNG": "png", "WEBP": "webp", "BMP": "bmp",
-             "GIF": "gif", "TIFF": "tif", "HEIF": "heif"}
+             "GIF": "gif", "TIFF": "tif", "HEIF": "heif", "AVIF": "avif"}
 
 
 # ---------------------------------------------------------------------------

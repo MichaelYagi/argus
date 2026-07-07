@@ -8,6 +8,10 @@
     Click a box to assign or correct a label. Faces: orange = unlabeled, green = labeled. Objects: blue.
   </span>
   <span class="nav-spacer"></span>
+  <span id="vis-toggles" style="display:none;gap:4px;margin-right:8px">
+    <button id="toggle-faces" class="btn btn-ghost tag-toggle active">Faces</button>
+    <button id="toggle-objects" class="btn btn-ghost tag-toggle active">Objects</button>
+  </span>
   <span id="tag-status" class="muted" style="font-size:12px"></span>
   <button class="btn btn-ghost" id="reprocess-btn" style="margin-left:8px">Reprocess</button>
   <button class="btn btn-danger" id="delete-image-btn" style="margin-left:8px">Delete image</button>
@@ -241,6 +245,21 @@ document.getElementById('delete-image-btn').addEventListener('click', () => {
     { confirmText: 'Delete image', danger: true }
   );
 });
+
+// Visibility toggles — only shown when both faces and objects are present
+if (FACES.length && OBJECTS.length) {
+  const vis = document.getElementById('vis-toggles');
+  vis.style.display = 'flex';
+  const wrap = document.getElementById('tag-wrap');
+  document.getElementById('toggle-faces').addEventListener('click', function() {
+    this.classList.toggle('active');
+    wrap.classList.toggle('hide-faces', !this.classList.contains('active'));
+  });
+  document.getElementById('toggle-objects').addEventListener('click', function() {
+    this.classList.toggle('active');
+    wrap.classList.toggle('hide-objects', !this.classList.contains('active'));
+  });
+}
 
 // Set breadcrumb from referrer so it always reflects where the user came from
 (function() {

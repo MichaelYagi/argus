@@ -22,7 +22,7 @@ try:
 except ImportError:
     pass
 
-SUPPORTED_FORMATS = frozenset({"JPEG", "PNG", "WEBP", "BMP", "GIF", "TIFF", "HEIF", "MPO"})
+SUPPORTED_FORMATS = frozenset({"JPEG", "PNG", "WEBP", "BMP", "GIF", "TIFF", "HEIF", "AVIF", "MPO"})
 
 
 async def acquire_image(request: Request) -> bytes:
