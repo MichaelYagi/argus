@@ -18,6 +18,8 @@
 //   preInit()   — optional async fn, called before first fetchPage on a fresh load
 //   extraState() — optional, returns extra fields merged into the saved history state
 //   restoreExtra(state) — optional, restores those extra fields on back-navigation
+//   filterRestored(items) — optional, filters the restored items list before render
+//                  (skipped on bfcache restores; use a pageshow handler for that)
 
 window.ArgusGallery = function ArgusGallery(opts) {
   const { container, emptyEl, loadingEl, stateKey } = opts;
@@ -151,8 +153,9 @@ window.ArgusGallery = function ArgusGallery(opts) {
     hasMore = savedState.hasMore ?? true;
     if (opts.restoreExtra) opts.restoreExtra(savedState);
     requestAnimationFrame(() => {
-      items.push(...savedState.items);
-      appendItems(savedState.items);
+      const restoredItems = opts.filterRestored ? opts.filterRestored(savedState.items) : savedState.items;
+      items.push(...restoredItems);
+      appendItems(restoredItems);
       if (loadingEl) loadingEl.hidden = true;
       if (!hasMore) sentinel.remove();
       observe();

@@ -105,6 +105,15 @@ function renderBoxes() {
   });
 }
 
+function trackLabeled(id) {
+  try {
+    const existing = JSON.parse(sessionStorage.getItem('argus_labeled') || '[]');
+    const n = parseInt(id, 10);
+    if (!existing.includes(n)) existing.push(n);
+    sessionStorage.setItem('argus_labeled', JSON.stringify(existing));
+  } catch (_) {}
+}
+
 function labelObjectBox(div, tip, chip) {
   const onUnidentify = div.dataset.label ? async () => {
     const r = await fetch('/api/review/' + div.dataset.id + '/reject', { method: 'POST' });
@@ -131,6 +140,7 @@ function labelObjectBox(div, tip, chip) {
       tip.textContent = d.label;
       chip.textContent = d.label;
       chip.style.display = 'block';
+      trackLabeled(div.dataset.id);
       setStatus('Labeled: ' + d.label);
     } else {
       setStatus('Error saving label.');
@@ -172,6 +182,7 @@ function labelBox(div, tip, chip) {
       chip.style.display = 'block';
       div.classList.add('labeled');
       addFaceLabel(d.label);
+      trackLabeled(div.dataset.id);
       setStatus('Labeled: ' + d.label);
     } else {
       setStatus('Error saving label.');

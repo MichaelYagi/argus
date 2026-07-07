@@ -15,7 +15,7 @@
 
 {% block scripts %}
 <script>
-ArgusGallery({
+const gallery = ArgusGallery({
   container: document.getElementById('up-gallery'),
   emptyEl:   document.getElementById('up-empty'),
   loadingEl: document.getElementById('up-loading'),
@@ -125,6 +125,26 @@ ArgusGallery({
   async preInit() {
     try { await fetch('/api/faces/scan', { method: 'POST' }); } catch (_) {}
   },
+
+  filterRestored(items) {
+    let labeled;
+    try { labeled = new Set(JSON.parse(sessionStorage.getItem('argus_labeled') || '[]')); }
+    catch (_) { labeled = new Set(); }
+    sessionStorage.removeItem('argus_labeled');
+    return labeled.size ? items.filter(i => !labeled.has(i.detection_id)) : items;
+  },
+});
+
+// Bfcache restore: page is frozen/thawed; script doesn't re-run, so filterRestored
+// above won't fire. Read sessionStorage directly and call removeItem instead.
+window.addEventListener('pageshow', e => {
+  if (!e.persisted) return;
+  let labeled;
+  try { labeled = new Set(JSON.parse(sessionStorage.getItem('argus_labeled') || '[]')); }
+  catch (_) { return; }
+  if (!labeled.size) return;
+  sessionStorage.removeItem('argus_labeled');
+  labeled.forEach(id => gallery.removeItem(i => i.detection_id === id));
 });
 </script>
 {% endblock %}
