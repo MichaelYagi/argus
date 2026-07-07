@@ -308,9 +308,11 @@ async def label_detection(
         )
 
     store.label_detection(detection_id, user_id, identity_id, environment_id)
+    log.info("label_detection: detection=%d identity=%d enroll=%s", detection_id, identity_id, body.enroll)
     enrolled = False
     if body.enroll:
         enrolled = _enroll_confirmed(detection_id, user_id, environment_id)
+    log.info("label_detection: enrolled=%s", enrolled)
     identity = store.get_identity(identity_id, user_id, environment_id)
     from app.core import activity_buffer as _ab
     lbl = identity["label"] if identity else str(identity_id)
