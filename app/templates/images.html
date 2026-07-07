@@ -92,6 +92,19 @@
   window.filterSince = '';
   window.filterUntil = '';
 
+  function saveState() {
+    try {
+      sessionStorage.setItem('images_state', JSON.stringify({
+        scrollY: window.scrollY, cursor, hasMore, items,
+        filterIdentityId: window.filterIdentityId,
+        filterIdentityLabel: document.getElementById('filter-identity')?.value || '',
+        filterType:  window.filterType,
+        filterSince: window.filterSince,
+        filterUntil: window.filterUntil,
+      }));
+    } catch (_) {}
+  }
+
   function buildRow(rowItems, height) {
     const rowEl = document.createElement('div');
     rowEl.className = 'g-row';
@@ -101,6 +114,7 @@
       const a = document.createElement('a');
       a.className = 'g-item';
       a.href = '/tag/' + item.source_image_id;
+      a.addEventListener('click', saveState);
       a.style.width  = Math.floor(ar * height) + 'px';
       a.style.height = Math.floor(height) + 'px';
 
@@ -244,9 +258,42 @@
     }, { rootMargin: '300px' }).observe(sentinel);
   }
 
-  window.addEventListener('pageshow', e => { if (e.persisted) window.resetGallery(); });
+  const fromTagPage = document.referrer && /\/tag\/\d+/.test(document.referrer);
+  const savedRaw    = sessionStorage.getItem('images_state');
+  sessionStorage.removeItem('images_state');
 
-  loadPage();
+  if (fromTagPage && savedRaw) {
+    try {
+      const state = JSON.parse(savedRaw);
+      cursor  = state.cursor  ?? null;
+      hasMore = state.hasMore ?? true;
+      window.filterIdentityId = state.filterIdentityId ?? null;
+      window.filterType       = state.filterType  || '';
+      window.filterSince      = state.filterSince || '';
+      window.filterUntil      = state.filterUntil || '';
+      // Restore filter UI inputs (elements exist in DOM before this IIFE runs)
+      const _id = document.getElementById('filter-identity');
+      const _ii = document.getElementById('filter-identity-id');
+      const _ft = document.getElementById('filter-type');
+      const _fs = document.getElementById('filter-since');
+      const _fu = document.getElementById('filter-until');
+      if (_id) _id.value = state.filterIdentityLabel || '';
+      if (_ii) _ii.value = state.filterIdentityId    || '';
+      if (_ft) _ft.value = state.filterType          || '';
+      if (_fs) _fs.value = state.filterSince         || '';
+      if (_fu) _fu.value = state.filterUntil         || '';
+      items.push(...state.items);
+      appendItems(state.items);
+      if (loadingEl) loadingEl.hidden = true;
+      if (!hasMore) sentinel.remove();
+      requestAnimationFrame(() => window.scrollTo(0, state.scrollY || 0));
+    } catch (_) {
+      loadPage();
+    }
+  } else {
+    loadPage();
+  }
+
   observe();
 
   let resizeT, lastW = 0;

@@ -60,7 +60,7 @@ async def list_source_images(
     )
     return paginate(rows, limit, lambda r: {
         "source_image_id": r["id"],
-        "source_image_url": f"/media/sources/{r['file_path']}",
+        "source_image_url": f"/media/sources/{r['file_path']}?h=300",
         "width": r["width"],
         "height": r["height"],
         "detection_count": r["detection_count"],
