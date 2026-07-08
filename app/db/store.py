@@ -34,7 +34,8 @@ def configure(db_path: str | Path | None) -> None:
 def _resolved_db_path() -> Path:
     if _DB_PATH is not None:
         return _DB_PATH
-    return Path(os.environ.get("DB_PATH", "data/argus.db"))
+    data = os.environ.get("DATA_PATH", "data")
+    return Path(os.environ.get("DB_PATH", f"{data}/argus.db"))
 
 
 @contextmanager
