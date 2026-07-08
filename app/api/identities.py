@@ -25,13 +25,24 @@ class _CreateBody(BaseModel):
 # Identity CRUD
 # ---------------------------------------------------------------------------
 
+_storage_cache: tuple[float, str] | None = None
+_STORAGE_TTL = 300  # seconds
+
+
+def _cached_storage() -> str:
+    import time
+    global _storage_cache
+    if _storage_cache is None or time.monotonic() - _storage_cache[0] > _STORAGE_TTL:
+        _storage_cache = (time.monotonic(), fmt_bytes(dir_size(crops_dir()) + dir_size(sources_dir())))
+    return _storage_cache[1]
+
+
 @router.get("/api/stats")
 async def stats(
     user_id: int = Depends(require_auth),
     environment_id: int = Depends(require_env_id),
 ):
     """Aggregate counts for the dashboard — single round-trip."""
-    storage_bytes = dir_size(crops_dir()) + dir_size(sources_dir())
     return {
         "people":         store.count_identities(user_id, identity_type="face", environment_id=environment_id),
         "objects":        store.count_identities(user_id, identity_type="object", environment_id=environment_id),
@@ -39,7 +50,7 @@ async def stats(
         "detections":     store.count_detections(user_id, environment_id),
         "pending_review": store.count_pending_review(user_id, environment_id),
         "unidentified":   store.count_unidentified(user_id, environment_id),
-        "storage":        fmt_bytes(storage_bytes),
+        "storage":        _cached_storage(),
     }
 
 
