@@ -588,14 +588,17 @@ def search_identities(
         type_param = [identity_type] if identity_type else []
         q = q.strip().lower()
 
+        prefix = f"{q}%"
+        contains = f"%{q}%"
+
         if len(q) < 3:
             rows = conn.execute(
                 _COLS + f"""
                 WHERE i.user_id = ? AND i.environment_id = ?{type_filter}
                   AND LOWER(i.label) LIKE LOWER(?)
-                ORDER BY i.label LIMIT ?
+                ORDER BY CASE WHEN LOWER(i.label) LIKE LOWER(?) THEN 0 ELSE 1 END, i.label LIMIT ?
                 """,
-                [user_id, env_id] + type_param + [f"%{q}%", limit],
+                [user_id, env_id] + type_param + [contains, prefix, limit],
             ).fetchall()
         else:
             safe_q = q.replace('"', '""')
@@ -615,10 +618,11 @@ def search_identities(
                     LEFT JOIN detections d ON d.id = i.cover_detection_id
                     WHERE identities_fts MATCH ?
                       AND i.user_id = ? AND i.environment_id = ?{type_filter}
-                    ORDER BY bm25(identities_fts)
+                    ORDER BY CASE WHEN LOWER(i.label) LIKE LOWER(?) THEN 0 ELSE 1 END,
+                             bm25(identities_fts)
                     LIMIT ?
                     """,
-                    [f'"{safe_q}"', user_id, env_id] + type_param + [limit],
+                    [f'"{safe_q}"', user_id, env_id] + type_param + [prefix, limit],
                 ).fetchall()
             except Exception:
                 pass
@@ -627,9 +631,9 @@ def search_identities(
                     _COLS + f"""
                     WHERE i.user_id = ? AND i.environment_id = ?{type_filter}
                       AND LOWER(i.label) LIKE LOWER(?)
-                    ORDER BY i.label LIMIT ?
+                    ORDER BY CASE WHEN LOWER(i.label) LIKE LOWER(?) THEN 0 ELSE 1 END, i.label LIMIT ?
                     """,
-                    [user_id, env_id] + type_param + [f"%{q}%", limit],
+                    [user_id, env_id] + type_param + [contains, prefix, limit],
                 ).fetchall()
         return rows
 
