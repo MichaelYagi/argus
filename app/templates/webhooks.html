@@ -54,19 +54,85 @@
             and the full detection result on success.
           </span>
         </div>
+        <div>
+          <code style="font-size:12px;background:var(--surface-raised);padding:1px 6px;border-radius:4px">detection.labeled</code>
+          <span class="muted" style="font-size:12px;margin-left:6px">
+            Fired when a detection is assigned or reassigned to an identity — via the review queue
+            (confirm, reassign, bulk), the tag page, the batch label endpoint, or a retroactive scan.
+            Not fired for <code style="font-size:11px">detection.created</code> auto-confirms; those payloads
+            already carry <code style="font-size:11px">identity_id</code> and <code style="font-size:11px">label</code>.
+            Data includes <code style="font-size:11px">detection_id</code>, <code style="font-size:11px">source_image_id</code>,
+            <code style="font-size:11px">identity_id</code>, <code style="font-size:11px">label</code>,
+            and <code style="font-size:11px">type</code>.
+          </span>
+        </div>
+        <div>
+          <code style="font-size:12px;background:var(--surface-raised);padding:1px 6px;border-radius:4px">identity.merged</code>
+          <span class="muted" style="font-size:12px;margin-left:6px">
+            Fired when one identity is merged into another. The source identity is deleted after the merge.
+            Data includes <code style="font-size:11px">identity_id</code> (the deleted source),
+            <code style="font-size:11px">label</code>, <code style="font-size:11px">type</code>,
+            and <code style="font-size:11px">merged_into</code> (the surviving target identity id).
+          </span>
+        </div>
+        <div>
+          <code style="font-size:12px;background:var(--surface-raised);padding:1px 6px;border-radius:4px">identity.deleted</code>
+          <span class="muted" style="font-size:12px;margin-left:6px">
+            Fired when a single identity is permanently deleted (not fired for bulk delete-all).
+            Data includes <code style="font-size:11px">identity_id</code>, <code style="font-size:11px">label</code>,
+            and <code style="font-size:11px">type</code>.
+          </span>
+        </div>
       </div>
     </div>
 
     <div>
-      <div style="font-weight:600;font-size:13px;margin-bottom:6px">Payload shape</div>
+      <div style="font-weight:600;font-size:13px;margin-bottom:6px">Payload shapes</div>
       <pre style="font-size:11px;background:var(--surface-raised);border:1px solid var(--border);
                   border-radius:var(--radius);padding:10px 12px;margin:0;line-height:1.5;
-                  white-space:pre-wrap;word-break:break-word">{
+                  white-space:pre-wrap;word-break:break-word">// detection.created
+{
   "event": "detection.created",
   "timestamp": "2026-07-03T12:00:00.123456+00:00",
   "data": {
     "source_image_id": 42,
     "external_ref": "photo-123",
+    "type": "face"
+  }
+}
+
+// detection.labeled
+{
+  "event": "detection.labeled",
+  "timestamp": "2026-07-03T12:01:00.000000+00:00",
+  "data": {
+    "detection_id": 17,
+    "source_image_id": 42,
+    "identity_id": 5,
+    "label": "Daisuke",
+    "type": "face"
+  }
+}
+
+// identity.merged  (source id=3 merged into id=5; id=3 deleted)
+{
+  "event": "identity.merged",
+  "timestamp": "2026-07-03T12:02:00.000000+00:00",
+  "data": {
+    "identity_id": 3,
+    "label": "Daisuke (old)",
+    "type": "face",
+    "merged_into": 5
+  }
+}
+
+// identity.deleted
+{
+  "event": "identity.deleted",
+  "timestamp": "2026-07-03T12:03:00.000000+00:00",
+  "data": {
+    "identity_id": 9,
+    "label": "Unknown person",
     "type": "face"
   }
 }</pre>

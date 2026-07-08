@@ -6,7 +6,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
 
 from app.api._utils import delete_crops, paginate
-from app.core import settings_cache
+from app.core import settings_cache, webhook as _webhook
 from app.core.auth import require_auth, require_env_id
 from app.db import store
 
@@ -198,12 +198,19 @@ async def delete_identity(
     user_id: int = Depends(require_auth),
     environment_id: int = Depends(require_env_id),
 ):
+    ident = store.get_identity(identity_id, user_id, environment_id)
     deleted, crops = store.delete_identity(identity_id, user_id, environment_id)
     if not deleted:
         raise HTTPException(404, "Identity not found")
     delete_crops(crops)
     from app.core import face_index as _fi
     _fi.rebuild_user(user_id, environment_id)
+    if ident:
+        _webhook.fire(user_id, environment_id, "identity.deleted", {
+            "identity_id": identity_id,
+            "label": ident["label"],
+            "type": ident["type"],
+        })
 
 
 class _MergeBody(BaseModel):
@@ -221,11 +228,19 @@ async def merge_identity(
     reassigned to the target, then the source identity is deleted."""
     if identity_id == body.into:
         raise HTTPException(400, "Source and target identity must differ")
+    source = store.get_identity(identity_id, user_id, environment_id)
     ok = store.merge_identities(identity_id, body.into, user_id, environment_id)
     if not ok:
         raise HTTPException(404, "One or both identities not found")
     from app.core import face_index as _fi
     _fi.rebuild_user(user_id, environment_id)
+    if source:
+        _webhook.fire(user_id, environment_id, "identity.merged", {
+            "identity_id": identity_id,
+            "label": source["label"],
+            "type": source["type"],
+            "merged_into": body.into,
+        })
     return {"merged_into": body.into, "deleted": identity_id}
 
 

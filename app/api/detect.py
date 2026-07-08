@@ -10,7 +10,7 @@ from typing import Any
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request
 
 from app.api._utils import delete_crops, is_truthy
-from app.core import settings_cache
+from app.core import settings_cache, webhook as _webhook
 from app.core.auth import require_auth, require_env_id
 from app.core.engine_registry import registry
 from app.core.image_input import (
@@ -908,6 +908,7 @@ def scan_unidentified(user_id: int, environment_id: int) -> dict:
         seen.add(key)
         if sim >= auto_confirm_thr:
             store.label_detection(row["id"], user_id, identity_id, environment_id)
+            _webhook.fire_detection_labeled(row["id"], user_id, environment_id, identity_id=identity_id)
             confirmed += 1
         else:
             store.suggest_detection(row["id"], user_id, identity_id, environment_id)

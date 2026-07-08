@@ -217,7 +217,8 @@
       "Bash(.venv/bin/pytest -v tests/test_detect_api.py::test_detect_faces_replace_clears_prior)",
       "Bash(grep -v \"^$\")",
       "Bash(awk 'length>120{print NR\": \"length\" chars\"}' /mnt/c/Users/Michael/Documents/development/argus/app/db/store.py)",
-      "Bash(awk NR>=850 && NR<=886 {printf \"%d: %d chars\\\\n\", NR, length} *)"
+      "Bash(awk NR>=850 && NR<=886 {printf \"%d: %d chars\\\\n\", NR, length} *)",
+      "Bash(awk length > 120 {print NR\": \"length\" chars: \"$0} *)"
     ]
   }
 }

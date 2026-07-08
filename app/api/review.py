@@ -10,7 +10,7 @@ from fastapi.responses import FileResponse
 from pydantic import BaseModel
 
 from app.api._utils import delete_crops
-from app.core import settings_cache
+from app.core import settings_cache, webhook as _webhook
 from app.core.auth import require_auth, require_env_id
 from app.core.paths import crops_dir
 from app.db import store
@@ -119,6 +119,7 @@ async def confirm(
     if not store.confirm_detection(detection_id, user_id, environment_id):
         raise HTTPException(404, "Detection not found")
     _enroll_confirmed(detection_id, user_id, environment_id)
+    _webhook.fire_detection_labeled(detection_id, user_id, environment_id)
     return {"detection_id": detection_id, "review_status": "confirmed"}
 
 
@@ -162,6 +163,7 @@ async def restore(
     _enroll_confirmed(detection_id, user_id, environment_id)
     from app.core import face_index as _fi
     _fi.rebuild_user(user_id, environment_id)
+    _webhook.fire_detection_labeled(detection_id, user_id, environment_id)
     return {"detection_id": detection_id, "review_status": "confirmed"}
 
 
@@ -193,6 +195,10 @@ async def reassign(
     from app.core import activity_buffer as _ab
     ident = store.get_identity(identity_id, user_id, environment_id)
     _ab.emit("identity", f"Face reassigned to {ident['label'] if ident else identity_id}")
+    _webhook.fire_detection_labeled(
+        detection_id, user_id, environment_id,
+        identity_id=identity_id, label=ident["label"] if ident else None,
+    )
     return {"detection_id": detection_id, "identity_id": identity_id, "review_status": "reassigned"}
 
 
@@ -214,6 +220,7 @@ async def bulk_review(
         if item.action == "confirm":
             store.confirm_detection(item.detection_id, user_id, environment_id)
             _enroll_confirmed(item.detection_id, user_id, environment_id)
+            _webhook.fire_detection_labeled(item.detection_id, user_id, environment_id)
             results.append({"detection_id": item.detection_id, "status": "confirmed"})
         elif item.action == "reject":
             store.reject_detection(item.detection_id, user_id, environment_id)
@@ -228,6 +235,7 @@ async def bulk_review(
                 continue
             store.reassign_detection(item.detection_id, user_id, iid, environment_id)
             _enroll_confirmed(item.detection_id, user_id, environment_id)
+            _webhook.fire_detection_labeled(item.detection_id, user_id, environment_id, identity_id=iid)
             results.append({"detection_id": item.detection_id, "status": "reassigned",
                              "identity_id": iid})
         else:
@@ -347,6 +355,9 @@ async def label_detection(
     lbl = identity["label"] if identity else str(identity_id)
     kind = "Face" if det["type"] == "face" else "Object"
     _ab.emit("identity", f"{kind} identified as {lbl}")
+    _webhook.fire_detection_labeled(
+        detection_id, user_id, environment_id, identity_id=identity_id, label=lbl,
+    )
     if det["type"] == "face":
         from app.api.detect import scan_unidentified
         background_tasks.add_task(scan_unidentified, user_id, environment_id)
@@ -409,6 +420,10 @@ async def label_detections_batch(
         if det["type"] == "face":
             has_face = True
         identity = store.get_identity(identity_id, user_id, environment_id)
+        _webhook.fire_detection_labeled(
+            item.detection_id, user_id, environment_id,
+            identity_id=identity_id, label=identity["label"] if identity else None,
+        )
         results.append({
             "detection_id": item.detection_id, "ok": True,
             "identity_id": identity_id,

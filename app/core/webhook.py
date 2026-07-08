@@ -37,6 +37,29 @@ def fire(user_id: int, environment_id: int, event: str, payload: dict) -> None:
         ).start()
 
 
+def fire_detection_labeled(
+    detection_id: int, user_id: int, environment_id: int,
+    identity_id: int | None = None, label: str | None = None,
+) -> None:
+    """Fire detection.labeled — fetches missing payload fields from the store."""
+    det = store.get_detection(detection_id, user_id, environment_id)
+    if not det:
+        return
+    iid = identity_id or det["identity_id"]
+    if not iid:
+        return
+    if label is None:
+        ident = store.get_identity(iid, user_id, environment_id)
+        label = ident["label"] if ident else str(iid)
+    fire(user_id, environment_id, "detection.labeled", {
+        "detection_id": detection_id,
+        "source_image_id": det["source_image_id"],
+        "identity_id": iid,
+        "label": label,
+        "type": det["type"],
+    })
+
+
 def fire_test(webhook_id: int, user_id: int) -> dict | None:
     """Send a synthetic ping to the webhook synchronously; return outcome or None if not found."""
     hook = store.get_webhook(webhook_id, user_id)
