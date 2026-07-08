@@ -577,7 +577,8 @@ def search_identities(
                    SELECT crop_path FROM detections
                    WHERE identity_id = i.id ORDER BY detected_at ASC, id ASC LIMIT 1
                )) AS cover_crop_path,
-               (SELECT COUNT(*) FROM detections dc WHERE dc.identity_id = i.id) AS detection_count
+               (SELECT COUNT(*) FROM detections dc WHERE dc.identity_id = i.id
+                AND dc.ignored = 0 AND (dc.review_status IS NULL OR dc.review_status != 'rejected')) AS detection_count
         FROM identities i
         LEFT JOIN detections d ON d.id = i.cover_detection_id
     """
@@ -607,7 +608,8 @@ def search_identities(
                                SELECT crop_path FROM detections
                                WHERE identity_id = i.id ORDER BY detected_at ASC, id ASC LIMIT 1
                            )) AS cover_crop_path,
-                           (SELECT COUNT(*) FROM detections dc WHERE dc.identity_id = i.id) AS detection_count
+                           (SELECT COUNT(*) FROM detections dc WHERE dc.identity_id = i.id
+                            AND dc.ignored = 0 AND (dc.review_status IS NULL OR dc.review_status != 'rejected')) AS detection_count
                     FROM identities_fts
                     JOIN identities i ON identities_fts.rowid = i.id
                     LEFT JOIN detections d ON d.id = i.cover_detection_id
@@ -847,7 +849,7 @@ def list_identities_summary(
                            ORDER BY d2.detected_at ASC LIMIT 1)
                         ) AS thumbnail_crop
                  FROM identities i
-                 LEFT JOIN detections d      ON d.identity_id  = i.id
+                 LEFT JOIN detections d      ON d.identity_id  = i.id AND d.ignored = 0 AND (d.review_status IS NULL OR d.review_status != 'rejected')
                  LEFT JOIN face_embeddings fe ON fe.identity_id = i.id
                  WHERE i.user_id = ? AND i.environment_id = ?"""
         params: list = [user_id, env_id]
@@ -877,7 +879,7 @@ def get_identity_with_counts(identity_id: int, user_id: int, environment_id: int
                          ORDER BY d2.detected_at ASC LIMIT 1)
                       ) AS thumbnail_crop
                FROM identities i
-               LEFT JOIN detections d  ON d.identity_id = i.id
+               LEFT JOIN detections d  ON d.identity_id = i.id AND d.ignored = 0 AND (d.review_status IS NULL OR d.review_status != 'rejected')
                LEFT JOIN face_embeddings fe ON fe.identity_id = i.id
                WHERE i.id = ? AND i.user_id = ? AND i.environment_id = ?
                GROUP BY i.id""",
@@ -911,6 +913,7 @@ def get_identity_gallery(
                         ON fe.identity_id = d.identity_id AND fe.source_image_path = d.crop_path
                  LEFT JOIN source_images si ON si.id = d.source_image_id
                  WHERE d.identity_id = ? AND d.user_id = ? AND d.environment_id = ?
+                   AND (d.review_status IS NULL OR d.review_status != 'rejected')
                    AND NOT EXISTS (
                      SELECT 1 FROM detections d2
                      WHERE d2.identity_id = d.identity_id
@@ -1491,6 +1494,7 @@ def _purge_empty_identities(conn, user_id: int, env_id: int) -> list[int]:
              AND id NOT IN (
                SELECT DISTINCT identity_id FROM detections
                WHERE user_id = ? AND environment_id = ? AND identity_id IS NOT NULL
+                 AND (review_status IS NULL OR review_status != 'rejected')
              )""",
         (user_id, env_id, user_id, env_id),
     ).fetchall()
@@ -1819,18 +1823,52 @@ def confirm_detection(detection_id: int, user_id: int, environment_id: int | Non
 def reject_detection(detection_id: int, user_id: int, environment_id: int | None = None) -> bool:
     with _connect() as conn:
         env_id = _resolve_env(conn, user_id, environment_id)
+        # Detach the face reference so it doesn't pollute matching, but keep identity_id so
+        # the detection remains findable under this person and can be restored later.
         old_id = _detach_old_reference(conn, detection_id, user_id, None)
         conn.execute(
-            """UPDATE detections SET review_status = 'rejected', identity_id = NULL,
+            """UPDATE detections SET review_status = 'rejected',
                reviewed_at = datetime('now') WHERE id = ? AND user_id = ? AND environment_id = ?""",
             (detection_id, user_id, env_id),
         )
         changed = conn.execute("SELECT changes()").fetchone()[0] > 0
-        if changed:  # identity cleared — surface as a relabel for delta-sync clients
+        if changed:
             record_change(conn, user_id, env_id, "detection", detection_id, "relabeled")
             _purge_empty_identities(conn, user_id, env_id)
     _recompute_representative(old_id)
     return changed
+
+
+def restore_detection(detection_id: int, user_id: int, environment_id: int | None = None) -> bool:
+    """Un-reject: mark confirmed, keep identity_id. Caller re-enrolls the face embedding."""
+    with _connect() as conn:
+        env_id = _resolve_env(conn, user_id, environment_id)
+        conn.execute(
+            """UPDATE detections SET review_status = 'confirmed', reviewed_at = datetime('now')
+               WHERE id = ? AND user_id = ? AND environment_id = ? AND review_status = 'rejected'""",
+            (detection_id, user_id, env_id),
+        )
+        changed = conn.execute("SELECT changes()").fetchone()[0] > 0
+        if changed:
+            record_change(conn, user_id, env_id, "detection", detection_id, "relabeled")
+    return changed
+
+
+def get_rejected_detections(
+    identity_id: int, user_id: int, environment_id: int | None = None,
+) -> list[sqlite3.Row]:
+    with _connect() as conn:
+        env_id = _resolve_env(conn, user_id, environment_id)
+        return conn.execute(
+            """SELECT d.id, d.crop_path, d.detected_at, d.source_image_id,
+                      si.file_path AS source_image_path
+               FROM detections d
+               LEFT JOIN source_images si ON si.id = d.source_image_id
+               WHERE d.identity_id = ? AND d.user_id = ? AND d.environment_id = ?
+                 AND d.review_status = 'rejected'
+               ORDER BY d.detected_at DESC, d.id DESC""",
+            (identity_id, user_id, env_id),
+        ).fetchall()
 
 
 def reassign_detection(detection_id: int, user_id: int, identity_id: int, environment_id: int | None = None) -> bool:

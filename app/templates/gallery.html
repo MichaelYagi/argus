@@ -78,6 +78,14 @@
      data-cover-id="{{ effective_cover_id if effective_cover_id is not none else '' }}"></div>
 <p id="gallery-loading" class="loading" hidden>Loading…</p>
 <p id="gallery-empty" class="muted" hidden style="text-align:center;padding:48px">No detections yet.</p>
+
+<details id="rejected-section" style="display:none;margin-top:32px">
+  <summary style="cursor:pointer;font-size:13px;color:var(--muted);user-select:none">
+    Rejected (<span id="rejected-count">0</span>)
+  </summary>
+  <div id="rejected-grid"
+       style="display:flex;flex-wrap:wrap;gap:8px;margin-top:12px"></div>
+</details>
 {% endblock %}
 
 {% block scripts %}
@@ -215,5 +223,65 @@ document.getElementById('delete-identity-btn').addEventListener('click', () => {
     { confirmText: 'Delete', danger: true }
   );
 });
+
+// ---------------------------------------------------------------------------
+// Rejected detections section
+// ---------------------------------------------------------------------------
+(async function() {
+  const resp = await fetch('/api/identities/{{ identity.id }}/rejected');
+  if (!resp.ok) return;
+  const items = await resp.json();
+  if (!items.length) return;
+
+  const section = document.getElementById('rejected-section');
+  const grid    = document.getElementById('rejected-grid');
+  document.getElementById('rejected-count').textContent = items.length;
+  section.style.display = '';
+
+  let rendered = false;
+  section.addEventListener('toggle', function() {
+    if (!this.open || rendered) return;
+    rendered = true;
+    items.forEach(item => {
+      const wrap = document.createElement('div');
+      wrap.dataset.id = item.detection_id;
+      wrap.style.cssText = 'display:flex;flex-direction:column;align-items:center;gap:4px';
+
+      const link = document.createElement('a');
+      link.href = '/tag/' + item.source_image_id + '?focus=' + item.detection_id;
+      link.title = 'View in source image';
+      const img = document.createElement('img');
+      img.src = item.crop_url;
+      img.style.cssText = 'width:80px;height:80px;object-fit:cover;border-radius:4px;border:1px solid var(--border)';
+      img.loading = 'lazy';
+      link.appendChild(img);
+      wrap.appendChild(link);
+
+      const btn = document.createElement('button');
+      btn.textContent = 'Restore';
+      btn.className = 'btn btn-ghost';
+      btn.style.cssText = 'font-size:11px;padding:2px 8px';
+      btn.addEventListener('click', async () => {
+        btn.disabled = true;
+        btn.textContent = '…';
+        const r = await fetch('/api/review/' + item.detection_id + '/restore', { method: 'POST' });
+        if (r.ok) {
+          wrap.remove();
+          const countEl = document.getElementById('rejected-count');
+          const n = Math.max(0, parseInt(countEl.textContent, 10) - 1);
+          countEl.textContent = n;
+          if (!n) section.style.display = 'none';
+          flashToast('Restored — will appear in gallery', 'success');
+        } else {
+          btn.disabled = false;
+          btn.textContent = 'Restore';
+          flashToast('Restore failed', 'error');
+        }
+      });
+      wrap.appendChild(btn);
+      grid.appendChild(wrap);
+    });
+  });
+})();
 </script>
 {% endblock %}

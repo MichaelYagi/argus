@@ -130,10 +130,24 @@ async def reject(
 ):
     if not store.reject_detection(detection_id, user_id, environment_id):
         raise HTTPException(404, "Detection not found")
-    # Rejecting clears the identity and drops its reference — refresh the index.
+    # Rejection drops the face reference — refresh the index.
     from app.core import face_index as _fi
     _fi.rebuild_user(user_id, environment_id)
     return {"detection_id": detection_id, "review_status": "rejected"}
+
+
+@router.post("/api/review/{detection_id}/restore", status_code=200)
+async def restore(
+    detection_id: int,
+    user_id: int = Depends(require_auth),
+    environment_id: int = Depends(require_env_id),
+):
+    if not store.restore_detection(detection_id, user_id, environment_id):
+        raise HTTPException(404, "Detection not found or not in rejected state")
+    _enroll_confirmed(detection_id, user_id, environment_id)
+    from app.core import face_index as _fi
+    _fi.rebuild_user(user_id, environment_id)
+    return {"detection_id": detection_id, "review_status": "confirmed"}
 
 
 class _ReassignBody(BaseModel):

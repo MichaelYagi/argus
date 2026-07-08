@@ -283,6 +283,27 @@ async def identity_gallery(
     })
 
 
+@router.get("/api/identities/{identity_id}/rejected")
+async def identity_rejected(
+    identity_id: int,
+    user_id: int = Depends(require_auth),
+    environment_id: int = Depends(require_env_id),
+):
+    if not store.get_identity(identity_id, user_id, environment_id):
+        raise HTTPException(404, "Identity not found")
+    rows = store.get_rejected_detections(identity_id, user_id, environment_id)
+    return [
+        {
+            "detection_id": r["id"],
+            "source_image_id": r["source_image_id"],
+            "source_image_url": f"/media/sources/{r['source_image_path']}" if r["source_image_path"] else None,
+            "crop_url": f"/media/crops/{r['crop_path']}",
+            "detected_at": r["detected_at"],
+        }
+        for r in rows
+    ]
+
+
 class _DetectionQueryBody(BaseModel):
     detection_ids: list[int]
 
