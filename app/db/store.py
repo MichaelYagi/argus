@@ -578,7 +578,7 @@ def search_identities(
                    WHERE identity_id = i.id ORDER BY detected_at ASC, id ASC LIMIT 1
                )) AS cover_crop_path,
                (SELECT COUNT(*) FROM detections dc WHERE dc.identity_id = i.id
-                AND dc.ignored = 0 AND (dc.review_status IS NULL OR dc.review_status != 'rejected')) AS detection_count
+                AND (dc.review_status IS NULL OR dc.review_status != 'rejected')) AS detection_count
         FROM identities i
         LEFT JOIN detections d ON d.id = i.cover_detection_id
     """
@@ -609,7 +609,7 @@ def search_identities(
                                WHERE identity_id = i.id ORDER BY detected_at ASC, id ASC LIMIT 1
                            )) AS cover_crop_path,
                            (SELECT COUNT(*) FROM detections dc WHERE dc.identity_id = i.id
-                            AND dc.ignored = 0 AND (dc.review_status IS NULL OR dc.review_status != 'rejected')) AS detection_count
+                            AND (dc.review_status IS NULL OR dc.review_status != 'rejected')) AS detection_count
                     FROM identities_fts
                     JOIN identities i ON identities_fts.rowid = i.id
                     LEFT JOIN detections d ON d.id = i.cover_detection_id
@@ -849,7 +849,7 @@ def list_identities_summary(
                            ORDER BY d2.detected_at ASC LIMIT 1)
                         ) AS thumbnail_crop
                  FROM identities i
-                 LEFT JOIN detections d      ON d.identity_id  = i.id AND d.ignored = 0 AND (d.review_status IS NULL OR d.review_status != 'rejected')
+                 LEFT JOIN detections d      ON d.identity_id  = i.id AND (d.review_status IS NULL OR d.review_status != 'rejected')
                  LEFT JOIN face_embeddings fe ON fe.identity_id = i.id
                  WHERE i.user_id = ? AND i.environment_id = ?"""
         params: list = [user_id, env_id]
@@ -879,7 +879,7 @@ def get_identity_with_counts(identity_id: int, user_id: int, environment_id: int
                          ORDER BY d2.detected_at ASC LIMIT 1)
                       ) AS thumbnail_crop
                FROM identities i
-               LEFT JOIN detections d  ON d.identity_id = i.id AND d.ignored = 0 AND (d.review_status IS NULL OR d.review_status != 'rejected')
+               LEFT JOIN detections d  ON d.identity_id = i.id AND (d.review_status IS NULL OR d.review_status != 'rejected')
                LEFT JOIN face_embeddings fe ON fe.identity_id = i.id
                WHERE i.id = ? AND i.user_id = ? AND i.environment_id = ?
                GROUP BY i.id""",
@@ -913,17 +913,7 @@ def get_identity_gallery(
                         ON fe.identity_id = d.identity_id AND fe.source_image_path = d.crop_path
                  LEFT JOIN source_images si ON si.id = d.source_image_id
                  WHERE d.identity_id = ? AND d.user_id = ? AND d.environment_id = ?
-                   AND (d.review_status IS NULL OR d.review_status != 'rejected')
-                   AND NOT EXISTS (
-                     SELECT 1 FROM detections d2
-                     WHERE d2.identity_id = d.identity_id
-                       AND d2.user_id = d.user_id
-                       AND d2.environment_id = d.environment_id
-                       AND d2.source_image_id = d.source_image_id
-                       AND d2.id != d.id
-                       AND (d2.confidence > d.confidence
-                            OR (d2.confidence = d.confidence AND d2.id < d.id))
-                   )"""
+                   AND (d.review_status IS NULL OR d.review_status != 'rejected')"""
         params: list = [identity_id, user_id, env_id]
         if enrolled is True:
             sql += " AND fe.id IS NOT NULL"
