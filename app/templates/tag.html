@@ -107,6 +107,11 @@ function renderBoxes() {
     div.appendChild(tip);
     wrap.appendChild(div);
   });
+
+  if (focusEl) {
+    focusEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    setTimeout(() => focusEl.click(), 350);
+  }
 }
 
 function trackLabeled(id) {
