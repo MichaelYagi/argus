@@ -7,7 +7,7 @@
   <h1>{{ identity.label }}</h1>
   <span class="badge badge-{{ identity.type }}">{{ identity.type }}</span>
   <span class="muted" style="font-size:12px">
-    <span id="det-count-label">{{ identity.detection_count }} detection{{ 's' if identity.detection_count != 1 else '' }}</span>
+    <span id="det-count-label">{{ identity.detection_count }} photo{{ 's' if identity.detection_count != 1 else '' }}</span>
     &middot; <span id="ref-count-label">{{ identity.embedding_count }} reference{{ 's' if identity.embedding_count != 1 else '' }}</span>
   </span>
   <span class="nav-spacer"></span>
@@ -215,7 +215,7 @@ document.getElementById('rename-save-btn').addEventListener('click', async () =>
 
 document.getElementById('delete-identity-btn').addEventListener('click', () => {
   showConfirm(
-    'Delete "{{ identity.label }}"?\n\n{{ identity.detection_count }} detection{{ "s" if identity.detection_count != 1 else "" }} and {{ identity.embedding_count }} enrolled reference{{ "s" if identity.embedding_count != 1 else "" }} will be permanently removed. This cannot be undone.',
+    'Delete "{{ identity.label }}"?\n\n{{ identity.detection_count }} photo{{ "s" if identity.detection_count != 1 else "" }} and {{ identity.embedding_count }} enrolled reference{{ "s" if identity.embedding_count != 1 else "" }} will be permanently removed. This cannot be undone.',
     async () => {
       const resp = await fetch('/api/identities/{{ identity.id }}', { method: 'DELETE' });
       if (resp.ok || resp.status === 204) location.href = '/?tab={{ identity.type }}';

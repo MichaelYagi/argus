@@ -577,7 +577,7 @@ def search_identities(
                    SELECT crop_path FROM detections
                    WHERE identity_id = i.id ORDER BY detected_at ASC, id ASC LIMIT 1
                )) AS cover_crop_path,
-               (SELECT COUNT(*) FROM detections dc WHERE dc.identity_id = i.id
+               (SELECT COUNT(DISTINCT dc.source_image_id) FROM detections dc WHERE dc.identity_id = i.id
                 AND (dc.review_status IS NULL OR dc.review_status != 'rejected')) AS detection_count
         FROM identities i
         LEFT JOIN detections d ON d.id = i.cover_detection_id
@@ -608,7 +608,7 @@ def search_identities(
                                SELECT crop_path FROM detections
                                WHERE identity_id = i.id ORDER BY detected_at ASC, id ASC LIMIT 1
                            )) AS cover_crop_path,
-                           (SELECT COUNT(*) FROM detections dc WHERE dc.identity_id = i.id
+                           (SELECT COUNT(DISTINCT dc.source_image_id) FROM detections dc WHERE dc.identity_id = i.id
                             AND (dc.review_status IS NULL OR dc.review_status != 'rejected')) AS detection_count
                     FROM identities_fts
                     JOIN identities i ON identities_fts.rowid = i.id
@@ -839,8 +839,8 @@ def list_identities_summary(
     with _connect() as conn:
         env_id = _resolve_env(conn, user_id, environment_id)
         sql = """SELECT i.*,
-                        COUNT(DISTINCT d.id)  AS detection_count,
-                        COUNT(DISTINCT fe.id) AS embedding_count,
+                        COUNT(DISTINCT d.source_image_id) AS detection_count,
+                        COUNT(DISTINCT fe.id)             AS embedding_count,
                         COALESCE(
                           (SELECT dc.crop_path FROM detections dc
                            WHERE dc.id = i.cover_detection_id),
@@ -869,8 +869,8 @@ def get_identity_with_counts(identity_id: int, user_id: int, environment_id: int
         env_id = _resolve_env(conn, user_id, environment_id)
         return conn.execute(
             """SELECT i.*,
-                      COUNT(DISTINCT d.id)  AS detection_count,
-                      COUNT(DISTINCT fe.id) AS embedding_count,
+                      COUNT(DISTINCT d.source_image_id) AS detection_count,
+                      COUNT(DISTINCT fe.id)             AS embedding_count,
                       COALESCE(
                         (SELECT d_cover.crop_path FROM detections d_cover
                          WHERE d_cover.id = i.cover_detection_id),
@@ -913,7 +913,17 @@ def get_identity_gallery(
                         ON fe.identity_id = d.identity_id AND fe.source_image_path = d.crop_path
                  LEFT JOIN source_images si ON si.id = d.source_image_id
                  WHERE d.identity_id = ? AND d.user_id = ? AND d.environment_id = ?
-                   AND (d.review_status IS NULL OR d.review_status != 'rejected')"""
+                   AND (d.review_status IS NULL OR d.review_status != 'rejected')
+                   AND NOT EXISTS (
+                     SELECT 1 FROM detections d2
+                     WHERE d2.identity_id = d.identity_id
+                       AND d2.user_id = d.user_id
+                       AND d2.environment_id = d.environment_id
+                       AND d2.source_image_id = d.source_image_id
+                       AND d2.id != d.id
+                       AND (d2.confidence > d.confidence
+                            OR (d2.confidence = d.confidence AND d2.id < d.id))
+                   )"""
         params: list = [identity_id, user_id, env_id]
         if enrolled is True:
             sql += " AND fe.id IS NOT NULL"

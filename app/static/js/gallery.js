@@ -28,7 +28,7 @@
     if (!el) return;
     const cur = parseInt(el.textContent, 10) || 0;
     const n = Math.max(0, cur + delta);
-    el.textContent = `${n} detection${n !== 1 ? 's' : ''}`;
+    el.textContent = `${n} photo${n !== 1 ? 's' : ''}`;
   }
   function removeItems(ids) {
     ids.forEach(id => {

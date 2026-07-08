@@ -165,7 +165,7 @@ function makeCard(d, type) {
   a.className = 'identity-thumb';
   a.dataset.id = d.id;
   a.style.position = 'relative';
-  const countLine = `${d.detection_count} detection${d.detection_count !== 1 ? 's' : ''}`;
+  const countLine = `${d.detection_count} photo${d.detection_count !== 1 ? 's' : ''}`;
   a.innerHTML = img +
     `<div class="it-name">${d.label}</div>` +
     `<div class="it-count">${countLine}</div>`;
