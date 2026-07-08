@@ -849,7 +849,8 @@ def list_identities_summary(
                            ORDER BY d2.detected_at ASC LIMIT 1)
                         ) AS thumbnail_crop
                  FROM identities i
-                 LEFT JOIN detections d      ON d.identity_id  = i.id AND (d.review_status IS NULL OR d.review_status != 'rejected')
+                 LEFT JOIN detections d      ON d.identity_id = i.id
+                                          AND (d.review_status IS NULL OR d.review_status != 'rejected')
                  LEFT JOIN face_embeddings fe ON fe.identity_id = i.id
                  WHERE i.user_id = ? AND i.environment_id = ?"""
         params: list = [user_id, env_id]
@@ -879,7 +880,8 @@ def get_identity_with_counts(identity_id: int, user_id: int, environment_id: int
                          ORDER BY d2.detected_at ASC LIMIT 1)
                       ) AS thumbnail_crop
                FROM identities i
-               LEFT JOIN detections d  ON d.identity_id = i.id AND (d.review_status IS NULL OR d.review_status != 'rejected')
+               LEFT JOIN detections d  ON d.identity_id = i.id
+                                      AND (d.review_status IS NULL OR d.review_status != 'rejected')
                LEFT JOIN face_embeddings fe ON fe.identity_id = i.id
                WHERE i.id = ? AND i.user_id = ? AND i.environment_id = ?
                GROUP BY i.id""",
