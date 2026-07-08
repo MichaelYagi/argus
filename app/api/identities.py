@@ -5,10 +5,11 @@ from __future__ import annotations
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
 
-from app.api._utils import delete_crops, paginate
+from app.api._utils import delete_crops, dir_size, fmt_bytes, paginate
 from app.core import settings_cache
 from app.core import webhook as _webhook
 from app.core.auth import require_auth, require_env_id
+from app.core.paths import crops_dir, sources_dir
 from app.db import store
 
 router = APIRouter()
@@ -30,12 +31,15 @@ async def stats(
     environment_id: int = Depends(require_env_id),
 ):
     """Aggregate counts for the dashboard — single round-trip."""
+    storage_bytes = dir_size(crops_dir()) + dir_size(sources_dir())
     return {
         "people":         store.count_identities(user_id, identity_type="face", environment_id=environment_id),
         "objects":        store.count_identities(user_id, identity_type="object", environment_id=environment_id),
         "images":         store.count_source_images(user_id, environment_id),
+        "detections":     store.count_detections(user_id, environment_id),
         "pending_review": store.count_pending_review(user_id, environment_id),
         "unidentified":   store.count_unidentified(user_id, environment_id),
+        "storage":        fmt_bytes(storage_bytes),
     }
 
 

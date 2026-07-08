@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from pathlib import Path
 from typing import Any, Callable
 
 from app.core.paths import crops_dir
@@ -22,6 +23,22 @@ def delete_crops(crops: list[str]) -> int:
         except OSError:
             pass
     return removed
+
+
+def fmt_bytes(n: int) -> str:
+    """Format a byte count as a human-readable string (B / KB / MB / GB / TB)."""
+    for unit in ("B", "KB", "MB", "GB", "TB"):
+        if n < 1024 or unit == "TB":
+            return f"{n:.0f} {unit}" if unit == "B" else f"{n:.1f} {unit}"
+        n /= 1024
+    return f"{n:.1f} TB"  # unreachable but satisfies type checkers
+
+
+def dir_size(path: Path) -> int:
+    """Return total byte size of all files under path; 0 if path does not exist."""
+    if not path.exists():
+        return 0
+    return sum(f.stat().st_size for f in path.rglob("*") if f.is_file())
 
 
 def paginate(rows: list, limit: int, serialize: Callable, cursor_fn: Callable | None = None) -> dict:

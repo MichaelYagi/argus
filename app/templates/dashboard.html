@@ -20,6 +20,10 @@
     <div class="num" id="s-review">—</div><div class="lbl">Pending review</div></a>
   <a class="stat stat-link" href="/unidentified" title="View unidentified detections">
     <div class="num" id="s-unidentified">—</div><div class="lbl">Unidentified</div></a>
+  <div class="stat">
+    <div class="num" id="s-detections">—</div><div class="lbl">Total detections</div></div>
+  <div class="stat">
+    <div class="num" id="s-storage" style="font-size:1.4rem">—</div><div class="lbl">Storage used</div></div>
 </div>
 
 <div class="tab-bar">
@@ -304,11 +308,13 @@ async function refreshStats() {
   const resp = await fetch('/api/stats');
   if (!resp.ok) return;
   const d = await resp.json();
-  document.getElementById('s-faces').textContent        = d.people        ?? 0;
-  document.getElementById('s-objects').textContent      = d.objects       ?? 0;
-  document.getElementById('s-images').textContent       = d.images        ?? 0;
+  document.getElementById('s-faces').textContent        = d.people         ?? 0;
+  document.getElementById('s-objects').textContent      = d.objects        ?? 0;
+  document.getElementById('s-images').textContent       = d.images         ?? 0;
+  document.getElementById('s-detections').textContent   = d.detections     ?? 0;
   document.getElementById('s-review').textContent       = d.pending_review ?? 0;
-  document.getElementById('s-unidentified').textContent = d.unidentified  ?? 0;
+  document.getElementById('s-unidentified').textContent = d.unidentified   ?? 0;
+  document.getElementById('s-storage').textContent      = d.storage        ?? '—';
   setTabBadge('face',   d.people  ?? 0);
   setTabBadge('object', d.objects ?? 0);
 }

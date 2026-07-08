@@ -1707,6 +1707,15 @@ def count_source_images(user_id: int, environment_id: int | None = None) -> int:
         ).fetchone()[0]
 
 
+def count_detections(user_id: int, environment_id: int | None = None) -> int:
+    with _connect() as conn:
+        env_id = _resolve_env(conn, user_id, environment_id)
+        return conn.execute(
+            "SELECT COUNT(*) FROM detections WHERE user_id = ? AND environment_id = ?",
+            (user_id, env_id),
+        ).fetchone()[0]
+
+
 def count_unidentified(user_id: int, environment_id: int | None = None) -> int:
     with _connect() as conn:
         env_id = _resolve_env(conn, user_id, environment_id)
