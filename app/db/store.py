@@ -1821,6 +1821,26 @@ def confirm_detection(detection_id: int, user_id: int, environment_id: int | Non
         return changed
 
 
+def unidentify_detection(detection_id: int, user_id: int, environment_id: int | None = None) -> bool:
+    """Clear a detection's identity and return it to the unidentified queue.
+    Distinct from reject: reject keeps identity_id (wrong match, stays under that person);
+    unidentify clears it so the face can be re-labeled as someone else."""
+    with _connect() as conn:
+        env_id = _resolve_env(conn, user_id, environment_id)
+        old_id = _detach_old_reference(conn, detection_id, user_id, None)
+        conn.execute(
+            """UPDATE detections SET identity_id = NULL, review_status = NULL,
+               reviewed_at = NULL WHERE id = ? AND user_id = ? AND environment_id = ?""",
+            (detection_id, user_id, env_id),
+        )
+        changed = conn.execute("SELECT changes()").fetchone()[0] > 0
+        if changed:
+            record_change(conn, user_id, env_id, "detection", detection_id, "relabeled")
+            _purge_empty_identities(conn, user_id, env_id)
+    _recompute_representative(old_id)
+    return changed
+
+
 def reject_detection(detection_id: int, user_id: int, environment_id: int | None = None) -> bool:
     with _connect() as conn:
         env_id = _resolve_env(conn, user_id, environment_id)
