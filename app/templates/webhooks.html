@@ -60,9 +60,9 @@ if not hmac.compare_digest(sig, expected):
       </div>
     </div>
 
-    <!-- Row 2: Events + Payload shapes side by side -->
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;align-items:start">
-      <div>
+    <!-- Row 2: Events + Payload shapes side by side, stack on narrow screens -->
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,320px),1fr));gap:20px;align-items:start">
+      <div style="min-width:0">
         <div style="font-weight:600;font-size:13px;margin-bottom:10px">Events</div>
         <div style="display:grid;gap:10px">
           <div>
@@ -111,7 +111,7 @@ if not hmac.compare_digest(sig, expected):
           </div>
         </div>
       </div>
-      <div>
+      <div style="min-width:0">
         <div style="font-weight:600;font-size:13px;margin-bottom:10px">Payload shapes</div>
         <pre style="font-size:11px;background:var(--surface-raised);border:1px solid var(--border);
                     border-radius:var(--radius);padding:10px 12px;margin:0;line-height:1.5;
