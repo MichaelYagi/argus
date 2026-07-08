@@ -35,6 +35,7 @@ async def stats(
         "objects":        store.count_identities(user_id, identity_type="object", environment_id=environment_id),
         "images":         store.count_source_images(user_id, environment_id),
         "pending_review": store.count_pending_review(user_id, environment_id),
+        "unidentified":   store.count_unidentified(user_id, environment_id),
     }
 
 
