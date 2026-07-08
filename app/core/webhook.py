@@ -10,8 +10,6 @@ import threading
 import time
 from datetime import datetime, timezone
 
-import httpx
-
 from app.db import store
 
 log = logging.getLogger(__name__)
@@ -89,6 +87,7 @@ def _deliver(webhook_id: int, url: str, secret: str | None, body: bytes, event: 
 
 def _send(url: str, secret: str | None, body: bytes) -> tuple[int | None, int, str | None]:
     """POST body to url; return (status_code, duration_ms, error_string_or_None)."""
+    import httpx
     headers = {"Content-Type": "application/json"}
     if secret:
         sig = hmac.new(secret.encode(), body, hashlib.sha256).hexdigest()
