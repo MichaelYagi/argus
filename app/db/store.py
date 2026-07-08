@@ -1018,7 +1018,8 @@ def get_unknown_detections(
                  FROM detections d
                  LEFT JOIN source_images si ON si.id = d.source_image_id
                  WHERE d.user_id = ? AND d.environment_id = ? AND d.identity_id IS NULL
-                   AND d.ignored = 0"""
+                   AND d.ignored = 0
+                   AND (d.review_status IS NULL OR d.review_status != 'rejected')"""
         params: list = [user_id, env_id]
         if detection_type:
             sql += " AND d.type = ?"
