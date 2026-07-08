@@ -14,154 +14,125 @@
     <span id="wh-about-arrow" style="font-size:11px;transition:transform .15s;transform:rotate(-90deg)">▼</span>
     About webhooks
   </div>
-  <div id="wh-about-content" style="display:none;margin-top:14px;gap:20px;
-              grid-template-columns:repeat(auto-fit,minmax(280px,1fr))">
+  <div id="wh-about-content" style="display:none;margin-top:14px">
 
-    <div>
-      <div style="font-weight:600;font-size:13px;margin-bottom:6px">What they are</div>
-      <p class="muted" style="font-size:13px;margin:0;line-height:1.6">
-        When something happens in Argus — a detection completes, a job finishes — Argus sends an HTTP POST
-        to a URL you configure. Your server receives the request and can act on it immediately,
-        with no polling required.
-      </p>
-    </div>
-
-    <div>
-      <div style="font-weight:600;font-size:13px;margin-bottom:6px">When to use one</div>
-      <ul class="muted" style="font-size:13px;margin:0;padding-left:18px;line-height:1.8">
-        <li>Notify another service the moment a detection result is ready</li>
-        <li>React to async batch jobs finishing without polling <code style="font-size:11px">/api/jobs/{id}</code></li>
-        <li>Trigger a downstream pipeline — indexing, tagging, alerts</li>
-      </ul>
-    </div>
-
-    <div>
-      <div style="font-weight:600;font-size:13px;margin-bottom:6px">Events</div>
-      <div style="font-size:13px;display:grid;gap:8px">
-        <div>
-          <code style="font-size:12px;background:var(--surface-raised);padding:1px 6px;border-radius:4px">detection.created</code>
-          <span class="muted" style="font-size:12px;margin-left:6px">
-            Fired after each synchronous detect call. Data includes <code style="font-size:11px">source_image_id</code>,
-            <code style="font-size:11px">external_ref</code>, and <code style="font-size:11px">type</code>
-            (<code style="font-size:11px">face</code> / <code style="font-size:11px">object</code> / <code style="font-size:11px">all</code>).
-          </span>
-        </div>
-        <div>
-          <code style="font-size:12px;background:var(--surface-raised);padding:1px 6px;border-radius:4px">job.done</code>
-          <span class="muted" style="font-size:12px;margin-left:6px">
-            Fired when an async batch job completes or fails. Data includes <code style="font-size:11px">job_id</code>,
-            <code style="font-size:11px">status</code> (<code style="font-size:11px">complete</code> or <code style="font-size:11px">failed</code>),
-            and the full detection result on success.
-          </span>
-        </div>
-        <div>
-          <code style="font-size:12px;background:var(--surface-raised);padding:1px 6px;border-radius:4px">detection.labeled</code>
-          <span class="muted" style="font-size:12px;margin-left:6px">
-            Fired when a detection is assigned or reassigned to an identity — via the review queue
-            (confirm, reassign, bulk), the tag page, the batch label endpoint, or a retroactive scan.
-            Not fired for <code style="font-size:11px">detection.created</code> auto-confirms; those payloads
-            already carry <code style="font-size:11px">identity_id</code> and <code style="font-size:11px">label</code>.
-            Data includes <code style="font-size:11px">detection_id</code>, <code style="font-size:11px">source_image_id</code>,
-            <code style="font-size:11px">identity_id</code>, <code style="font-size:11px">label</code>,
-            and <code style="font-size:11px">type</code>.
-          </span>
-        </div>
-        <div>
-          <code style="font-size:12px;background:var(--surface-raised);padding:1px 6px;border-radius:4px">identity.merged</code>
-          <span class="muted" style="font-size:12px;margin-left:6px">
-            Fired when one identity is merged into another. The source identity is deleted after the merge.
-            Data includes <code style="font-size:11px">identity_id</code> (the deleted source),
-            <code style="font-size:11px">label</code>, <code style="font-size:11px">type</code>,
-            and <code style="font-size:11px">merged_into</code> (the surviving target identity id).
-          </span>
-        </div>
-        <div>
-          <code style="font-size:12px;background:var(--surface-raised);padding:1px 6px;border-radius:4px">identity.deleted</code>
-          <span class="muted" style="font-size:12px;margin-left:6px">
-            Fired when a single identity is permanently deleted (not fired for bulk delete-all).
-            Data includes <code style="font-size:11px">identity_id</code>, <code style="font-size:11px">label</code>,
-            and <code style="font-size:11px">type</code>.
-          </span>
-        </div>
+    <!-- Row 1: four short info panels -->
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:20px;margin-bottom:20px">
+      <div>
+        <div style="font-weight:600;font-size:13px;margin-bottom:6px">What they are</div>
+        <p class="muted" style="font-size:13px;margin:0;line-height:1.6">
+          When something happens in Argus — a detection completes, a job finishes, a face is labeled —
+          Argus sends an HTTP POST to a URL you configure. No polling required.
+        </p>
       </div>
-    </div>
-
-    <div>
-      <div style="font-weight:600;font-size:13px;margin-bottom:6px">Payload shapes</div>
-      <pre style="font-size:11px;background:var(--surface-raised);border:1px solid var(--border);
-                  border-radius:var(--radius);padding:10px 12px;margin:0;line-height:1.5;
-                  white-space:pre-wrap;word-break:break-word">// detection.created
-{
-  "event": "detection.created",
-  "timestamp": "2026-07-03T12:00:00.123456+00:00",
-  "data": {
-    "source_image_id": 42,
-    "external_ref": "photo-123",
-    "type": "face"
-  }
-}
-
-// detection.labeled
-{
-  "event": "detection.labeled",
-  "timestamp": "2026-07-03T12:01:00.000000+00:00",
-  "data": {
-    "detection_id": 17,
-    "source_image_id": 42,
-    "identity_id": 5,
-    "label": "Daisuke",
-    "type": "face"
-  }
-}
-
-// identity.merged  (source id=3 merged into id=5; id=3 deleted)
-{
-  "event": "identity.merged",
-  "timestamp": "2026-07-03T12:02:00.000000+00:00",
-  "data": {
-    "identity_id": 3,
-    "label": "Daisuke (old)",
-    "type": "face",
-    "merged_into": 5
-  }
-}
-
-// identity.deleted
-{
-  "event": "identity.deleted",
-  "timestamp": "2026-07-03T12:03:00.000000+00:00",
-  "data": {
-    "identity_id": 9,
-    "label": "Unknown person",
-    "type": "face"
-  }
-}</pre>
-    </div>
-
-    <div>
-      <div style="font-weight:600;font-size:13px;margin-bottom:6px">Signing <span class="muted" style="font-weight:400">(optional)</span></div>
-      <p class="muted" style="font-size:13px;margin:0 0 8px;line-height:1.6">
-        Set a secret and every request includes <code style="font-size:11px">X-Argus-Signature: sha256=&lt;hmac-hex&gt;</code>.
-        Verify it on your server:
-      </p>
-      <pre style="font-size:11px;background:var(--surface-raised);border:1px solid var(--border);
-                  border-radius:var(--radius);padding:10px 12px;margin:0;line-height:1.5;
-                  white-space:pre-wrap;word-break:break-word">import hashlib, hmac
+      <div>
+        <div style="font-weight:600;font-size:13px;margin-bottom:6px">When to use one</div>
+        <ul class="muted" style="font-size:13px;margin:0;padding-left:18px;line-height:1.8">
+          <li>Notify another service the moment a detection result is ready</li>
+          <li>React to async jobs finishing without polling <code style="font-size:11px">/api/jobs/{id}</code></li>
+          <li>Trigger a downstream pipeline — indexing, tagging, alerts</li>
+        </ul>
+      </div>
+      <div>
+        <div style="font-weight:600;font-size:13px;margin-bottom:6px">Signing <span class="muted" style="font-weight:400">(optional)</span></div>
+        <p class="muted" style="font-size:13px;margin:0 0 8px;line-height:1.6">
+          Set a secret and every request will include
+          <code style="font-size:11px">X-Argus-Signature: sha256=&lt;hmac-hex&gt;</code>.
+          Verify it on your server:
+        </p>
+        <pre style="font-size:11px;background:var(--surface-raised);border:1px solid var(--border);
+                    border-radius:var(--radius);padding:8px 10px;margin:0;line-height:1.5;
+                    overflow-x:auto;white-space:pre">import hashlib, hmac
 sig = request.headers["X-Argus-Signature"].removeprefix("sha256=")
 expected = hmac.new(secret.encode(), request.body, hashlib.sha256).hexdigest()
 if not hmac.compare_digest(sig, expected):
     raise ValueError("signature mismatch")</pre>
+      </div>
+      <div>
+        <div style="font-weight:600;font-size:13px;margin-bottom:6px">Setup</div>
+        <ol class="muted" style="font-size:13px;margin:0;padding-left:18px;line-height:1.8">
+          <li>Click <strong>+ Add webhook</strong> above</li>
+          <li>Enter the URL Argus will POST to</li>
+          <li>Optionally add a label and a shared secret</li>
+          <li>Check the events you want to receive</li>
+          <li>Save, then click <strong>Test</strong> to verify connectivity</li>
+        </ol>
+      </div>
     </div>
 
-    <div>
-      <div style="font-weight:600;font-size:13px;margin-bottom:6px">Setup</div>
-      <ol class="muted" style="font-size:13px;margin:0;padding-left:18px;line-height:1.8">
-        <li>Click <strong>+ Add webhook</strong> above</li>
-        <li>Enter the URL Argus will POST to</li>
-        <li>Optionally add a label and a shared secret</li>
-        <li>Check the events you want to receive</li>
-        <li>Save, then click <strong>Test</strong> to verify connectivity</li>
-      </ol>
+    <!-- Row 2: Events + Payload shapes side by side -->
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;align-items:start">
+      <div>
+        <div style="font-weight:600;font-size:13px;margin-bottom:10px">Events</div>
+        <div style="display:grid;gap:10px">
+          <div>
+            <code style="font-size:12px;background:var(--surface-raised);padding:2px 7px;border-radius:4px">detection.created</code>
+            <p class="muted" style="font-size:12px;margin:4px 0 0;line-height:1.5">
+              Fired after each synchronous detect call.
+              Payload: <code style="font-size:11px">source_image_id</code>, <code style="font-size:11px">external_ref</code>,
+              <code style="font-size:11px">type</code>.
+            </p>
+          </div>
+          <div>
+            <code style="font-size:12px;background:var(--surface-raised);padding:2px 7px;border-radius:4px">job.done</code>
+            <p class="muted" style="font-size:12px;margin:4px 0 0;line-height:1.5">
+              Fired when an async batch job completes or fails.
+              Payload: <code style="font-size:11px">job_id</code>, <code style="font-size:11px">status</code>, full result on success.
+            </p>
+          </div>
+          <div>
+            <code style="font-size:12px;background:var(--surface-raised);padding:2px 7px;border-radius:4px">detection.labeled</code>
+            <p class="muted" style="font-size:12px;margin:4px 0 0;line-height:1.5">
+              Fired when a detection is assigned or reassigned to an identity (review queue, tag page,
+              batch label, retroactive scan). Not fired for auto-confirms at detect-time —
+              <code style="font-size:11px">detection.created</code> already carries <code style="font-size:11px">identity_id</code>
+              in that case.
+              Payload: <code style="font-size:11px">detection_id</code>, <code style="font-size:11px">source_image_id</code>,
+              <code style="font-size:11px">identity_id</code>, <code style="font-size:11px">label</code>,
+              <code style="font-size:11px">type</code>.
+            </p>
+          </div>
+          <div>
+            <code style="font-size:12px;background:var(--surface-raised);padding:2px 7px;border-radius:4px">identity.merged</code>
+            <p class="muted" style="font-size:12px;margin:4px 0 0;line-height:1.5">
+              Fired when one identity is merged into another (source is deleted).
+              Payload: <code style="font-size:11px">identity_id</code> (deleted source),
+              <code style="font-size:11px">label</code>, <code style="font-size:11px">type</code>,
+              <code style="font-size:11px">merged_into</code> (surviving target id).
+            </p>
+          </div>
+          <div>
+            <code style="font-size:12px;background:var(--surface-raised);padding:2px 7px;border-radius:4px">identity.deleted</code>
+            <p class="muted" style="font-size:12px;margin:4px 0 0;line-height:1.5">
+              Fired when a single identity is permanently deleted. Not fired for bulk delete-all.
+              Payload: <code style="font-size:11px">identity_id</code>, <code style="font-size:11px">label</code>,
+              <code style="font-size:11px">type</code>.
+            </p>
+          </div>
+        </div>
+      </div>
+      <div>
+        <div style="font-weight:600;font-size:13px;margin-bottom:10px">Payload shapes</div>
+        <pre style="font-size:11px;background:var(--surface-raised);border:1px solid var(--border);
+                    border-radius:var(--radius);padding:10px 12px;margin:0;line-height:1.5;
+                    overflow-x:auto;white-space:pre">// detection.created
+{ "event": "detection.created", "timestamp": "...",
+  "data": { "source_image_id": 42, "external_ref": "photo-123", "type": "face" } }
+
+// detection.labeled
+{ "event": "detection.labeled", "timestamp": "...",
+  "data": { "detection_id": 17, "source_image_id": 42,
+            "identity_id": 5, "label": "Daisuke", "type": "face" } }
+
+// identity.merged  (source deleted, detections moved to target)
+{ "event": "identity.merged", "timestamp": "...",
+  "data": { "identity_id": 3, "label": "Daisuke (old)",
+            "type": "face", "merged_into": 5 } }
+
+// identity.deleted
+{ "event": "identity.deleted", "timestamp": "...",
+  "data": { "identity_id": 9, "label": "Unknown person", "type": "face" } }</pre>
+      </div>
     </div>
 
   </div>

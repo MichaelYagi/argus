@@ -10,7 +10,8 @@ from fastapi.responses import FileResponse
 from pydantic import BaseModel
 
 from app.api._utils import delete_crops
-from app.core import settings_cache, webhook as _webhook
+from app.core import settings_cache
+from app.core import webhook as _webhook
 from app.core.auth import require_auth, require_env_id
 from app.core.paths import crops_dir
 from app.db import store

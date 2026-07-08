@@ -6,7 +6,8 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
 
 from app.api._utils import delete_crops, paginate
-from app.core import settings_cache, webhook as _webhook
+from app.core import settings_cache
+from app.core import webhook as _webhook
 from app.core.auth import require_auth, require_env_id
 from app.db import store
 

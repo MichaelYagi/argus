@@ -10,7 +10,8 @@ from typing import Any
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request
 
 from app.api._utils import delete_crops, is_truthy
-from app.core import settings_cache, webhook as _webhook
+from app.core import settings_cache
+from app.core import webhook as _webhook
 from app.core.auth import require_auth, require_env_id
 from app.core.engine_registry import registry
 from app.core.image_input import (
