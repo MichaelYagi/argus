@@ -2280,6 +2280,13 @@ _SETTINGS_SEED: list[tuple] = [
     ("system.url_fetch_max_size_mb",
      "25",    "int",    "system",
      "URL Size Limit | Maximum image size in MB when fetching from a URL; larger images are rejected"),
+    ("system.compress_on_ingest",
+     "true",  "bool",   "system",
+     "Compress on Ingest | Re-encode source images as JPEG on save to reduce storage. "
+     "Loses original quality; crops are unaffected."),
+    ("system.ingest_jpeg_quality",
+     "85",    "int",    "system",
+     "Ingest JPEG Quality | JPEG quality (1–95) used when Compress on Ingest is enabled"),
     ("system.use_gpu",
      "true",  "bool",   "system",
      "Use GPU | Enable GPU inference when a CUDA device is available; disable to force CPU"),

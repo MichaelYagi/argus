@@ -111,7 +111,11 @@ Binds to `http://localhost:8100` by default. Pass `--host` and `--port` to overr
 python -m app --host 0.0.0.0 --port 9000
 ```
 
-Data is stored in `./data/` and model weights in `./models/` relative to the working directory.
+Data is stored in `./data/` and model weights in `./models/` relative to the working directory. To use a different data location, set `DATA_PATH`:
+
+```bash
+DATA_PATH="/Volumes/MyDrive/argus-data" python3 -m app --host 0.0.0.0 --port 8100
+```
 
 **GPU (native run):** Install `requirements.txt` and ensure NVIDIA drivers are installed. Argus auto-detects the GPU and pre-loads the required CUDA libraries at startup — no manual configuration needed for most setups. See [Troubleshooting](#troubleshooting) if GPU isn't detected.
 

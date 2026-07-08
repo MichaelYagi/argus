@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+import io
 import json
 import uuid
 from typing import Any
@@ -750,8 +751,16 @@ def _run_objects(
 def _save_source_image(
     user_id: int, environment_id: int, raw_bytes: bytes, img: Any, external_ref: str | None = None,
 ) -> tuple[str, int]:
+    if settings_cache.cache.get_or("system.compress_on_ingest", True):
+        quality = max(1, min(95, int(settings_cache.cache.get_or("system.ingest_jpeg_quality", 85))))
+        buf = io.BytesIO()
+        src = img if img.mode == "RGB" else img.convert("RGB")
+        src.save(buf, "JPEG", quality=quality)
+        raw_bytes = buf.getvalue()
+        ext = "jpg"
+    else:
+        ext = _FMT_EXT.get(img.format or "JPEG", "jpg")
     content_hash = hashlib.sha256(raw_bytes).hexdigest()
-    ext = _FMT_EXT.get(img.format or "JPEG", "jpg")
     filename = f"{content_hash}.{ext}"
     dest = sources_dir() / filename
     if not dest.exists():
