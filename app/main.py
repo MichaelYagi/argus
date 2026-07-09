@@ -57,6 +57,10 @@ async def lifespan(app: FastAPI):
 
 def _autoload_engines() -> None:
     """Re-load whichever engines were active before this process started."""
+    if os.environ.get("INFERENCE_URL", "").strip():
+        log.info("INFERENCE_URL set — skipping in-process engine load.")
+        return
+
     from app.core.paths import models_dir
     from app.inference.registry import registry
 

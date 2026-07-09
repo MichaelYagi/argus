@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+from unittest.mock import MagicMock, patch
 
 import pytest
 from fastapi.testclient import TestClient
@@ -61,4 +62,59 @@ def test_capabilities_no_model_not_available(client):
     r = client.get("/api/capabilities")
     data = r.json()
     assert data["detection"]["faces"]["available"] is False
+    assert data["detection"]["objects"]["available"] is False
+
+
+# ---------------------------------------------------------------------------
+# Sidecar mode — INFERENCE_URL set
+# ---------------------------------------------------------------------------
+
+@pytest.fixture(autouse=False)
+def inference_url_env():
+    os.environ["INFERENCE_URL"] = "http://inference:8200"
+    yield
+    os.environ.pop("INFERENCE_URL", None)
+
+
+def test_health_sidecar_mode_reflects_sidecar_response(client, inference_url_env):
+    """face/object model status comes from the sidecar when INFERENCE_URL is set."""
+    mock_resp = MagicMock()
+    mock_resp.status_code = 200
+    mock_resp.json.return_value = {
+        "status": "ok",
+        "face_model": "buffalo_l",
+        "object_model": "yolov8n",
+    }
+    with patch("httpx.get", return_value=mock_resp):
+        r = client.get("/api/health")
+    assert r.status_code == 200
+    data = r.json()
+    assert data["face_model"] == "buffalo_l"
+    assert data["object_model"] == "yolov8n"
+
+
+def test_health_sidecar_mode_unreachable_returns_none(client, inference_url_env):
+    """When the sidecar is unreachable, model status fields are None."""
+    with patch("httpx.get", side_effect=Exception("connection refused")):
+        r = client.get("/api/health")
+    assert r.status_code == 200
+    data = r.json()
+    assert data["face_model"] is None
+    assert data["object_model"] is None
+
+
+def test_capabilities_sidecar_mode_available_from_sidecar(client, inference_url_env):
+    """In sidecar mode, detection readiness reflects what the sidecar reports."""
+    mock_resp = MagicMock()
+    mock_resp.status_code = 200
+    mock_resp.json.return_value = {
+        "status": "ok",
+        "face_model": "buffalo_l",
+        "object_model": None,
+    }
+    with patch("httpx.get", return_value=mock_resp):
+        r = client.get("/api/capabilities")
+    assert r.status_code == 200
+    data = r.json()
+    assert data["detection"]["faces"]["available"] is True
     assert data["detection"]["objects"]["available"] is False

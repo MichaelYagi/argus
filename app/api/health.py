@@ -8,6 +8,7 @@ from app import __version__
 from app.core import settings_cache
 from app.db import store
 from app.inference.registry import registry
+from app.inference.runner import _inference_url
 
 
 def _cpu_name() -> str:
@@ -51,6 +52,20 @@ def _os_info() -> dict:
         return {"name": "Windows", "version": platform.version()}
     return {"name": system, "version": platform.version()}
 
+def _sidecar_model_status(url: str) -> dict:
+    """Query the inference sidecar's health endpoint; return model names or None on failure."""
+    import httpx
+
+    try:
+        resp = httpx.get(f"{url}/infer/health", timeout=2.0)
+        if resp.status_code == 200:
+            data = resp.json()
+            return {"face_model": data.get("face_model"), "object_model": data.get("object_model")}
+    except Exception:
+        pass
+    return {"face_model": None, "object_model": None}
+
+
 router = APIRouter()
 
 
@@ -67,16 +82,23 @@ async def health():
         gpu_available = None
         active_provider = None
 
-    face_row   = store.get_active_model("face")
-    object_row = store.get_active_model("object")
+    sidecar_url = _inference_url()
+    if sidecar_url:
+        model_status = _sidecar_model_status(sidecar_url)
+    else:
+        face_row   = store.get_active_model("face")
+        object_row = store.get_active_model("object")
+        model_status = {
+            "face_model":   face_row["name"]   if face_row   and registry.get_face_engine()   else None,
+            "object_model": object_row["name"] if object_row and registry.get_object_engine() else None,
+        }
 
     return {
         "status": "ok",
         "version": __version__,
         "gpu_available": gpu_available,
         "active_provider": active_provider,
-        "face_model":   face_row["name"]   if face_row   and registry.get_face_engine()   else None,
-        "object_model": object_row["name"] if object_row and registry.get_object_engine() else None,
+        **model_status,
     }
 
 
@@ -100,8 +122,14 @@ async def capabilities():
 
     face_row    = store.get_active_model("face")
     object_row  = store.get_active_model("object")
-    face_ready  = bool(face_row   and registry.get_face_engine())
-    object_ready = bool(object_row and registry.get_object_engine())
+    sidecar_url = _inference_url()
+    if sidecar_url:
+        status = _sidecar_model_status(sidecar_url)
+        face_ready   = status["face_model"] is not None
+        object_ready = status["object_model"] is not None
+    else:
+        face_ready   = bool(face_row   and registry.get_face_engine())
+        object_ready = bool(object_row and registry.get_object_engine())
 
     return {
         "version": __version__,

@@ -22,8 +22,13 @@ def engine_flags() -> dict:
     Drives nav visibility, the Detect/Test mode control, and the readiness banner —
     all rendered server-side so there's no flash. Shared by every page context."""
     from app.inference.registry import registry
-    face_active = bool(store.get_active_model("face") and registry.get_face_engine())
-    object_active = bool(store.get_active_model("object") and registry.get_object_engine())
+    from app.inference.runner import _inference_url
+    if _inference_url():
+        face_active   = bool(store.get_active_model("face"))
+        object_active = bool(store.get_active_model("object"))
+    else:
+        face_active   = bool(store.get_active_model("face")   and registry.get_face_engine())
+        object_active = bool(store.get_active_model("object") and registry.get_object_engine())
     return {"face_active": face_active, "object_active": object_active}
 
 SLIDER_RANGES = {
@@ -236,7 +241,8 @@ async def models_page(request: Request):
     # nothing-active, a deactivated model, and a model flagged active whose
     # weights are gone or failed to load on startup.
     from app.inference.registry import registry
-    ctx["obj_active"]          = registry.get_object_engine() is not None
+    from app.inference.runner import _inference_url
+    ctx["obj_active"] = bool(active_obj) if _inference_url() else registry.get_object_engine() is not None
     ctx["active_obj_world"]    = bool(active_obj_name and "world" in active_obj_name.lower())
     # Florence-2 and the RAM++ + Grounding DINO tagger are open-vocabulary and not
     # user-promptable: no COCO grid, no world vocabulary editor.

@@ -1,8 +1,9 @@
 services:
-  argus:
+  argus-inference:
     build: .
-    ports:
-      - "8100:8100"
+    command: ["python", "-m", "app.inference", "--host", "0.0.0.0"]
+    expose:
+      - "8200"
     volumes:
       - ./data:/app/data
       - ./models:/app/models
@@ -20,3 +21,19 @@ services:
     #         - driver: nvidia
     #           count: all
     #           capabilities: [gpu]
+
+  argus:
+    build: .
+    ports:
+      - "8100:8100"
+    volumes:
+      - ./data:/app/data
+      - ./models:/app/models
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      INFERENCE_URL: "http://argus-inference:8200"
+    depends_on:
+      - argus-inference
+    restart: unless-stopped

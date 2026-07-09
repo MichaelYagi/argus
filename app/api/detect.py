@@ -26,7 +26,7 @@ from app.core.image_input import (
 from app.core.paths import crops_dir, sources_dir
 from app.db import store
 from app.inference.registry import registry
-from app.inference.runner import infer_faces, infer_objects
+from app.inference.runner import _inference_url, infer_faces, infer_objects
 
 router = APIRouter()
 
@@ -341,11 +341,11 @@ def _stateless_detect(
     image_tags: list[str] | None = None
 
     if type_param in ("faces", "all"):
-        face_engine = registry.get_face_engine()
-        if face_engine is not None:
-            from app.core import face_index
+        try:
+            raw_faces, _ = infer_faces(img_array)
             face_available = True
-            for det in face_engine.detect(img_array):
+            from app.core import face_index
+            for det in raw_faces:
                 face = {
                     "bbox": {"x": det.bbox[0], "y": det.bbox[1],
                              "w": det.bbox[2], "h": det.bbox[3]},
@@ -364,15 +364,13 @@ def _stateless_detect(
                             face["label"] = ident["label"]
                             face["similarity"] = round(float(sim), 4)
                 faces.append(face)
+        except HTTPException:
+            pass  # engine unavailable — face_available stays False
 
     if type_param in ("objects", "all"):
-        object_engine = registry.get_object_engine()
-        if object_engine is not None:
+        try:
+            raw_dets, image_tags, _ = infer_objects(img_array)
             object_available = True
-            if getattr(object_engine, "has_image_tags", False):
-                image_tags, raw_dets = object_engine.detect_with_tags(img_array)
-            else:
-                raw_dets = object_engine.detect(img_array)
             for det in raw_dets:
                 objects.append({
                     "bbox": {"x": det.bbox[0], "y": det.bbox[1],
@@ -381,6 +379,8 @@ def _stateless_detect(
                     "class_name": det.class_name,
                     "class_id": det.class_id,
                 })
+        except HTTPException:
+            pass  # engine unavailable — object_available stays False
 
     result: dict = {
         "faces": faces,
@@ -552,7 +552,7 @@ def _run_bulk_job(
 
 # ---------------------------------------------------------------------------
 # Persistence phase — matching, crop saves, DB writes
-# (Inference phase lives in app/api/_infer.py — infer_faces / infer_objects)
+# (Inference phase lives in app/inference/runner.py — infer_faces / infer_objects)
 # ---------------------------------------------------------------------------
 
 async def _extract_label(request: Request) -> str | None:
@@ -792,7 +792,7 @@ def _require_face_engine() -> None:
     """Raise 503 if no active face model / engine is loaded."""
     if store.get_active_model("face") is None:
         raise HTTPException(503, "No active face model. Download and activate one via /api/models.")
-    if registry.get_face_engine() is None:
+    if not _inference_url() and registry.get_face_engine() is None:
         raise HTTPException(503, "Face engine not loaded. Activate a model via /api/models/{id}/activate.")
 
 
