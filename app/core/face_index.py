@@ -124,7 +124,7 @@ def build_for_user(model_id: int, user_id: int, environment_id: int) -> None:
 def build_all(model_id: int) -> None:
     """Rebuild index for every (user, environment) that has face data for this model."""
     if _try_import_faiss() is None:
-        log.warning("faiss disabled or unavailable — using numpy similarity search")
+        log.info("faiss disabled or unavailable — using numpy similarity search")
 
     from app.db import store
     pairs = store.list_user_env_pairs_for_model(model_id)
