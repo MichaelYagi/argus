@@ -11,8 +11,8 @@ from typing import Any
 
 from fastapi import HTTPException
 
-from app.core.engine_registry import registry
 from app.db import store
+from app.inference.registry import registry
 
 
 def infer_faces(img_array: Any) -> tuple[list[Any], Any]:

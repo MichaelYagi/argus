@@ -7,9 +7,9 @@ import sys
 from unittest.mock import MagicMock, patch
 
 from app.core import settings_cache
-from app.core.device import torch_device
-from app.core.florence_engine import TASK, FlorenceEngine
-from app.core.object_engine import ObjectDetection
+from app.inference.device import torch_device
+from app.inference.florence_engine import TASK, FlorenceEngine
+from app.inference.object_engine import ObjectDetection
 
 
 def _make_engine(parsed: dict) -> FlorenceEngine:

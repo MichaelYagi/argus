@@ -57,13 +57,13 @@ async def lifespan(app: FastAPI):
 
 def _autoload_engines() -> None:
     """Re-load whichever engines were active before this process started."""
-    from app.core.engine_registry import registry
     from app.core.paths import models_dir
+    from app.inference.registry import registry
 
     face_row = store.get_active_model("face")
     if face_row and face_row["is_downloaded"]:
         try:
-            from app.core.face_engine import FaceEngine
+            from app.inference.face_engine import FaceEngine
             registry.swap_face_engine(FaceEngine(face_row["name"], models_dir()))
             log.info("Loaded face model: %s", face_row["name"])
             from app.core import face_index
@@ -76,13 +76,13 @@ def _autoload_engines() -> None:
         try:
             name = obj_row["name"]
             if name.lower() == "ram-plus-plus-grounding-dino":
-                from app.core.tagger_engine import TaggerEngine
+                from app.inference.tagger_engine import TaggerEngine
                 registry.swap_object_engine(TaggerEngine(models_dir()))
             elif name.lower().startswith("florence"):
-                from app.core.florence_engine import FlorenceEngine
+                from app.inference.florence_engine import FlorenceEngine
                 registry.swap_object_engine(FlorenceEngine(models_dir()))
             else:
-                from app.core.object_engine import ObjectEngine
+                from app.inference.object_engine import ObjectEngine
                 path = models_dir() / f"{name}.pt"
                 registry.swap_object_engine(ObjectEngine(name, path))
             log.info("Loaded object model: %s", obj_row["name"])

@@ -9,9 +9,9 @@ import pytest
 from fastapi.testclient import TestClient
 
 from app.api import models as models_module
-from app.core.engine_registry import registry
 from app.core.security import generate_api_key, hash_api_key
 from app.db import store
+from app.inference.registry import registry
 from app.main import app
 
 

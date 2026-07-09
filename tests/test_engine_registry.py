@@ -1,7 +1,7 @@
 import threading
 import time
 
-from app.core.engine_registry import EngineRegistry
+from app.inference.registry import EngineRegistry
 
 
 class _FakeEngine:

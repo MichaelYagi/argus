@@ -26,8 +26,8 @@ from pathlib import Path
 from typing import Any
 
 from app.core import settings_cache
-from app.core.device import torch_device
-from app.core.object_engine import ObjectDetection
+from app.inference.device import torch_device
+from app.inference.object_engine import ObjectDetection
 
 # Hub repo and the on-disk directory name under models_dir().
 REPO_ID = "florence-community/Florence-2-base"

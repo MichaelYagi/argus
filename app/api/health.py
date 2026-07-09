@@ -6,8 +6,8 @@ from fastapi import APIRouter
 
 from app import __version__
 from app.core import settings_cache
-from app.core.engine_registry import registry
 from app.db import store
+from app.inference.registry import registry
 
 
 def _cpu_name() -> str:

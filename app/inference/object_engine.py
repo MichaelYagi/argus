@@ -7,7 +7,7 @@ from pathlib import Path
 from typing import Any
 
 from app.core import settings_cache
-from app.core.device import torch_device
+from app.inference.device import torch_device
 
 
 @dataclass

@@ -25,8 +25,8 @@ import io
 from pathlib import Path
 from typing import Any
 
-from app.core.device import torch_device
-from app.core.object_engine import ObjectDetection
+from app.inference.device import torch_device
+from app.inference.object_engine import ObjectDetection
 
 DIR_NAME = "ram-plus-plus-grounding-dino"
 RAM_REPO_ID = "xinyu1205/recognize-anything-plus-model"

@@ -8,10 +8,10 @@ from unittest.mock import MagicMock, patch
 import pytest
 from fastapi.testclient import TestClient
 
-from app.core.engine_registry import registry
-from app.core.face_engine import FaceDetection
 from app.core.security import generate_api_key, hash_api_key
 from app.db import store
+from app.inference.face_engine import FaceDetection
+from app.inference.registry import registry
 from app.main import app
 
 
@@ -90,6 +90,7 @@ def test_enroll_new_no_face_returns_400(client):
 
     with patch("app.api.enroll.open_and_validate", return_value=img), \
          patch("app.api.enroll.to_rgb_array", return_value=MagicMock()), \
+         patch("app.db.store.get_active_model", return_value={"id": 1, "name": "buffalo_l"}), \
          patch.object(registry, "get_face_engine", return_value=engine):
         r = client.post(
             "/api/faces/enroll",

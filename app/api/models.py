@@ -10,9 +10,9 @@ from typing import Any
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query
 
 from app.core.auth import require_admin
-from app.core.engine_registry import registry
 from app.core.paths import models_dir
 from app.db import store
+from app.inference.registry import registry
 
 router = APIRouter()
 
@@ -161,15 +161,15 @@ def _is_tagger(model_name: str) -> bool:
 def _load_engine(model_type: str, model_name: str) -> Any:
     """Load (and if necessary download) an engine. Slow for large models."""
     if model_type == "face":
-        from app.core.face_engine import FaceEngine
+        from app.inference.face_engine import FaceEngine
         return FaceEngine(model_name, models_dir())
     if _is_tagger(model_name):
-        from app.core.tagger_engine import TaggerEngine
+        from app.inference.tagger_engine import TaggerEngine
         return TaggerEngine(models_dir())
     if _is_florence(model_name):
-        from app.core.florence_engine import FlorenceEngine
+        from app.inference.florence_engine import FlorenceEngine
         return FlorenceEngine(models_dir())
-    from app.core.object_engine import ObjectEngine
+    from app.inference.object_engine import ObjectEngine
     return ObjectEngine(model_name, models_dir() / f"{model_name}.pt")
 
 
@@ -179,12 +179,12 @@ def _delete_files(model_type: str, model_name: str) -> None:
         if path.exists():
             shutil.rmtree(path)
     elif _is_tagger(model_name):
-        from app.core.tagger_engine import DIR_NAME
+        from app.inference.tagger_engine import DIR_NAME
         path = models_dir() / DIR_NAME
         if path.exists():
             shutil.rmtree(path)
     elif _is_florence(model_name):
-        from app.core.florence_engine import DIR_NAME
+        from app.inference.florence_engine import DIR_NAME
         path = models_dir() / DIR_NAME
         if path.exists():
             shutil.rmtree(path)

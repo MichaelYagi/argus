@@ -10,12 +10,10 @@ from typing import Any
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request
 
-from app.api._infer import infer_faces, infer_objects
 from app.api._utils import delete_crops, is_truthy
 from app.core import settings_cache
 from app.core import webhook as _webhook
 from app.core.auth import require_auth, require_env_id
-from app.core.engine_registry import registry
 from app.core.image_input import (
     acquire_image,
     acquire_image_slot,
@@ -27,6 +25,8 @@ from app.core.image_input import (
 )
 from app.core.paths import crops_dir, sources_dir
 from app.db import store
+from app.inference.registry import registry
+from app.inference.runner import infer_faces, infer_objects
 
 router = APIRouter()
 

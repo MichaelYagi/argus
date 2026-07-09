@@ -8,11 +8,11 @@ from unittest.mock import MagicMock, patch
 import pytest
 from fastapi.testclient import TestClient
 
-from app.core.engine_registry import registry
-from app.core.face_engine import FaceDetection
-from app.core.object_engine import ObjectDetection
 from app.core.security import generate_api_key, hash_api_key
 from app.db import store
+from app.inference.face_engine import FaceDetection
+from app.inference.object_engine import ObjectDetection
+from app.inference.registry import registry
 from app.main import app
 
 FAKE_FILE = ("test.jpg", b"fake-image-bytes", "image/jpeg")

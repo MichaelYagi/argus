@@ -7,12 +7,12 @@ from typing import Any
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request
 from fastapi.responses import FileResponse
 
-from app.api._infer import infer_faces
 from app.core import settings_cache
 from app.core.auth import require_auth, require_env_id
 from app.core.image_input import acquire_image, open_and_validate, read_body_field, to_rgb_array
 from app.core.paths import crops_dir
 from app.db import store
+from app.inference.runner import infer_faces
 
 router = APIRouter()
 

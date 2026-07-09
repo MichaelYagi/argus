@@ -4,8 +4,8 @@ from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 from app.core import settings_cache
-from app.core.device import torch_device
-from app.core.object_engine import ObjectDetection, ObjectEngine
+from app.inference.device import torch_device
+from app.inference.object_engine import ObjectDetection, ObjectEngine
 
 
 def _fake_box(x1: float, y1: float, x2: float, y2: float, conf: float, cls_id: int) -> MagicMock:

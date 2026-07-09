@@ -4,7 +4,7 @@ from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 from app.core import settings_cache
-from app.core.face_engine import FaceDetection, FaceEngine, _face_ctx_id
+from app.inference.face_engine import FaceDetection, FaceEngine, _face_ctx_id
 
 
 def _fake_face(x1: float, y1: float, x2: float, y2: float, score: float = 0.95) -> MagicMock:
