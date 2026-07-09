@@ -401,7 +401,7 @@ async function openExportModal() {
         document.querySelectorAll('.export-cb').forEach(c => c.checked = this.checked)">
       <strong>Select all</strong>
     </label>
-    <div style="max-height:260px;overflow-y:auto;border:1px solid var(--border);
+    <div style="max-height:260px;overflow-y:auto;overscroll-behavior:contain;border:1px solid var(--border);
                 border-radius:var(--radius);padding:10px">
       ${group('People', faces)}${group('Objects', objects)}
     </div>`;
