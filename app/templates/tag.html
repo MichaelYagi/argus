@@ -38,7 +38,7 @@
     <div style="display:flex;gap:8px">
       <button id="reprocess-save-btn" class="btn btn-primary">Run</button>
       <button class="btn btn-ghost"
-              onclick="document.getElementById('reprocess-overlay').style.display='none'">Cancel</button>
+              onclick="closeReprocessOverlay()">Cancel</button>
     </div>
     <p id="reprocess-error" style="color:#e53e3e;font-size:12px;margin-top:8px;display:none"></p>
   </div>
@@ -202,15 +202,21 @@ function labelBox(div, tip, chip) {
 function setStatus(msg) { document.getElementById('tag-status').textContent = msg; }
 
 // Reprocess
+function closeReprocessOverlay() {
+  unlockScroll();
+  document.getElementById('reprocess-overlay').style.display = 'none';
+}
 document.getElementById('reprocess-btn').addEventListener('click', () => {
   document.getElementById('reprocess-error').style.display = 'none';
+  lockScroll();
   document.getElementById('reprocess-overlay').style.display = 'flex';
 });
 document.getElementById('reprocess-overlay').addEventListener('click', function(e) {
-  if (e.target === this) this.style.display = 'none';
+  if (e.target === this) closeReprocessOverlay();
 });
 document.addEventListener('keydown', e => {
-  if (e.key === 'Escape') document.getElementById('reprocess-overlay').style.display = 'none';
+  const overlay = document.getElementById('reprocess-overlay');
+  if (e.key === 'Escape' && overlay.style.display === 'flex') closeReprocessOverlay();
 });
 document.getElementById('reprocess-save-btn').addEventListener('click', async () => {
   const type    = document.getElementById('reprocess-type').value;

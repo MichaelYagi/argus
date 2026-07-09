@@ -321,11 +321,12 @@
   // ---- Open / close ----
 
   function open() {
+    lockScroll();
     modal.style.display = 'flex';
     if (activeTab === 'activity') loadActivity(); else { syncLevelButtons(); load(); }
   }
 
-  function close() { modal.style.display = 'none'; }
+  function close() { unlockScroll(); modal.style.display = 'none'; }
 
   // ---- Copy ----
 

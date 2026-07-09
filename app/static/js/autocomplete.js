@@ -128,10 +128,23 @@
   // onConfirm(label) called with the typed/selected value (blank = reject/clear).
   // ---------------------------------------------------------------------------
   // ---------------------------------------------------------------------------
+  // lockScroll / unlockScroll — prevent the page from scrolling while a modal
+  // is open. Reference-counted so nested modals work correctly.
+  // ---------------------------------------------------------------------------
+  let _scrollLockCount = 0;
+  window.lockScroll = () => {
+    if (++_scrollLockCount === 1) document.body.classList.add('modal-open');
+  };
+  window.unlockScroll = () => {
+    if (--_scrollLockCount <= 0) { _scrollLockCount = 0; document.body.classList.remove('modal-open'); }
+  };
+
+  // ---------------------------------------------------------------------------
   // showConfirm — custom confirm modal (replaces browser confirm())
   // ---------------------------------------------------------------------------
   window.showConfirm = (message, onConfirm, { confirmText = 'Confirm', danger = false } = {}) => {
     document.querySelectorAll('.modal-overlay').forEach(m => m.remove());
+    lockScroll();
 
     const overlay = document.createElement('div');
     overlay.className = 'modal-overlay';
@@ -172,7 +185,7 @@
     document.body.appendChild(overlay);
     confirmBtn.focus();
 
-    const close = () => overlay.remove();
+    const close = () => { unlockScroll(); overlay.remove(); };
     cancelBtn.addEventListener('click', close);
     overlay.addEventListener('click', e => { if (e.target === overlay) close(); });
     confirmBtn.addEventListener('click', () => { close(); onConfirm(); });
@@ -189,6 +202,7 @@
   // ---------------------------------------------------------------------------
   window.showMessage = (message, { buttonText = 'OK', onClose = null } = {}) => {
     document.querySelectorAll('.modal-overlay').forEach(m => m.remove());
+    lockScroll();
 
     const overlay = document.createElement('div');
     overlay.className = 'modal-overlay';
@@ -224,7 +238,7 @@
     document.body.appendChild(overlay);
     okBtn.focus();
 
-    const close = () => { overlay.remove(); onClose?.(); };
+    const close = () => { unlockScroll(); overlay.remove(); onClose?.(); };
     okBtn.addEventListener('click', close);
     overlay.addEventListener('click', e => { if (e.target === overlay) close(); });
     document.addEventListener('keydown', function onKey(e) {

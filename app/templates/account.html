@@ -146,7 +146,7 @@
     <div style="display:flex;gap:8px;margin-top:16px">
       <button id="key-rename-save" class="btn btn-primary">Save</button>
       <button class="btn btn-ghost"
-              onclick="document.getElementById('key-rename-overlay').style.display='none'">Cancel</button>
+              onclick="closeKeyRenameOverlay()">Cancel</button>
     </div>
     <p id="key-rename-error" style="color:#e53e3e;font-size:12px;margin-top:8px;display:none"></p>
   </div>
@@ -442,9 +442,10 @@ async function openExportModal() {
   actions.appendChild(cancelBtn);
   actions.appendChild(downloadBtn);
   popup.appendChild(actions);
+  lockScroll();
   document.body.appendChild(popup);
 
-  const close = () => { popup.remove(); backdrop.remove(); };
+  const close = () => { unlockScroll(); popup.remove(); backdrop.remove(); };
   cancelBtn.addEventListener('click', close);
   backdrop.addEventListener('click', close);
 
@@ -526,19 +527,24 @@ async function doImport() {
 }
 
 let _renameKeyId = null;
+function closeKeyRenameOverlay() {
+  unlockScroll();
+  document.getElementById('key-rename-overlay').style.display = 'none';
+}
 function openKeyRename(id, currentLabel) {
   _renameKeyId = id;
   document.getElementById('key-rename-input').value = currentLabel;
   document.getElementById('key-rename-error').style.display = 'none';
-  const overlay = document.getElementById('key-rename-overlay');
-  overlay.style.display = 'flex';
+  lockScroll();
+  document.getElementById('key-rename-overlay').style.display = 'flex';
   document.getElementById('key-rename-input').select();
 }
 document.getElementById('key-rename-overlay').addEventListener('click', function(e) {
-  if (e.target === this) this.style.display = 'none';
+  if (e.target === this) closeKeyRenameOverlay();
 });
 document.addEventListener('keydown', e => {
-  if (e.key === 'Escape') document.getElementById('key-rename-overlay').style.display = 'none';
+  const overlay = document.getElementById('key-rename-overlay');
+  if (e.key === 'Escape' && overlay.style.display === 'flex') closeKeyRenameOverlay();
 });
 document.getElementById('key-rename-save').addEventListener('click', async () => {
   const label = document.getElementById('key-rename-input').value.trim();

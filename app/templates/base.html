@@ -208,8 +208,8 @@ document.addEventListener('DOMContentLoaded', function() {
 
   const envModal = document.getElementById('env-modal');
   if (envModal) {
-    const openEnv  = () => { envModal.style.display = 'flex'; };
-    const closeEnv = () => { envModal.style.display = 'none'; };
+    const openEnv  = () => { lockScroll(); envModal.style.display = 'flex'; };
+    const closeEnv = () => { unlockScroll(); envModal.style.display = 'none'; };
     const activeId = parseInt(envModal.dataset.envId, 10);
     document.querySelectorAll('.env-manage-btn').forEach(b =>
       b.addEventListener('click', e => { e.stopPropagation(); openEnv(); }));
@@ -747,8 +747,8 @@ SOFTWARE.</pre>
 (() => {
   const m = document.getElementById('about-modal');
   if (!m) return;
-  window.openAbout = () => { m.style.display = 'flex'; };
-  const close = () => { m.style.display = 'none'; };
+  window.openAbout = () => { lockScroll(); m.style.display = 'flex'; };
+  const close = () => { unlockScroll(); m.style.display = 'none'; };
   m.querySelectorAll('.about-modal-close').forEach(b => b.addEventListener('click', close));
   m.addEventListener('click', e => { if (e.target === m) close(); });
   document.addEventListener('keydown', e => {

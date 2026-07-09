@@ -40,7 +40,7 @@
     <div style="display:flex;gap:8px;margin-top:4px">
       <button id="merge-save-btn" class="btn btn-danger" disabled>Merge</button>
       <button class="btn btn-ghost"
-              onclick="document.getElementById('merge-overlay').style.display='none'">Cancel</button>
+              onclick="closeMergeOverlay()">Cancel</button>
     </div>
     <p id="merge-error" style="color:#e53e3e;font-size:12px;margin-top:8px;display:none"></p>
   </div>
@@ -60,7 +60,7 @@
     <div style="display:flex;gap:8px;margin-top:16px">
       <button id="rename-save-btn" class="btn btn-primary">Save</button>
       <button class="btn btn-ghost"
-              onclick="document.getElementById('rename-overlay').style.display='none'">Cancel</button>
+              onclick="closeRenameOverlay()">Cancel</button>
     </div>
     <p id="rename-error" style="color:#e53e3e;font-size:12px;margin-top:8px;display:none"></p>
   </div>
@@ -91,16 +91,21 @@
 {% block scripts %}
 <script src="/static/js/gallery.js"></script>
 <script>
+function closeRenameOverlay() {
+  unlockScroll();
+  document.getElementById('rename-overlay').style.display = 'none';
+}
 document.getElementById('rename-identity-btn').addEventListener('click', () => {
-  const overlay = document.getElementById('rename-overlay');
-  overlay.style.display = 'flex';
+  lockScroll();
+  document.getElementById('rename-overlay').style.display = 'flex';
   document.getElementById('rename-input').select();
 });
 document.getElementById('rename-overlay').addEventListener('click', function(e) {
-  if (e.target === this) this.style.display = 'none';
+  if (e.target === this) closeRenameOverlay();
 });
 document.addEventListener('keydown', e => {
-  if (e.key === 'Escape') document.getElementById('rename-overlay').style.display = 'none';
+  const overlay = document.getElementById('rename-overlay');
+  if (e.key === 'Escape' && overlay.style.display === 'flex') closeRenameOverlay();
 });
 document.getElementById('rename-save-btn').addEventListener('click', async () => {
   const label = document.getElementById('rename-input').value.trim();
@@ -115,7 +120,7 @@ document.getElementById('rename-save-btn').addEventListener('click', async () =>
   if (resp.ok) {
     document.querySelector('.page-header h1').textContent = label;
     document.title = label + ' — Argus';
-    document.getElementById('rename-overlay').style.display = 'none';
+    closeRenameOverlay();
   } else {
     const data = await resp.json().catch(() => ({}));
     err.textContent = data.detail || 'Rename failed';
@@ -133,6 +138,9 @@ document.getElementById('rename-save-btn').addEventListener('click', async () =>
   const saveBtn   = document.getElementById('merge-save-btn');
   const errEl     = document.getElementById('merge-error');
 
+  function closeMergeOverlay() { unlockScroll(); overlay.style.display = 'none'; }
+  window.closeMergeOverlay = closeMergeOverlay;
+
   document.getElementById('merge-identity-btn').addEventListener('click', () => {
     targetId.value = '';
     searchEl.value = '';
@@ -140,12 +148,13 @@ document.getElementById('rename-save-btn').addEventListener('click', async () =>
     saveBtn.disabled = true;
     errEl.style.display = 'none';
     drop.style.display = 'none';
+    lockScroll();
     overlay.style.display = 'flex';
     searchEl.focus();
   });
-  overlay.addEventListener('click', e => { if (e.target === overlay) overlay.style.display = 'none'; });
+  overlay.addEventListener('click', e => { if (e.target === overlay) closeMergeOverlay(); });
   document.addEventListener('keydown', e => {
-    if (e.key === 'Escape' && overlay.style.display === 'flex') overlay.style.display = 'none';
+    if (e.key === 'Escape' && overlay.style.display === 'flex') closeMergeOverlay();
   });
 
   let timer;

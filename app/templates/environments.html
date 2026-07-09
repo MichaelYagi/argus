@@ -72,7 +72,7 @@
       <div style="display:flex;gap:8px;margin-top:16px">
         <button type="submit" class="btn btn-primary">Save</button>
         <button type="button" class="btn btn-ghost"
-                onclick="document.getElementById('rename-overlay').style.display='none'">Cancel</button>
+                onclick="closeRenameOverlay()">Cancel</button>
       </div>
     </form>
   </div>
@@ -81,21 +81,27 @@
 
 {% block scripts %}
 <script>
+function closeRenameOverlay() {
+  unlockScroll();
+  document.getElementById('rename-overlay').style.display = 'none';
+}
 function startRename(envId, currentName) {
   const overlay = document.getElementById('rename-overlay');
   const form    = document.getElementById('rename-form');
   const input   = document.getElementById('rename-input');
   form.action   = '/environments/' + envId + '/rename';
   input.value   = currentName;
+  lockScroll();
   overlay.style.display = 'flex';
   input.focus();
   input.select();
 }
 document.getElementById('rename-overlay').addEventListener('click', function(e) {
-  if (e.target === this) this.style.display = 'none';
+  if (e.target === this) closeRenameOverlay();
 });
 document.addEventListener('keydown', function(e) {
-  if (e.key === 'Escape') document.getElementById('rename-overlay').style.display = 'none';
+  const overlay = document.getElementById('rename-overlay');
+  if (e.key === 'Escape' && overlay.style.display === 'flex') closeRenameOverlay();
 });
 </script>
 {% endblock %}

@@ -239,6 +239,7 @@ if not hmac.compare_digest(sig, expected):
 
   // ── Modal ────────────────────────────────────────────────────────────────
   function openModal(wh) {
+    lockScroll();
     editId = wh ? wh.id : null;
     document.getElementById('modal-title').textContent = wh ? 'Edit webhook' : 'Add webhook';
     document.getElementById('wh-url').value   = wh ? wh.url   : '';
@@ -253,6 +254,7 @@ if not hmac.compare_digest(sig, expected):
   }
 
   function closeModal() {
+    unlockScroll();
     document.getElementById('wh-modal').style.display = 'none';
     editId = null;
   }
