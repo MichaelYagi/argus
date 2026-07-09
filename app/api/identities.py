@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+import asyncio
+import time as _time
+
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
 
@@ -24,9 +27,6 @@ class _CreateBody(BaseModel):
 # ---------------------------------------------------------------------------
 # Identity CRUD
 # ---------------------------------------------------------------------------
-
-import asyncio
-import time as _time
 
 _storage_cache: tuple[float, str] | None = None
 _STORAGE_TTL = 300  # seconds

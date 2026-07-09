@@ -118,13 +118,49 @@ if _nvidia_lib_dirs:
 
 import uvicorn  # noqa: E402
 
+_LOG_CONFIG = {
+    "version": 1,
+    "disable_existing_loggers": False,
+    "formatters": {
+        "default": {
+            "()": "uvicorn.logging.DefaultFormatter",
+            "fmt": "%(asctime)s %(levelprefix)s %(message)s",
+            "datefmt": "%Y-%m-%d %H:%M:%S",
+            "use_colors": None,
+        },
+        "access": {
+            "()": "uvicorn.logging.AccessFormatter",
+            "fmt": '%(asctime)s %(levelprefix)s %(client_addr)s - "%(request_line)s" %(status_code)s',
+            "datefmt": "%Y-%m-%d %H:%M:%S",
+            "use_colors": None,
+        },
+    },
+    "handlers": {
+        "default": {
+            "formatter": "default",
+            "class": "logging.StreamHandler",
+            "stream": "ext://sys.stderr",
+        },
+        "access": {
+            "formatter": "access",
+            "class": "logging.StreamHandler",
+            "stream": "ext://sys.stdout",
+        },
+    },
+    "loggers": {
+        "uvicorn":        {"handlers": ["default"], "level": "INFO", "propagate": False},
+        "uvicorn.error":  {"handlers": ["default"], "level": "INFO", "propagate": False},
+        "uvicorn.access": {"handlers": ["access"],  "level": "INFO", "propagate": False},
+    },
+}
+
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="Argus face & object recognition server")
     parser.add_argument("--host", default="127.0.0.1")
     parser.add_argument("--port", type=int, default=8100)
     args = parser.parse_args()
-    uvicorn.run("app.main:app", host=args.host, port=args.port)
+    uvicorn.run("app.main:app", host=args.host, port=args.port, log_config=_LOG_CONFIG)
 
 
 if __name__ == "__main__":
