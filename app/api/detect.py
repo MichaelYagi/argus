@@ -552,7 +552,43 @@ def _run_bulk_job(
 
 
 # ---------------------------------------------------------------------------
-# Detection pipelines
+# Inference phase — engine calls only, no DB, no file I/O
+#
+# These are the future service boundary: everything above the return belongs
+# in an inference container; everything in _run_faces/_run_objects below is
+# persistence (DB writes, crop saves, matching) that stays in Core.
+# ---------------------------------------------------------------------------
+
+def _infer_faces(img_array: Any) -> tuple[list[Any], Any]:
+    """Run the face engine on img_array. Returns (raw_detections, model_row).
+    Raises 503 if no active model or engine is loaded."""
+    model_row = store.get_active_model("face")
+    if model_row is None:
+        raise HTTPException(503, "No active face model. Download and activate one via /api/models.")
+    engine = registry.get_face_engine()
+    if engine is None:
+        raise HTTPException(503, "Face engine not loaded. Activate a model via /api/models/{id}/activate.")
+    return engine.detect(img_array), model_row
+
+
+def _infer_objects(img_array: Any) -> tuple[list[Any], list[str] | None, Any]:
+    """Run the object engine on img_array. Returns (raw_detections, image_tags, model_row).
+    image_tags is None for non-tagger engines. Raises 503 if no active model or engine."""
+    model_row = store.get_active_model("object")
+    if model_row is None:
+        raise HTTPException(503, "No active object model. Download and activate one via /api/models.")
+    engine = registry.get_object_engine()
+    if engine is None:
+        raise HTTPException(503, "Object engine not loaded. Activate a model via /api/models/{id}/activate.")
+    if getattr(engine, "has_image_tags", False):
+        image_tags, raw_dets = engine.detect_with_tags(img_array)
+    else:
+        image_tags, raw_dets = None, engine.detect(img_array)
+    return raw_dets, image_tags, model_row
+
+
+# ---------------------------------------------------------------------------
+# Persistence phase — matching, crop saves, DB writes
 # ---------------------------------------------------------------------------
 
 async def _extract_label(request: Request) -> str | None:
@@ -597,22 +633,16 @@ def _clear_detections(user_id: int, environment_id: int, source_id: int, det_typ
 
 
 def _run_faces(user_id: int, environment_id: int, img: Any, source_id: int, label: str | None = None) -> list[dict]:
-    model_row = store.get_active_model("face")
-    if model_row is None:
-        raise HTTPException(503, "No active face model. Download and activate one via /api/models.")
+    # Inference phase
+    img_array = to_rgb_array(img)
+    detections, model_row = _infer_faces(img_array)
 
-    engine = registry.get_face_engine()
-    if engine is None:
-        raise HTTPException(503, "Face engine not loaded. Activate a model via /api/models/{id}/activate.")
-
+    # Persistence phase
     threshold = settings_cache.cache.get_or("face.match_threshold", 0.5)
     auto_confirm_on = settings_cache.cache.get_or("face.auto_confirm", True)
     auto_confirm = settings_cache.cache.get_or("face.auto_confirm_threshold", 0.80)
     padding = settings_cache.cache.get_or("system.crop_padding", 0.2)
     save_unknown = settings_cache.cache.get_or("system.save_unknown_detections", True)
-
-    img_array = to_rgb_array(img)
-    detections = engine.detect(img_array)
 
     # When a label is provided, only the highest-confidence detection gets that
     # identity confirmed. All other faces are treated as unidentified and go to
@@ -692,25 +722,15 @@ def _run_objects(
     image_tags is a list of keyword strings when the active engine is a tagger
     (RAM++ + Grounding DINO); None for all other engines.
     """
-    model_row = store.get_active_model("object")
-    if model_row is None:
-        raise HTTPException(503, "No active object model. Download and activate one via /api/models.")
+    # Inference phase
+    img_array = to_rgb_array(img)
+    raw_dets, image_tags, model_row = _infer_objects(img_array)
 
-    engine = registry.get_object_engine()
-    if engine is None:
-        raise HTTPException(503, "Object engine not loaded. Activate a model via /api/models/{id}/activate.")
+    # Persistence phase
+    if image_tags:
+        store.set_source_image_tags(source_id, json.dumps(image_tags))
 
     padding = settings_cache.cache.get_or("system.crop_padding", 0.2)
-    img_array = to_rgb_array(img)
-
-    image_tags: list[str] | None = None
-    if getattr(engine, "has_image_tags", False):
-        image_tags, raw_dets = engine.detect_with_tags(img_array)
-        if image_tags:
-            store.set_source_image_tags(source_id, json.dumps(image_tags))
-    else:
-        raw_dets = engine.detect(img_array)
-
     results = []
     for det in raw_dets:
         identity_id = store.get_or_create_identity(user_id, "object", det.class_name, environment_id)
