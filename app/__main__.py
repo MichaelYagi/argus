@@ -151,6 +151,7 @@ _LOG_CONFIG = {
         "uvicorn":        {"handlers": ["default"], "level": "INFO", "propagate": False},
         "uvicorn.error":  {"handlers": ["default"], "level": "INFO", "propagate": False},
         "uvicorn.access": {"handlers": ["access"],  "level": "INFO", "propagate": False},
+        "app":            {"handlers": ["default"], "level": "INFO", "propagate": False},
     },
 }
 
