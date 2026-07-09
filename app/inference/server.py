@@ -6,7 +6,7 @@ Endpoints:
   POST /infer/objects         — detect objects in an image
 
 Request body (both POST endpoints):
-  { "image_b64": "<base64-encoded raw image bytes>" }
+  { "array_b64": "<base64 of img_array.tobytes()>", "array_shape": [H, W, 3] }
 
 Embeddings in face responses are base64-encoded little-endian float32 arrays
 with a companion "embedding_shape" field so the caller can reconstruct them:
@@ -26,7 +26,6 @@ comes in a later phase when the full sidecar split is in place.
 from __future__ import annotations
 
 import base64
-import io
 import logging
 from contextlib import asynccontextmanager
 from typing import Any
@@ -91,17 +90,16 @@ app = FastAPI(title="Argus Inference", lifespan=lifespan, docs_url=None)
 # ---------------------------------------------------------------------------
 
 class InferRequest(BaseModel):
-    image_b64: str
+    array_b64: str        # base64 of img_array.tobytes() (uint8 RGB)
+    array_shape: list[int]  # [H, W, 3]
 
 
-def _b64_to_rgb_array(b64: str) -> Any:
-    """Decode base64 image bytes to an RGB numpy array."""
+def _b64_to_array(array_b64: str, array_shape: list[int]) -> Any:
+    """Reconstruct a numpy uint8 RGB array from its serialized form."""
     import numpy as np
-    from PIL import Image
 
-    raw = base64.b64decode(b64)
-    img = Image.open(io.BytesIO(raw)).convert("RGB")
-    return np.array(img)
+    data = base64.b64decode(array_b64)
+    return np.frombuffer(data, dtype="uint8").reshape(array_shape)
 
 
 def _face_to_dict(face: Any) -> dict:
@@ -159,7 +157,7 @@ async def infer_faces(body: InferRequest):
     engine = registry.get_face_engine()
     if engine is None:
         raise HTTPException(503, "Face engine not loaded.")
-    img_array = _b64_to_rgb_array(body.image_b64)
+    img_array = _b64_to_array(body.array_b64, body.array_shape)
     faces = engine.detect(img_array)
     return {
         "model_id":   model_row["id"],
@@ -176,7 +174,7 @@ async def infer_objects(body: InferRequest):
     engine = registry.get_object_engine()
     if engine is None:
         raise HTTPException(503, "Object engine not loaded.")
-    img_array = _b64_to_rgb_array(body.image_b64)
+    img_array = _b64_to_array(body.array_b64, body.array_shape)
     if getattr(engine, "has_image_tags", False):
         image_tags, raw_dets = engine.detect_with_tags(img_array)
     else:

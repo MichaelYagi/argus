@@ -13,6 +13,8 @@ from app.db import store
 from app.inference.registry import registry
 from app.inference.server import app
 
+_ARRAY_PAYLOAD = {"array_b64": base64.b64encode(b"\x00" * 12).decode(), "array_shape": [1, 1, 3]}
+
 
 @pytest.fixture()
 def client(tmp_path):
@@ -53,14 +55,14 @@ def test_health_reflects_loaded_engine(client):
 # ---------------------------------------------------------------------------
 
 def test_infer_faces_no_active_model_returns_503(client):
-    r = client.post("/infer/faces", json={"image_b64": "AAAA"})
+    r = client.post("/infer/faces", json=_ARRAY_PAYLOAD)
     assert r.status_code == 503
 
 
 def test_infer_faces_engine_not_loaded_returns_503(client):
     with patch("app.db.store.get_active_model", return_value={"id": 1, "name": "buffalo_l"}), \
          patch.object(registry, "get_face_engine", return_value=None):
-        r = client.post("/infer/faces", json={"image_b64": "AAAA"})
+        r = client.post("/infer/faces", json=_ARRAY_PAYLOAD)
     assert r.status_code == 503
 
 
@@ -89,12 +91,11 @@ def _fake_face(bbox=(10, 20, 80, 90), confidence=0.95):
 def test_infer_faces_happy_path(client):
     engine = MagicMock()
     engine.detect.return_value = [_fake_face()]
-    img_b64 = base64.b64encode(b"fake-image-bytes").decode()
 
     with patch("app.db.store.get_active_model", return_value={"id": 1, "name": "buffalo_l"}), \
          patch.object(registry, "get_face_engine", return_value=engine), \
-         patch("app.inference.server._b64_to_rgb_array", return_value=MagicMock()):
-        r = client.post("/infer/faces", json={"image_b64": img_b64})
+         patch("app.inference.server._b64_to_array", return_value=MagicMock()):
+        r = client.post("/infer/faces", json=_ARRAY_PAYLOAD)
 
     assert r.status_code == 200
     data = r.json()
@@ -114,12 +115,11 @@ def test_infer_faces_happy_path(client):
 def test_infer_faces_no_detections(client):
     engine = MagicMock()
     engine.detect.return_value = []
-    img_b64 = base64.b64encode(b"fake-image-bytes").decode()
 
     with patch("app.db.store.get_active_model", return_value={"id": 1, "name": "buffalo_l"}), \
          patch.object(registry, "get_face_engine", return_value=engine), \
-         patch("app.inference.server._b64_to_rgb_array", return_value=MagicMock()):
-        r = client.post("/infer/faces", json={"image_b64": img_b64})
+         patch("app.inference.server._b64_to_array", return_value=MagicMock()):
+        r = client.post("/infer/faces", json=_ARRAY_PAYLOAD)
 
     assert r.status_code == 200
     assert r.json()["faces"] == []
@@ -130,14 +130,14 @@ def test_infer_faces_no_detections(client):
 # ---------------------------------------------------------------------------
 
 def test_infer_objects_no_active_model_returns_503(client):
-    r = client.post("/infer/objects", json={"image_b64": "AAAA"})
+    r = client.post("/infer/objects", json=_ARRAY_PAYLOAD)
     assert r.status_code == 503
 
 
 def test_infer_objects_engine_not_loaded_returns_503(client):
     with patch("app.db.store.get_active_model", return_value={"id": 2, "name": "yolov8n"}), \
          patch.object(registry, "get_object_engine", return_value=None):
-        r = client.post("/infer/objects", json={"image_b64": "AAAA"})
+        r = client.post("/infer/objects", json=_ARRAY_PAYLOAD)
     assert r.status_code == 503
 
 
@@ -158,12 +158,11 @@ def test_infer_objects_happy_path(client):
     engine = MagicMock()
     engine.detect.return_value = [_fake_object()]
     engine.has_image_tags = False
-    img_b64 = base64.b64encode(b"fake-image-bytes").decode()
 
     with patch("app.db.store.get_active_model", return_value={"id": 2, "name": "yolov8n"}), \
          patch.object(registry, "get_object_engine", return_value=engine), \
-         patch("app.inference.server._b64_to_rgb_array", return_value=MagicMock()):
-        r = client.post("/infer/objects", json={"image_b64": img_b64})
+         patch("app.inference.server._b64_to_array", return_value=MagicMock()):
+        r = client.post("/infer/objects", json=_ARRAY_PAYLOAD)
 
     assert r.status_code == 200
     data = r.json()
@@ -184,12 +183,11 @@ def test_infer_objects_tagger_engine_returns_image_tags(client):
         ["person", "tree"],
         [_fake_object("person"), _fake_object("tree", 0.72)],
     )
-    img_b64 = base64.b64encode(b"fake-image-bytes").decode()
 
     with patch("app.db.store.get_active_model", return_value={"id": 3, "name": "ram-plus-plus-grounding-dino"}), \
          patch.object(registry, "get_object_engine", return_value=engine), \
-         patch("app.inference.server._b64_to_rgb_array", return_value=MagicMock()):
-        r = client.post("/infer/objects", json={"image_b64": img_b64})
+         patch("app.inference.server._b64_to_array", return_value=MagicMock()):
+        r = client.post("/infer/objects", json=_ARRAY_PAYLOAD)
 
     assert r.status_code == 200
     data = r.json()
