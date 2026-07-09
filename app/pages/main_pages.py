@@ -9,7 +9,7 @@ from fastapi.responses import RedirectResponse
 from fastapi.templating import Jinja2Templates
 
 from app import __version__
-from app.api._utils import delete_crops, delete_sources
+from app.api._utils import delete_crops, delete_sources, gc_source_files
 from app.core.auth import get_session_env, get_session_user
 from app.db import store
 
@@ -337,6 +337,7 @@ async def environment_delete(env_id: int, request: Request):
         if deleted:
             delete_crops(crops)
             delete_sources(sources)
+            gc_source_files()
             _fi.clear_environment(ctx["user_id"], env_id)
             if request.session.get("environment_id") == env_id:
                 remaining = store.list_environments(ctx["user_id"])

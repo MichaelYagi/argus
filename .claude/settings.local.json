@@ -218,7 +218,8 @@
       "Bash(grep -v \"^$\")",
       "Bash(awk 'length>120{print NR\": \"length\" chars\"}' /mnt/c/Users/Michael/Documents/development/argus/app/db/store.py)",
       "Bash(awk NR>=850 && NR<=886 {printf \"%d: %d chars\\\\n\", NR, length} *)",
-      "Bash(awk length > 120 {print NR\": \"length\" chars: \"$0} *)"
+      "Bash(awk length > 120 {print NR\": \"length\" chars: \"$0} *)",
+      "Bash(/mnt/c/Users/Michael/PycharmProjects/mcp-platform/.venv/bin/ruff check *)"
     ]
   }
 }

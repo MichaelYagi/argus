@@ -1296,6 +1296,13 @@ def get_or_create_source_image(
         return row["id"]
 
 
+def get_all_source_file_paths() -> set[str]:
+    """Return every file_path currently referenced in source_images (all users, all envs)."""
+    with _connect() as conn:
+        rows = conn.execute("SELECT file_path FROM source_images WHERE file_path IS NOT NULL").fetchall()
+    return {r["file_path"] for r in rows}
+
+
 def set_source_image_tags(source_image_id: int, tags_json: str) -> None:
     """Persist image-level keyword tags produced by a tagger engine (e.g. RAM++)."""
     with _connect() as conn:

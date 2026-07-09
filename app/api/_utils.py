@@ -34,15 +34,11 @@ def delete_sources(sources: list[str]) -> int:
     base = sources_dir()
     removed = 0
     for src in sources:
-        target = base / src
         try:
-            existed = target.exists()
-            target.unlink(missing_ok=True)
-            if not existed:
-                _log.warning("delete_sources: file not found on disk: %s", target)
+            (base / src).unlink(missing_ok=True)
             removed += 1
         except OSError as exc:
-            _log.error("delete_sources: failed to delete %s: %s", target, exc)
+            _log.error("delete_sources: failed to delete %s: %s", src, exc)
     return removed
 
 
@@ -53,6 +49,32 @@ def fmt_bytes(n: int) -> str:
             return f"{n:.0f} {unit}" if unit == "B" else f"{n:.1f} {unit}"
         n /= 1024
     return f"{n:.1f} TB"  # unreachable but satisfies type checkers
+
+
+def gc_source_files() -> int:
+    """Delete source files on disk that are no longer referenced in source_images.
+
+    Runs after a bulk delete to clean up orphans from prior runs that cleared
+    the DB but not the filesystem. Returns the count of files removed.
+    """
+    from app.core.paths import sources_dir
+    from app.db import store
+    referenced = store.get_all_source_file_paths()
+    base = sources_dir()
+    if not base.exists():
+        return 0
+    removed = 0
+    for f in base.iterdir():
+        if f.is_dir():
+            continue
+        if f.name not in referenced:
+            try:
+                f.unlink(missing_ok=True)
+                removed += 1
+                _log.info("gc_source_files: removed orphan %s", f.name)
+            except OSError as exc:
+                _log.error("gc_source_files: failed to remove %s: %s", f.name, exc)
+    return removed
 
 
 def dir_size(path: Path) -> int:
