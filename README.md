@@ -1,6 +1,6 @@
 # Argus
 
-Self-hosted face and object recognition you can both **use and build on** — a clean API backend for other apps *and* a real human curation UI in one, instead of a headless black box or a feature trapped inside a photo library. Single Docker container, runs on your LAN.
+Self-hosted face and object recognition you can both **use and build on** — a clean API backend for other apps *and* a real human curation UI in one, instead of a headless black box or a feature trapped inside a photo library. Runs on your LAN via `docker compose up`.
 
 **Features:**
 - Face detection and recognition (InsightFace/ArcFace) — enroll people by name, match them across photos
@@ -133,9 +133,11 @@ DATA_PATH="/Volumes/MyDrive/argus-data" python3 -m app --host 0.0.0.0 --port 810
 
 **Data persists** — `./data` (database, crops, source images) and `./models` (downloaded weights) are bind-mounted from your host, so they survive container rebuilds.
 
+**Two containers, one command.** `docker compose up` starts both the main app (`argus`, port 8100) and the inference sidecar (`argus-inference`, internal port 8200, not exposed to the host). The sidecar loads the ML model weights; the main app handles all HTTP traffic, the UI, and the database. No configuration needed — the `INFERENCE_URL` that connects them is set in `docker-compose.yml`.
+
 ### GPU support (Docker)
 
-Uncomment the `deploy` block in `docker-compose.yml`. Requires the NVIDIA Container Toolkit installed on the host and Docker Desktop using the WSL2 backend. The app auto-detects GPU availability at runtime — no rebuild needed.
+Uncomment the `deploy` block in `docker-compose.yml` under the `argus-inference` service. That's where the model weights load, so that's where the GPU reservation belongs. Requires the NVIDIA Container Toolkit installed on the host and Docker Desktop using the WSL2 backend. GPU availability is auto-detected at runtime — no rebuild needed.
 
 ### GPU and performance
 

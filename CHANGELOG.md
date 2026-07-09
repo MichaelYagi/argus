@@ -5,6 +5,24 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [0.1.0-alpha.10] — 2026-07-09
+
+### Changed
+
+- **Docker Compose now runs two containers.** Inference (InsightFace, YOLO) runs in a dedicated `argus-inference` sidecar on port 8200 (internal only); the main app connects to it over HTTP. `docker compose up` is unchanged — both containers start automatically in the right order. The GPU `deploy` block in `docker-compose.yml` now sits on `argus-inference`, where the model weights actually load.
+- Native run (`python -m app`) is unchanged — without `INFERENCE_URL` set it stays in-process, same as always.
+
+### Internal
+
+- Engine code extracted from `app/core/` into a new `app/inference/` package: `registry.py`, `face_engine.py`, `object_engine.py`, `tagger_engine.py`, `florence_engine.py`, `device.py`.
+- `app/inference/server.py` — standalone FastAPI server exposing `POST /infer/faces`, `POST /infer/objects`, and `GET /infer/health`. Entry point: `python -m app.inference`.
+- `app/inference/runner.py` — dispatch layer. In-process when `INFERENCE_URL` is unset; HTTP POST to the sidecar when set. Callers (`detect.py`, `enroll.py`) are unchanged — same `infer_faces`/`infer_objects` interface, same return types.
+- Main process skips engine loading entirely when `INFERENCE_URL` is set, freeing RAM and GPU memory that only the sidecar needs.
+- `GET /api/health` and `GET /api/capabilities` query the sidecar's `/infer/health` (2-second timeout, graceful on failure) for loaded-model status when `INFERENCE_URL` is set.
+- `/api/test` and `/api/test/batch` stateless detection now routes through `runner.infer_faces`/`infer_objects`, so it also dispatches to the sidecar in two-container mode.
+
+---
+
 ## [0.1.0-alpha.9] — 2026-07-06
 
 ### Added
@@ -336,6 +354,7 @@ Initial alpha release.
 
 ---
 
+[0.1.0-alpha.10]: https://github.com/MichaelYagi/argus/compare/v0.1.0-alpha.9...v0.1.0-alpha.10
 [0.1.0-alpha.9]: https://github.com/MichaelYagi/argus/compare/v0.1.0-alpha.8...v0.1.0-alpha.9
 [0.1.0-alpha.8]: https://github.com/MichaelYagi/argus/compare/v0.1.0-alpha.7...v0.1.0-alpha.8
 [0.1.0-alpha.7]: https://github.com/MichaelYagi/argus/compare/v0.1.0-alpha.6...v0.1.0-alpha.7
