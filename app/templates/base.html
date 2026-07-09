@@ -220,6 +220,33 @@ document.addEventListener('DOMContentLoaded', function() {
     const envEsc = s => String(s).replace(/[&<>"']/g, c =>
       ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 
+    // Rename via AJAX so the modal stays open and the list updates in place.
+    envModal.addEventListener('submit', async e => {
+      const form = e.target.closest('form[action*="/rename"]');
+      if (!form) return;
+      e.preventDefault();
+      const input = form.querySelector('input[name="name"]');
+      const name = input ? input.value.trim() : '';
+      if (!name) return;
+      const envId = parseInt(form.action.match(/\/environments\/(\d+)\/rename/)[1]);
+      const resp = await fetch(`/api/environments/${envId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name }),
+      });
+      if (!resp.ok) {
+        const d = await resp.json().catch(() => ({}));
+        showMessage(d.detail || 'Could not rename environment.');
+        return;
+      }
+      const listResp = await fetch('/api/environments');
+      if (listResp.ok) rebuildList(await listResp.json());
+      // Update the navbar label if the active env was renamed
+      document.querySelectorAll('.env-label').forEach(el => {
+        if (parseInt(el.dataset.envId) === envId) el.textContent = name;
+      });
+    });
+
     // Delete confirm via delegation, so rebuilt rows keep working.
     envModal.addEventListener('click', e => {
       const btn = e.target.closest('.env-del-btn');
@@ -383,7 +410,7 @@ setInterval(_updateSuggestedDot, 30000);
           style="background:none;border:1px solid rgba(255,255,255,.15);border-radius:5px;
                  padding:3px 8px;cursor:pointer;font-size:11px;color:var(--nav-text);
                  white-space:nowrap;font-family:inherit;margin-right:6px">
-    {{ environment_name | default('default') }}
+    <span class="env-label" data-env-id="{{ environment_id }}">{{ environment_name | default('default') }}</span>
   </button>
   {% endif %}
 
@@ -530,7 +557,7 @@ setInterval(_updateSuggestedDot, 30000);
   <div style="border-top:1px solid rgba(255,255,255,.12);margin:6px 0"></div>
   {% if environments is defined and environments %}
   <button type="button" class="env-manage-btn" title="Manage environments">
-    Environment: {{ environment_name | default('default') }}
+    Environment: <span class="env-label" data-env-id="{{ environment_id }}">{{ environment_name | default('default') }}</span>
   </button>
   {% endif %}
   {% if username %}
