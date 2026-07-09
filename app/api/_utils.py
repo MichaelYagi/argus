@@ -25,6 +25,19 @@ def delete_crops(crops: list[str]) -> int:
     return removed
 
 
+def delete_sources(sources: list[str]) -> int:
+    """Delete source image files from disk; return the count successfully removed."""
+    from app.core.paths import sources_dir
+    removed = 0
+    for src in sources:
+        try:
+            (sources_dir() / src).unlink(missing_ok=True)
+            removed += 1
+        except OSError:
+            pass
+    return removed
+
+
 def fmt_bytes(n: int) -> str:
     """Format a byte count as a human-readable string (B / KB / MB / GB / TB)."""
     for unit in ("B", "KB", "MB", "GB", "TB"):

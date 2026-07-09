@@ -4,7 +4,7 @@ from __future__ import annotations
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
-from app.api._utils import delete_crops
+from app.api._utils import delete_crops, delete_sources
 from app.core.auth import require_auth
 from app.db import store
 
@@ -73,9 +73,10 @@ async def delete_environment(env_id: int, user_id: int = Depends(require_auth)):
     envs = store.list_environments(user_id)
     if len(envs) <= 1:
         raise HTTPException(400, "Cannot delete the only environment")
-    deleted, crops = store.delete_environment(env_id, user_id)
+    deleted, crops, sources = store.delete_environment(env_id, user_id)
     if not deleted:
         raise HTTPException(404, "Environment not found")
     delete_crops(crops)
+    delete_sources(sources)
     from app.core import face_index as _fi
     _fi.clear_environment(user_id, env_id)

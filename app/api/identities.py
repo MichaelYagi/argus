@@ -8,7 +8,7 @@ import time as _time
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
 
-from app.api._utils import delete_crops, dir_size, fmt_bytes, paginate
+from app.api._utils import delete_crops, delete_sources, dir_size, fmt_bytes, paginate
 from app.core import settings_cache
 from app.core import webhook as _webhook
 from app.core.auth import require_auth, require_env_id
@@ -279,8 +279,9 @@ async def delete_all_identities(
     user_id: int = Depends(require_auth),
     environment_id: int = Depends(require_env_id),
 ):
-    count, crops = store.delete_all_identities(user_id, environment_id)
+    count, crops, sources = store.delete_all_identities(user_id, environment_id)
     delete_crops(crops)
+    delete_sources(sources)
     from app.core import face_index as _fi
     _fi.rebuild_user(user_id, environment_id)
     return {"deleted": count}

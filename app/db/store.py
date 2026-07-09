@@ -801,6 +801,15 @@ def delete_all_identities(user_id: int, environment_id: int | None = None) -> tu
                 "SELECT crop_path FROM detections WHERE user_id = ? AND environment_id = ?",
                 (user_id, env_id),
             ).fetchall()
+            if r["crop_path"]
+        ]
+        sources = [
+            r["file_path"]
+            for r in conn.execute(
+                "SELECT file_path FROM source_images WHERE user_id = ? AND environment_id = ?",
+                (user_id, env_id),
+            ).fetchall()
+            if r["file_path"]
         ]
         conn.execute(
             "DELETE FROM face_embeddings WHERE environment_id = ? AND identity_id IN "
@@ -819,7 +828,7 @@ def delete_all_identities(user_id: int, environment_id: int | None = None) -> tu
             "DELETE FROM identities WHERE user_id = ? AND environment_id = ?",
             (user_id, env_id),
         )
-        return count, crops
+        return count, crops, sources
 
 
 def count_identities(user_id: int, identity_type: str | None = None, environment_id: int | None = None) -> int:
@@ -2416,18 +2425,22 @@ def rename_environment(env_id: int, user_id: int, name: str) -> bool:
         raise DuplicateError(name) from exc
 
 
-def delete_environment(env_id: int, user_id: int) -> tuple[bool, list[str]]:
-    """Delete environment and all its data. Returns (deleted, crop_paths)."""
+def delete_environment(env_id: int, user_id: int) -> tuple[bool, list[str], list[str]]:
+    """Delete environment and all its data. Returns (deleted, crop_paths, source_paths)."""
     with _connect() as conn:
         if not conn.execute(
             "SELECT 1 FROM environments WHERE id = ? AND user_id = ?",
             (env_id, user_id),
         ).fetchone():
-            return False, []
+            return False, [], []
         crops = [r["crop_path"] for r in conn.execute(
             "SELECT crop_path FROM detections WHERE environment_id = ? AND user_id = ?",
             (env_id, user_id),
-        ).fetchall()]
+        ).fetchall() if r["crop_path"]]
+        sources = [r["file_path"] for r in conn.execute(
+            "SELECT file_path FROM source_images WHERE environment_id = ? AND user_id = ?",
+            (env_id, user_id),
+        ).fetchall() if r["file_path"]]
         conn.execute(
             "DELETE FROM face_embeddings WHERE environment_id = ?", (env_id,)
         )
@@ -2451,7 +2464,7 @@ def delete_environment(env_id: int, user_id: int) -> tuple[bool, list[str]]:
             "DELETE FROM environments WHERE id = ? AND user_id = ?",
             (env_id, user_id),
         )
-        return True, crops
+        return True, crops, sources
 
 
 def get_environment_stats(env_id: int, user_id: int) -> dict:

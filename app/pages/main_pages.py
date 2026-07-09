@@ -9,7 +9,7 @@ from fastapi.responses import RedirectResponse
 from fastapi.templating import Jinja2Templates
 
 from app import __version__
-from app.api._utils import delete_crops
+from app.api._utils import delete_crops, delete_sources
 from app.core.auth import get_session_env, get_session_user
 from app.db import store
 
@@ -333,9 +333,10 @@ async def environment_delete(env_id: int, request: Request):
         return RedirectResponse("/login")
     envs = store.list_environments(ctx["user_id"])
     if len(envs) > 1:
-        deleted, crops = store.delete_environment(env_id, ctx["user_id"])
+        deleted, crops, sources = store.delete_environment(env_id, ctx["user_id"])
         if deleted:
             delete_crops(crops)
+            delete_sources(sources)
             _fi.clear_environment(ctx["user_id"], env_id)
             if request.session.get("environment_id") == env_id:
                 remaining = store.list_environments(ctx["user_id"])
