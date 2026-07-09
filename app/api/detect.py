@@ -10,6 +10,7 @@ from typing import Any
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request
 
+from app.api._infer import infer_faces, infer_objects
 from app.api._utils import delete_crops, is_truthy
 from app.core import settings_cache
 from app.core import webhook as _webhook
@@ -227,14 +228,13 @@ async def verify(request: Request, user_id: int = Depends(require_auth)):
     threshold = await _extract_threshold(request)
 
     _require_face_engine()  # 503 if no active face model
-    engine = registry.get_face_engine()
     if threshold is None:
         threshold = settings_cache.cache.get_or("face.match_threshold", 0.5)
 
-    face1 = _top_face(engine, raw1)
+    face1 = _top_face(raw1)
     if face1 is None:
         raise HTTPException(400, "No face found in image 1")
-    face2 = _top_face(engine, raw2)
+    face2 = _top_face(raw2)
     if face2 is None:
         raise HTTPException(400, "No face found in image 2")
 
@@ -268,14 +268,13 @@ async def identify(
     top_n = await _extract_top_n(request)
 
     _require_face_engine()
-    engine = registry.get_face_engine()
     if threshold is None:
         threshold = settings_cache.cache.get_or("face.match_threshold", 0.5)
 
     from app.core import face_index
 
     img = open_and_validate(raw)
-    faces = engine.detect(to_rgb_array(img))
+    faces, _ = infer_faces(to_rgb_array(img))
 
     results = []
     for det in faces:
@@ -552,43 +551,8 @@ def _run_bulk_job(
 
 
 # ---------------------------------------------------------------------------
-# Inference phase — engine calls only, no DB, no file I/O
-#
-# These are the future service boundary: everything above the return belongs
-# in an inference container; everything in _run_faces/_run_objects below is
-# persistence (DB writes, crop saves, matching) that stays in Core.
-# ---------------------------------------------------------------------------
-
-def _infer_faces(img_array: Any) -> tuple[list[Any], Any]:
-    """Run the face engine on img_array. Returns (raw_detections, model_row).
-    Raises 503 if no active model or engine is loaded."""
-    model_row = store.get_active_model("face")
-    if model_row is None:
-        raise HTTPException(503, "No active face model. Download and activate one via /api/models.")
-    engine = registry.get_face_engine()
-    if engine is None:
-        raise HTTPException(503, "Face engine not loaded. Activate a model via /api/models/{id}/activate.")
-    return engine.detect(img_array), model_row
-
-
-def _infer_objects(img_array: Any) -> tuple[list[Any], list[str] | None, Any]:
-    """Run the object engine on img_array. Returns (raw_detections, image_tags, model_row).
-    image_tags is None for non-tagger engines. Raises 503 if no active model or engine."""
-    model_row = store.get_active_model("object")
-    if model_row is None:
-        raise HTTPException(503, "No active object model. Download and activate one via /api/models.")
-    engine = registry.get_object_engine()
-    if engine is None:
-        raise HTTPException(503, "Object engine not loaded. Activate a model via /api/models/{id}/activate.")
-    if getattr(engine, "has_image_tags", False):
-        image_tags, raw_dets = engine.detect_with_tags(img_array)
-    else:
-        image_tags, raw_dets = None, engine.detect(img_array)
-    return raw_dets, image_tags, model_row
-
-
-# ---------------------------------------------------------------------------
 # Persistence phase — matching, crop saves, DB writes
+# (Inference phase lives in app/api/_infer.py — infer_faces / infer_objects)
 # ---------------------------------------------------------------------------
 
 async def _extract_label(request: Request) -> str | None:
@@ -635,7 +599,7 @@ def _clear_detections(user_id: int, environment_id: int, source_id: int, det_typ
 def _run_faces(user_id: int, environment_id: int, img: Any, source_id: int, label: str | None = None) -> list[dict]:
     # Inference phase
     img_array = to_rgb_array(img)
-    detections, model_row = _infer_faces(img_array)
+    detections, model_row = infer_faces(img_array)
 
     # Persistence phase
     threshold = settings_cache.cache.get_or("face.match_threshold", 0.5)
@@ -724,7 +688,7 @@ def _run_objects(
     """
     # Inference phase
     img_array = to_rgb_array(img)
-    raw_dets, image_tags, model_row = _infer_objects(img_array)
+    raw_dets, image_tags, model_row = infer_objects(img_array)
 
     # Persistence phase
     if image_tags:
@@ -832,10 +796,10 @@ def _require_face_engine() -> None:
         raise HTTPException(503, "Face engine not loaded. Activate a model via /api/models/{id}/activate.")
 
 
-def _top_face(engine: Any, raw: bytes) -> Any | None:
+def _top_face(raw: bytes) -> Any | None:
     """Highest-confidence face in an image, or None if no face is found."""
     img = open_and_validate(raw)
-    faces = engine.detect(to_rgb_array(img))
+    faces, _ = infer_faces(to_rgb_array(img))
     return max(faces, key=lambda f: f.confidence) if faces else None
 
 

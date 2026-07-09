@@ -7,9 +7,9 @@ from typing import Any
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request
 from fastapi.responses import FileResponse
 
+from app.api._infer import infer_faces
 from app.core import settings_cache
 from app.core.auth import require_auth, require_env_id
-from app.core.engine_registry import registry
 from app.core.image_input import acquire_image, open_and_validate, read_body_field, to_rgb_array
 from app.core.paths import crops_dir
 from app.db import store
@@ -315,12 +315,7 @@ def _extract_embedding(raw: bytes, img: Any) -> tuple[Any, Any]:
     Uses the highest-confidence face if multiple are detected.
     Raises 503 if no engine is loaded, 400 if no face is found.
     """
-    engine = registry.get_face_engine()
-    if engine is None:
-        raise HTTPException(503, "Face engine not loaded. Activate a model via /api/models/{id}/activate.")
-
-    img_array = to_rgb_array(img)
-    faces = engine.detect(img_array)
+    faces, _ = infer_faces(to_rgb_array(img))
 
     if not faces:
         raise HTTPException(400, "No face detected in this image.")
