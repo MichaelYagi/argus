@@ -288,6 +288,7 @@
       `<span style="color:${CAT_COLORS[e.category] || 'var(--text)'}">` +
       `[${esc(e.category)}]</span> ${esc(e.message)}</div>`
     ).join('');
+    activityOutput.scrollTop = activityOutput.scrollHeight;
   }
 
   async function loadActivity() {

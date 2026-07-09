@@ -18,4 +18,4 @@ async def get_activity(
     row = store.get_setting("system.log_buffer_size")
     size = int(row["value"]) if row else log_buffer.DEFAULT_SIZE
     events = activity_buffer.get_events(limit)
-    return {"buffer_size": size, "events": list(reversed(events))}
+    return {"buffer_size": size, "events": events}
