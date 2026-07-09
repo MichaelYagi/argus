@@ -2,10 +2,13 @@
 
 from __future__ import annotations
 
+import logging
 from pathlib import Path
 from typing import Any, Callable
 
 from app.core.paths import crops_dir
+
+_log = logging.getLogger(__name__)
 
 
 def is_truthy(v: Any) -> bool:
@@ -28,13 +31,18 @@ def delete_crops(crops: list[str]) -> int:
 def delete_sources(sources: list[str]) -> int:
     """Delete source image files from disk; return the count successfully removed."""
     from app.core.paths import sources_dir
+    base = sources_dir()
     removed = 0
     for src in sources:
+        target = base / src
         try:
-            (sources_dir() / src).unlink(missing_ok=True)
+            existed = target.exists()
+            target.unlink(missing_ok=True)
+            if not existed:
+                _log.warning("delete_sources: file not found on disk: %s", target)
             removed += 1
-        except OSError:
-            pass
+        except OSError as exc:
+            _log.error("delete_sources: failed to delete %s: %s", target, exc)
     return removed
 
 

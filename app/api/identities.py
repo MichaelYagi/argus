@@ -3,7 +3,10 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 import time as _time
+
+_log = logging.getLogger(__name__)
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
@@ -280,8 +283,12 @@ async def delete_all_identities(
     environment_id: int = Depends(require_env_id),
 ):
     count, crops, sources = store.delete_all_identities(user_id, environment_id)
+    _log.info("delete_all: %d identities, %d crops, %d sources (env=%s)", count, len(crops), len(sources), environment_id)
+    if sources:
+        _log.info("delete_all: first source path = %r, sources_dir = %r", sources[0], str(sources_dir()))
     delete_crops(crops)
-    delete_sources(sources)
+    removed = delete_sources(sources)
+    _log.info("delete_all: removed %d source files from disk", removed)
     from app.core import face_index as _fi
     _fi.rebuild_user(user_id, environment_id)
     return {"deleted": count}
