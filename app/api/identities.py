@@ -25,16 +25,29 @@ class _CreateBody(BaseModel):
 # Identity CRUD
 # ---------------------------------------------------------------------------
 
+import asyncio
+import time as _time
+
 _storage_cache: tuple[float, str] | None = None
 _STORAGE_TTL = 300  # seconds
+_storage_lock = asyncio.Lock()
 
 
-def _cached_storage() -> str:
-    import time
+def _compute_storage() -> str:
+    return fmt_bytes(dir_size(crops_dir()) + dir_size(sources_dir()))
+
+
+async def _cached_storage() -> str:
     global _storage_cache
-    if _storage_cache is None or time.monotonic() - _storage_cache[0] > _STORAGE_TTL:
-        _storage_cache = (time.monotonic(), fmt_bytes(dir_size(crops_dir()) + dir_size(sources_dir())))
-    return _storage_cache[1]
+    if _storage_cache is not None and _time.monotonic() - _storage_cache[0] <= _STORAGE_TTL:
+        return _storage_cache[1]
+    async with _storage_lock:
+        # Re-check after acquiring lock — another coroutine may have just refreshed it.
+        if _storage_cache is not None and _time.monotonic() - _storage_cache[0] <= _STORAGE_TTL:
+            return _storage_cache[1]
+        result = await asyncio.to_thread(_compute_storage)
+        _storage_cache = (_time.monotonic(), result)
+        return result
 
 
 @router.get("/api/stats")
@@ -50,7 +63,7 @@ async def stats(
         "detections":     store.count_detections(user_id, environment_id),
         "pending_review": store.count_pending_review(user_id, environment_id),
         "unidentified":   store.count_unidentified(user_id, environment_id),
-        "storage":        _cached_storage(),
+        "storage":        await _cached_storage(),
     }
 
 
