@@ -735,11 +735,13 @@ def set_identity_external_ref(
         return cur.rowcount > 0
 
 
-def delete_identity(identity_id: int, user_id: int, environment_id: int | None = None) -> tuple[bool, list[str]]:
+def delete_identity(
+    identity_id: int, user_id: int, environment_id: int | None = None,
+) -> tuple[bool, list[str], list[str]]:
     """Delete an identity, its detections, and any source images that become orphaned.
 
-    Returns (deleted, crop_filenames) so the caller can remove crop files from disk.
-    face_embeddings are removed via FK ON DELETE CASCADE when the identity row is deleted.
+    Returns (deleted, crop_filenames, source_filenames) so the caller can remove
+    files from disk. face_embeddings are removed via FK ON DELETE CASCADE.
     """
     with _connect() as conn:
         env_id = _resolve_env(conn, user_id, environment_id)
@@ -747,7 +749,7 @@ def delete_identity(identity_id: int, user_id: int, environment_id: int | None =
             "SELECT 1 FROM identities WHERE id = ? AND user_id = ? AND environment_id = ?",
             (identity_id, user_id, env_id),
         ).fetchone():
-            return False, []
+            return False, [], []
 
         crops = [
             r["crop_path"]
@@ -755,6 +757,7 @@ def delete_identity(identity_id: int, user_id: int, environment_id: int | None =
                 "SELECT crop_path FROM detections WHERE identity_id = ? AND user_id = ?",
                 (identity_id, user_id),
             ).fetchall()
+            if r["crop_path"]
         ]
 
         source_ids = [
@@ -770,10 +773,16 @@ def delete_identity(identity_id: int, user_id: int, environment_id: int | None =
             (identity_id, user_id),
         )
 
+        sources = []
         for sid in source_ids:
             if conn.execute(
                 "SELECT COUNT(*) FROM detections WHERE source_image_id = ?", (sid,)
             ).fetchone()[0] == 0:
+                row = conn.execute(
+                    "SELECT file_path FROM source_images WHERE id = ?", (sid,)
+                ).fetchone()
+                if row and row["file_path"]:
+                    sources.append(row["file_path"])
                 conn.execute("DELETE FROM source_images WHERE id = ?", (sid,))
 
         conn.execute(
@@ -781,7 +790,7 @@ def delete_identity(identity_id: int, user_id: int, environment_id: int | None =
             (identity_id, user_id),
         )
         record_change(conn, user_id, env_id, "identity", identity_id, "deleted")
-        return True, crops
+        return True, crops, sources
 
 
 def delete_all_identities(user_id: int, environment_id: int | None = None) -> tuple[int, list[str]]:

@@ -229,10 +229,11 @@ async def delete_identity(
     environment_id: int = Depends(require_env_id),
 ):
     ident = store.get_identity(identity_id, user_id, environment_id)
-    deleted, crops = store.delete_identity(identity_id, user_id, environment_id)
+    deleted, crops, sources = store.delete_identity(identity_id, user_id, environment_id)
     if not deleted:
         raise HTTPException(404, "Identity not found")
     delete_crops(crops)
+    delete_sources(sources)
     from app.core import face_index as _fi
     _fi.rebuild_user(user_id, environment_id)
     if ident:
