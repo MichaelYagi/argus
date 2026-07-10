@@ -105,6 +105,30 @@
         a.appendChild(badge);
       }
 
+      if (item.image_tags && item.image_tags.length) {
+        a.title = item.image_tags.join(', ');
+        const strip = document.createElement('div');
+        strip.style.cssText = 'position:absolute;bottom:6px;left:6px;z-index:2;' +
+          'display:flex;gap:3px;max-width:calc(100% - 48px);overflow:hidden';
+        const visible = item.image_tags.slice(0, 3);
+        visible.forEach(tag => {
+          const chip = document.createElement('span');
+          chip.textContent = tag;
+          chip.style.cssText = 'background:rgba(0,0,0,.6);color:#e2e8f0;border-radius:3px;' +
+            'padding:1px 5px;font-size:10px;font-weight:500;white-space:nowrap;' +
+            'overflow:hidden;text-overflow:ellipsis;max-width:70px';
+          strip.appendChild(chip);
+        });
+        if (item.image_tags.length > 3) {
+          const more = document.createElement('span');
+          more.textContent = '+' + (item.image_tags.length - 3);
+          more.style.cssText = 'background:rgba(0,0,0,.4);color:#cbd5e0;border-radius:3px;' +
+            'padding:1px 4px;font-size:10px;white-space:nowrap';
+          strip.appendChild(more);
+        }
+        a.appendChild(strip);
+      }
+
       const delBtn = document.createElement('button');
       delBtn.title = 'Delete image and all its detections';
       delBtn.style.cssText = 'position:absolute;top:5px;right:5px;z-index:3;' +

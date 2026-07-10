@@ -34,17 +34,18 @@ _STORAGE_TTL = 300  # seconds
 _storage_lock = asyncio.Lock()
 
 
-def _compute_storage() -> tuple[str, str | None]:
+def _compute_storage() -> tuple[str, str | None, int, int | None]:
     used = dir_size(crops_dir()) + dir_size(sources_dir())
     try:
         free = shutil.disk_usage(crops_dir()).free
         free_str = fmt_bytes(free)
     except OSError:
+        free = None
         free_str = None
-    return fmt_bytes(used), free_str
+    return fmt_bytes(used), free_str, used, free
 
 
-async def _cached_storage() -> tuple[str, str | None]:
+async def _cached_storage() -> tuple[str, str | None, int, int | None]:
     global _storage_cache
     if _storage_cache is not None and _time.monotonic() - _storage_cache[0] <= _STORAGE_TTL:
         return _storage_cache[1]
@@ -62,16 +63,18 @@ async def stats(
     environment_id: int = Depends(require_env_id),
 ):
     """Aggregate counts for the dashboard — single round-trip."""
-    storage_used, storage_free = await _cached_storage()
+    storage_used, storage_free, storage_bytes, storage_free_bytes = await _cached_storage()
     return {
-        "people":         store.count_identities(user_id, identity_type="face", environment_id=environment_id),
-        "objects":        store.count_identities(user_id, identity_type="object", environment_id=environment_id),
-        "images":         store.count_source_images(user_id, environment_id),
-        "detections":     store.count_detections(user_id, environment_id),
-        "pending_review": store.count_pending_review(user_id, environment_id),
-        "unidentified":   store.count_unidentified(user_id, environment_id),
-        "storage":        storage_used,
-        "storage_free":   storage_free,
+        "people":              store.count_identities(user_id, identity_type="face", environment_id=environment_id),
+        "objects":             store.count_identities(user_id, identity_type="object", environment_id=environment_id),
+        "images":              store.count_source_images(user_id, environment_id),
+        "detections":          store.count_detections(user_id, environment_id),
+        "pending_review":      store.count_pending_review(user_id, environment_id),
+        "unidentified":        store.count_unidentified(user_id, environment_id),
+        "storage":             storage_used,
+        "storage_free":        storage_free,
+        "storage_bytes":       storage_bytes,
+        "storage_free_bytes":  storage_free_bytes,
     }
 
 
@@ -171,6 +174,8 @@ async def create_identity(
         identity_id = store.create_identity(user_id, body.type, label, environment_id, ext)
     except store.DuplicateError:
         raise HTTPException(409, f"Identity '{label}' ({body.type}) already exists")
+    _webhook.fire(user_id, environment_id, "identity.created",
+                  {"identity_id": identity_id, "label": label, "type": body.type, "external_ref": ext})
     return {"id": identity_id, "type": body.type, "label": label, "external_ref": ext}
 
 
@@ -494,6 +499,7 @@ def _fmt(row) -> dict:
         "type": row["type"],
         "label": row["label"],
         "external_ref": _safe(row, "external_ref"),
+        "cover_detection_id": _safe(row, "cover_detection_id"),
         "created_at": row["created_at"],
     }
 

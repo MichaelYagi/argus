@@ -185,7 +185,10 @@ async def reassign(
     identity_id = body.identity_id
     if not identity_id:
         assert body.label  # guard above ensures label is truthy when identity_id is absent
-        identity_id = store.get_or_create_identity(user_id, "face", body.label.strip(), environment_id)
+        identity_id, _created = store.get_or_create_identity(user_id, "face", body.label.strip(), environment_id)
+        if _created:
+            _webhook.fire(user_id, environment_id, "identity.created",
+                          {"identity_id": identity_id, "label": body.label.strip(), "type": "face"})
 
     det = store.get_detection(detection_id, user_id, environment_id)
     if not det:
@@ -229,7 +232,10 @@ async def bulk_review(
         elif item.action == "reassign":
             iid = item.identity_id
             if not iid and item.label:
-                iid = store.get_or_create_identity(user_id, "face", item.label.strip(), environment_id)
+                iid, _created = store.get_or_create_identity(user_id, "face", item.label.strip(), environment_id)
+                if _created:
+                    _webhook.fire(user_id, environment_id, "identity.created",
+                                  {"identity_id": iid, "label": item.label.strip(), "type": "face"})
             if not iid:
                 results.append({"detection_id": item.detection_id, "status": "error",
                                  "detail": "Provide identity_id or label"})
@@ -341,9 +347,12 @@ async def label_detection(
     identity_id = body.identity_id
     if not identity_id:
         assert body.label  # guard above ensures label is truthy when identity_id is absent
-        identity_id = store.get_or_create_identity(
+        identity_id, _created = store.get_or_create_identity(
             user_id, det["type"], body.label.strip(), environment_id
         )
+        if _created:
+            _webhook.fire(user_id, environment_id, "identity.created",
+                          {"identity_id": identity_id, "label": body.label.strip(), "type": det["type"]})
 
     store.label_detection(detection_id, user_id, identity_id, environment_id)
     log.info("label_detection: detection=%d identity=%d enroll=%s", detection_id, identity_id, body.enroll)
@@ -413,9 +422,12 @@ async def label_detections_batch(
         identity_id = item.identity_id
         if not identity_id:
             assert item.label  # loop guard above ensures label is truthy when identity_id is absent
-            identity_id = store.get_or_create_identity(
+            identity_id, _created = store.get_or_create_identity(
                 user_id, det["type"], item.label.strip(), environment_id
             )
+            if _created:
+                _webhook.fire(user_id, environment_id, "identity.created",
+                              {"identity_id": identity_id, "label": item.label.strip(), "type": det["type"]})
         store.label_detection(item.detection_id, user_id, identity_id, environment_id)
         enrolled = _enroll_confirmed(item.detection_id, user_id, environment_id) if item.enroll else False
         if det["type"] == "face":

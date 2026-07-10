@@ -132,7 +132,7 @@ def test_change_feed_covers_relabel_and_delete(client):
     delta-sync client sees corrections made outside the create path."""
     user_id, key = _create_user_and_key()
     env_id = store.get_default_environment_id(user_id)
-    iid = store.get_or_create_identity(user_id, "object", "thing", env_id)
+    iid, _ = store.get_or_create_identity(user_id, "object", "thing", env_id)
     sid = store.get_or_create_source_image(user_id, "x.jpg", 100, 100, env_id)
     det = store.insert_detection(
         user_id=user_id, identity_id=iid, source_image_id=sid,
@@ -181,7 +181,7 @@ def test_capabilities_endpoint(client):
 def _insert_object_detection(user_id: int, label: str) -> int:
     """Create an object identity + a source image + a detection directly."""
     env_id = store.get_default_environment_id(user_id)
-    identity_id = store.get_or_create_identity(user_id, "object", label, env_id)
+    identity_id, _ = store.get_or_create_identity(user_id, "object", label, env_id)
     source_id = store.get_or_create_source_image(user_id, f"{label}.jpg", 100, 100, env_id)
     return store.insert_detection(
         user_id=user_id, identity_id=identity_id, source_image_id=source_id,

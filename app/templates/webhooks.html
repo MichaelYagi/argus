@@ -93,6 +93,15 @@ if not hmac.compare_digest(sig, expected):
             </p>
           </div>
           <div>
+            <code style="font-size:12px;background:var(--surface-raised);padding:2px 7px;border-radius:4px">identity.created</code>
+            <p class="muted" style="font-size:12px;margin:4px 0 0;line-height:1.5">
+              Fired when a new identity is created (via enroll, detect with a new label, or the
+              identities API). Not fired when an existing identity is matched.
+              Payload: <code style="font-size:11px">identity_id</code>, <code style="font-size:11px">label</code>,
+              <code style="font-size:11px">type</code>, <code style="font-size:11px">external_ref</code>.
+            </p>
+          </div>
+          <div>
             <code style="font-size:12px;background:var(--surface-raised);padding:2px 7px;border-radius:4px">identity.merged</code>
             <p class="muted" style="font-size:12px;margin:4px 0 0;line-height:1.5">
               Fired when one identity is merged into another (source is deleted).
@@ -123,6 +132,10 @@ if not hmac.compare_digest(sig, expected):
 { "event": "detection.labeled", "timestamp": "...",
   "data": { "detection_id": 17, "source_image_id": 42,
             "identity_id": 5, "label": "Daisuke", "type": "face" } }
+
+// identity.created
+{ "event": "identity.created", "timestamp": "...",
+  "data": { "identity_id": 5, "label": "Daisuke", "type": "face", "external_ref": null } }
 
 // identity.merged  (source deleted, detections moved to target)
 { "event": "identity.merged", "timestamp": "...",

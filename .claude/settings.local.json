@@ -220,7 +220,10 @@
       "Bash(awk NR>=850 && NR<=886 {printf \"%d: %d chars\\\\n\", NR, length} *)",
       "Bash(awk length > 120 {print NR\": \"length\" chars: \"$0} *)",
       "Bash(/mnt/c/Users/Michael/PycharmProjects/mcp-platform/.venv/bin/ruff check *)",
-      "Bash(.venv/bin/pytest *)"
+      "Bash(.venv/bin/pytest *)",
+      "Bash(pip3 show *)",
+      "Bash(python3.11 -m ast app/api/jobs.py app/api/webhooks.py app/api/health.py app/api/images.py app/api/identities.py app/api/detect.py app/api/review.py app/api/enroll.py app/db/store.py app/pages/main_pages.py)",
+      "Bash(python3.11 -c ' *)"
     ]
   }
 }

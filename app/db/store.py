@@ -1091,7 +1091,8 @@ def insert_face_embedding(
 def get_or_create_identity(
     user_id: int, identity_type: str, label: str,
     environment_id: int | None = None, external_ref: str | None = None,
-) -> int:
+) -> tuple[int, bool]:
+    """Return (identity_id, was_created). was_created is True only when a new row is inserted."""
     with _connect() as conn:
         env_id = _resolve_env(conn, user_id, environment_id)
         # Case-insensitive lookup first — prevents duplicate identities when a caller
@@ -1110,7 +1111,7 @@ def get_or_create_identity(
                 conn.execute(
                     "UPDATE identities SET external_ref = ? WHERE id = ?", (external_ref, existing["id"]),
                 )
-            return existing["id"]
+            return existing["id"], False
         try:
             conn.execute(
                 "INSERT INTO identities (user_id, environment_id, type, label, external_ref) VALUES (?, ?, ?, ?, ?)",
@@ -1124,10 +1125,10 @@ def get_or_create_identity(
                    ORDER BY id ASC LIMIT 1""",
                 (user_id, env_id, identity_type, label),
             ).fetchone()
-            return row["id"]
+            return row["id"], False
         new_id = conn.execute("SELECT last_insert_rowid()").fetchone()[0]
         record_change(conn, user_id, env_id, "identity", new_id, "created", external_ref)
-        return new_id
+        return new_id, True
 
 
 def get_identity(identity_id: int, user_id: int, environment_id: int | None = None) -> sqlite3.Row | None:
@@ -1701,7 +1702,7 @@ def list_source_images(
         if identity_id is not None:
             join = """JOIN detections _id_f
                         ON _id_f.source_image_id = si.id AND _id_f.identity_id = ?"""
-        sql = f"""SELECT si.id, si.file_path, si.width, si.height, si.uploaded_at,
+        sql = f"""SELECT si.id, si.file_path, si.width, si.height, si.uploaded_at, si.image_tags,
                          COUNT(DISTINCT d.id) AS detection_count
                   FROM source_images si
                   {join}

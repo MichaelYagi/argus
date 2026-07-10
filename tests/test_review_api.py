@@ -126,7 +126,7 @@ def test_confirm_detection(client):
 
 def test_reject_detection(client):
     user_id, h = _setup(client)
-    identity_id = store.get_or_create_identity(user_id, "face", "Mike")
+    identity_id, _ = store.get_or_create_identity(user_id, "face", "Mike")
     did = _insert_detection(user_id, identity_id=identity_id)
 
     r = client.post(f"/api/review/{did}/reject", headers=h)
@@ -139,7 +139,7 @@ def test_reject_detection(client):
 
 def test_reassign_by_identity_id(client):
     user_id, h = _setup(client)
-    iid = store.get_or_create_identity(user_id, "face", "Sarah")
+    iid, _ = store.get_or_create_identity(user_id, "face", "Sarah")
     did = _insert_detection(user_id)
 
     r = client.post(f"/api/review/{did}/reassign", json={"identity_id": iid}, headers=h)
@@ -189,7 +189,7 @@ def test_bulk_review(client):
 
 def test_label_detection_by_identity_id(client):
     user_id, h = _setup(client)
-    iid = store.get_or_create_identity(user_id, "face", "Mike")
+    iid, _ = store.get_or_create_identity(user_id, "face", "Mike")
     did = _insert_detection(user_id)
 
     r = client.put(f"/api/detections/{did}/label", json={"identity_id": iid}, headers=h)

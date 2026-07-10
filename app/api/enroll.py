@@ -184,7 +184,10 @@ async def enroll_new(
     store.set_identity_cover(identity_id, user_id, result["detection_id"], environment_id)
 
     from app.core import activity_buffer as _ab
+    from app.core import webhook as _wh
     _ab.emit("enrollment", f"New face enrolled: {name}")
+    _wh.fire(user_id, environment_id, "identity.created",
+             {"identity_id": identity_id, "label": name, "type": "face", "external_ref": external_ref})
     return {
         "identity_id": identity_id, "label": name, "embeddings": 1,
         "embedding_id": result["embedding_id"], "detection_id": result["detection_id"],

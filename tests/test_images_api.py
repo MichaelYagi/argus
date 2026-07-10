@@ -98,7 +98,7 @@ def _insert_face(user_id: int, src_id: int, label: str | None = None,
     env_id = store.get_default_environment_id(user_id) or 0
     identity_id = None
     if label:
-        identity_id = store.get_or_create_identity(user_id, "face", label)
+        identity_id, _ = store.get_or_create_identity(user_id, "face", label)
     with store._connect() as conn:
         conn.execute(
             """INSERT INTO detections
@@ -241,7 +241,7 @@ def test_tag_labels_faces(client):
     src_id = _insert_source(user_id)
     d1 = _insert_face(user_id, src_id)
     d2 = _insert_face(user_id, src_id)
-    iid = store.get_or_create_identity(user_id, "face", "Noah")
+    iid, _ = store.get_or_create_identity(user_id, "face", "Noah")
 
     r = client.post(f"/api/images/{src_id}/tag", json=[
         {"detection_id": d1, "identity_id": iid},

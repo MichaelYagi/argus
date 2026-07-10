@@ -8,6 +8,7 @@ from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, R
 from pydantic import BaseModel
 
 from app.api._utils import delete_crops, is_truthy, paginate
+from app.core import webhook as _webhook
 from app.core.auth import require_auth, require_env_id
 from app.core.paths import sources_dir
 from app.db import store
@@ -33,6 +34,7 @@ async def list_images_by_ref(
                 "height": r["height"],
                 "source_image_url": f"/media/sources/{r['file_path']}",
                 "uploaded_at": r["uploaded_at"],
+                "image_tags": json.loads(r["image_tags"]) if r["image_tags"] else [],
             }
             for r in rows
         ],
@@ -65,6 +67,7 @@ async def list_source_images(
         "height": r["height"],
         "detection_count": r["detection_count"],
         "uploaded_at": r["uploaded_at"],
+        "image_tags": json.loads(r["image_tags"]) if r["image_tags"] else [],
     }, cursor_fn=lambda r: f"{r['uploaded_at']}_{r['id']}")
 
 
@@ -99,6 +102,7 @@ async def image_faces(
         "width": src["width"],
         "height": src["height"],
         "source_image_url": f"/media/sources/{src['file_path']}",
+        "image_tags": json.loads(src["image_tags"]) if src["image_tags"] else [],
         "faces": [
             {
                 "detection_id": r["id"],
@@ -223,7 +227,10 @@ async def tag_image(
 
         identity_id = item.identity_id
         if not identity_id and item.label:
-            identity_id = store.get_or_create_identity(user_id, det["type"], item.label.strip(), environment_id)
+            identity_id, _created = store.get_or_create_identity(user_id, det["type"], item.label.strip(), environment_id)
+            if _created:
+                _webhook.fire(user_id, environment_id, "identity.created",
+                              {"identity_id": identity_id, "label": item.label.strip(), "type": det["type"]})
         if not identity_id:
             results.append({"detection_id": item.detection_id, "status": "error",
                              "detail": "Provide identity_id or label"})

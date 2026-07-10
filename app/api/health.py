@@ -53,17 +53,21 @@ def _os_info() -> dict:
     return {"name": system, "version": platform.version()}
 
 def _sidecar_model_status(url: str) -> dict:
-    """Query the inference sidecar's health endpoint; return model names or None on failure."""
+    """Query the inference sidecar's health endpoint; return model names, None on failure, and reachability."""
     import httpx
 
     try:
         resp = httpx.get(f"{url}/infer/health", timeout=2.0)
         if resp.status_code == 200:
             data = resp.json()
-            return {"face_model": data.get("face_model"), "object_model": data.get("object_model")}
+            return {
+                "face_model": data.get("face_model"),
+                "object_model": data.get("object_model"),
+                "sidecar_reachable": True,
+            }
     except Exception:
         pass
-    return {"face_model": None, "object_model": None}
+    return {"face_model": None, "object_model": None, "sidecar_reachable": False}
 
 
 router = APIRouter()
