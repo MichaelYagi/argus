@@ -91,6 +91,9 @@ function saveState(clickedId) {
         object: { items: state.object.items, cursor: state.object.cursor, hasMore: state.object.hasMore },
       },
     }, '');
+    if (clickedId != null) {
+      try { sessionStorage.setItem('_argus_last_gallery_id', clickedId); } catch (_) {}
+    }
   } catch (_) {}
 }
 
@@ -329,6 +332,26 @@ function setTabBadge(type, total) {
 refreshStats();
 setInterval(refreshStats, 30000);
 
+// Refresh the thumbnail of a single card after navigating back from its gallery
+// (cover photo may have been updated while away).
+async function refreshCardThumbnail(id) {
+  const card = document.querySelector(`.identity-thumb[data-id="${id}"]`);
+  if (!card) return;
+  try {
+    const resp = await fetch(`/api/identities/${id}`);
+    if (!resp.ok) return;
+    const data = await resp.json();
+    if (!data.thumbnail_url) return;
+    const img = card.querySelector('img');
+    if (img) {
+      if (img.src !== data.thumbnail_url) img.src = data.thumbnail_url;
+    } else {
+      const ph = card.querySelector('.it-ph');
+      if (ph) ph.outerHTML = `<img src="${data.thumbnail_url}" alt="">`;
+    }
+  } catch (_) {}
+}
+
 // ---------------------------------------------------------------------------
 // Init — restore from history.state on back navigation, else fresh load
 // ---------------------------------------------------------------------------
@@ -361,6 +384,7 @@ if (savedState) {
       requestAnimationFrame(() => {
         const el = document.querySelector(`#grid-${tab} [data-id="${savedState.clickedId}"]`);
         if (el) el.scrollIntoView({ block: 'center' });
+        refreshCardThumbnail(savedState.clickedId);
       });
     });
   }
@@ -371,9 +395,14 @@ if (savedState) {
 }
 
 // Bfcache restore: page is thawed; script doesn't re-run.
-// Keep existing DOM and scroll intact — just refresh stats in the background.
+// Refresh stats and the thumbnail of the last-visited gallery identity in case cover changed.
 window.addEventListener('pageshow', e => {
-  if (e.persisted) refreshStats();
+  if (!e.persisted) return;
+  refreshStats();
+  try {
+    const lastId = sessionStorage.getItem('_argus_last_gallery_id');
+    if (lastId) refreshCardThumbnail(parseInt(lastId, 10));
+  } catch (_) {}
 });
 </script>
 {% endblock %}
