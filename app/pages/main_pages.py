@@ -142,8 +142,7 @@ async def switch_environment(env_id: int, request: Request):
     if env:
         request.session["environment_id"] = env_id
         store.save_last_environment(ctx["user_id"], env_id)
-    referer = request.headers.get("referer", "/")
-    return RedirectResponse(referer, status_code=303)
+    return RedirectResponse("/", status_code=303)
 
 
 @router.get("/environments")
