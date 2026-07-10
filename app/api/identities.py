@@ -251,6 +251,11 @@ async def set_cover(
         raise HTTPException(400, "Detection does not belong to this identity")
     if not store.set_identity_cover(identity_id, user_id, body.detection_id, environment_id):
         raise HTTPException(404, "Identity not found")
+    _webhook.fire(user_id, environment_id, "identity.updated", {
+        "identity_id": identity_id,
+        "action": "thumbnail_updated",
+        "thumbnail_url": f"/media/crops/{det['crop_path']}",
+    })
     return {"identity_id": identity_id, "cover_detection_id": body.detection_id}
 
 

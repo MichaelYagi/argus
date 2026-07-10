@@ -55,6 +55,11 @@ def enroll_from_detection(det: Any, user_id: int, environment_id: int | None = N
         store.compute_and_store_representative(det["identity_id"], model_id)
         from app.core import face_index as _fi
         _fi.rebuild_user(user_id, _det_env(det, environment_id))
+    from app.core import webhook as _wh
+    _wh.fire(user_id, _det_env(det, environment_id), "identity.updated", {
+        "identity_id": det["identity_id"],
+        "action": "embedding_added",
+    })
     return True
 
 
@@ -86,12 +91,6 @@ async def enroll_detection(
         raise HTTPException(409, "No embedding stored for this detection")
 
     added = enroll_from_detection(det, user_id, environment_id)
-    if added:
-        from app.core import webhook as _wh
-        _wh.fire(user_id, environment_id, "identity.updated", {
-            "identity_id": det["identity_id"],
-            "action": "embedding_added",
-        })
     return {"detection_id": detection_id, "identity_id": det["identity_id"], "added": added, "enrolled": True}
 
 
@@ -124,11 +123,17 @@ async def delete_embedding(
     user_id: int = Depends(require_auth),
     environment_id: int = Depends(require_env_id),
 ):
-    if not store.delete_face_embedding(embedding_id, user_id, environment_id):
+    emb = store.get_face_embedding(embedding_id, user_id, environment_id)
+    if not emb or not store.delete_face_embedding(embedding_id, user_id, environment_id):
         raise HTTPException(404, "Embedding not found")
     if _active_face_model_id():
         from app.core import face_index as _fi
         _fi.rebuild_user(user_id, environment_id)
+    from app.core import webhook as _wh
+    _wh.fire(user_id, environment_id, "identity.updated", {
+        "identity_id": emb["identity_id"],
+        "action": "embedding_removed",
+    })
 
 
 @router.get("/api/face_embeddings")
@@ -237,13 +242,7 @@ async def enroll_existing(
     )
     identity = store.get_identity(identity_id, user_id, environment_id)
     from app.core import activity_buffer as _ab
-    from app.core import webhook as _wh
     _ab.emit("enrollment", f"Face sample added to {identity['label'] if identity else identity_id}")
-    _wh.fire(user_id, environment_id, "identity.updated", {
-        "identity_id": identity_id,
-        "label": identity["label"] if identity else None,
-        "action": "embedding_added",
-    })
     return {
         "embedding_id": result["embedding_id"],
         "identity_id": identity_id,
