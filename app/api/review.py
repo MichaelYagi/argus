@@ -100,12 +100,14 @@ async def get_review_queue(
                 continue
         kept.append(r)
 
-    # Cursor is derived from the last item in `kept` (not `items`) so pagination
-    # advances past what the client actually sees. If the whole page was auto-confirmed,
-    # propagate has_more so the caller keeps paginating rather than stopping.
-    next_cursor = (
-        f"{kept[-1]['confidence']}_{kept[-1]['id']}" if kept and has_more else None
-    )
+    # Cursor advances past what the client sees. When the entire page was auto-confirmed
+    # (kept is empty) we still need a cursor so the client can fetch the next page.
+    if kept and has_more:
+        next_cursor = f"{kept[-1]['confidence']}_{kept[-1]['id']}"
+    elif not kept and has_more and items:
+        next_cursor = f"{items[-1]['confidence']}_{items[-1]['id']}"
+    else:
+        next_cursor = None
     return {
         "items": [_fmt_review_item(r, model_id, user_id, environment_id) for r in kept],
         "next_cursor": next_cursor,
@@ -206,17 +208,21 @@ async def reassign(
     if not body.identity_id and not body.label:
         raise HTTPException(400, "Provide identity_id or label")
 
-    identity_id = body.identity_id
-    if not identity_id:
-        assert body.label  # guard above ensures label is truthy when identity_id is absent
+    det = store.get_detection(detection_id, user_id, environment_id)
+    if not det:
+        raise HTTPException(404, "Detection not found")
+
+    if body.identity_id:
+        if not store.get_identity(body.identity_id, user_id, environment_id):
+            raise HTTPException(404, "Identity not found")
+        identity_id = body.identity_id
+        _created = False
+    else:
+        assert body.label
         identity_id, _created = store.get_or_create_identity(user_id, "face", body.label.strip(), environment_id)
         if _created:
             _webhook.fire(user_id, environment_id, "identity.created",
                           {"identity_id": identity_id, "label": body.label.strip(), "type": "face"})
-
-    det = store.get_detection(detection_id, user_id, environment_id)
-    if not det:
-        raise HTTPException(404, "Detection not found")
 
     store.reassign_detection(detection_id, user_id, identity_id, environment_id)
     _enroll_confirmed(detection_id, user_id, environment_id)  # human named this face — enroll unconditionally
@@ -389,9 +395,12 @@ async def label_detection(
     if not det:
         raise HTTPException(404, "Detection not found")
 
-    identity_id = body.identity_id
-    if not identity_id:
-        assert body.label  # guard above ensures label is truthy when identity_id is absent
+    if body.identity_id:
+        if not store.get_identity(body.identity_id, user_id, environment_id):
+            raise HTTPException(404, "Identity not found")
+        identity_id = body.identity_id
+    else:
+        assert body.label
         identity_id, _created = store.get_or_create_identity(
             user_id, det["type"], body.label.strip(), environment_id
         )
@@ -525,14 +534,14 @@ async def delete_detections(
         raise HTTPException(400, "detection_ids is required")
     if len(body.detection_ids) > _BATCH_MAX:
         raise HTTPException(400, f"Too many items (max {_BATCH_MAX})")
-    crops = store.delete_detections(user_id, body.detection_ids, environment_id)
+    deleted_ids, crops = store.delete_detections(user_id, body.detection_ids, environment_id)
     removed = delete_crops(crops)
     from app.core import face_index as _fi
     _fi.rebuild_user(user_id, environment_id)
-    if crops:
+    if deleted_ids:
         _webhook.fire(user_id, environment_id, "detection.deleted",
-                      {"detection_ids": body.detection_ids[:len(crops)], "count": len(crops)})
-    return {"deleted": len(crops), "crops_removed": removed}
+                      {"detection_ids": deleted_ids, "count": len(deleted_ids)})
+    return {"deleted": len(deleted_ids), "crops_removed": removed}
 
 
 # ---------------------------------------------------------------------------

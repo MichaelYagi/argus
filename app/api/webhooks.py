@@ -22,7 +22,7 @@ def _fmt(row) -> dict:
     return {
         "id": row["id"],
         "url": row["url"],
-        "events": row["events"].split(","),
+        "events": [e for e in row["events"].split(",") if e],
         "label": row["label"],
         "is_active": bool(row["is_active"]),
         "created_at": row["created_at"],

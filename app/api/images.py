@@ -179,10 +179,11 @@ async def reprocess_source_image(
 
     if run_async:
         from app.api.detect import _run_detection_job
+        _DET_TYPE_SINGULAR = {"faces": "face", "objects": "object", "all": None}
         job_id = store.create_job(user_id, "reprocess", environment_id)
         background_tasks.add_task(
             _run_detection_job, job_id, user_id, environment_id,
-            raw, None, replace, det_type, src["external_ref"],
+            raw, None, replace, _DET_TYPE_SINGULAR[det_type], src["external_ref"],
         )
         return {"job_id": job_id, "status": "pending", "source_image_id": source_image_id}
 

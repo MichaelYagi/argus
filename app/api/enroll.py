@@ -34,7 +34,12 @@ def enroll_from_detection(det: Any, user_id: int, environment_id: int | None = N
     if not det or not det["embedding"] or not det["identity_id"]:
         return False
 
-    model_id = _active_face_model_id()
+    # Use the model that produced this detection's embedding; fall back to the
+    # currently active model for detections created before model_id was recorded.
+    try:
+        model_id = int(det["model_id"]) if det["model_id"] is not None else _active_face_model_id()
+    except (KeyError, TypeError):
+        model_id = _active_face_model_id()
 
     if store.embedding_exists(det["identity_id"], det["crop_path"]):
         return False

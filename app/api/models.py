@@ -101,12 +101,12 @@ async def activate_model(model_id: int, user_id: int = Depends(require_admin)):
 
     if row["type"] == "face":
         registry.swap_face_engine(engine)
+        store.set_model_active(model_id, row["type"])
         from app.core import face_index as _fi
         _fi.build_all(model_id)
     else:
         registry.swap_object_engine(engine)
-
-    store.set_model_active(model_id, row["type"])
+        store.set_model_active(model_id, row["type"])
     from app.core import activity_buffer as _ab
     from app.core import webhook as _wh
     _ab.emit("model", f"Model activated: {row['name']} ({row['type']})")

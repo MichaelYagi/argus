@@ -1011,11 +1011,11 @@ def dismiss_detections(user_id: int, detection_ids: list[int], environment_id: i
 
 def delete_detections(
     user_id: int, detection_ids: list[int], environment_id: int | None = None
-) -> list[str]:
-    """Permanently delete detections, returning their crop filenames so the caller can
-    remove the files. Reconciles any orphaned references and records change events."""
+) -> tuple[list[int], list[str]]:
+    """Permanently delete detections. Returns (deleted_ids, crop_filenames) so the
+    caller can remove files and report exactly which IDs were removed."""
     if not detection_ids:
-        return []
+        return [], []
     with _connect() as conn:
         env_id = _resolve_env(conn, user_id, environment_id)
         placeholders = ",".join("?" * len(detection_ids))
@@ -1025,7 +1025,7 @@ def delete_detections(
             (user_id, env_id, *detection_ids),
         ).fetchall()
         if not rows:
-            return []
+            return [], []
         ids = [r["id"] for r in rows]
         crops = [r["crop_path"] for r in rows]
         del_ph = ",".join("?" * len(ids))
@@ -1037,7 +1037,7 @@ def delete_detections(
             record_change(conn, user_id, env_id, "detection", did, "deleted")
         _reconcile_orphan_references(conn, user_id)
         _purge_empty_identities(conn, user_id, env_id)
-        return crops
+        return ids, crops
 
 
 def get_unknown_detections(
@@ -2791,14 +2791,21 @@ def export_identity_data(
                 (iid,),
             ).fetchall()
 
+            det_params: tuple = (iid, user_id)
+            det_env_clause = ""
+            if environment_id is not None:
+                det_env_clause = " AND d.environment_id = ?"
+                det_params += (environment_id,)
             detections = conn.execute(
-                """SELECT d.confidence, d.bbox_x, d.bbox_y, d.bbox_w, d.bbox_h,
+                f"""SELECT d.confidence, d.bbox_x, d.bbox_y, d.bbox_w, d.bbox_h,
                           d.crop_path, d.detected_at, d.review_status,
+                          m.name AS model_name,
                           si.file_path AS source_image, si.width, si.height
                    FROM detections d
                    JOIN source_images si ON si.id = d.source_image_id
-                   WHERE d.identity_id = ? AND d.user_id = ?""",
-                (iid, user_id),
+                   LEFT JOIN models m ON m.id = d.model_id
+                   WHERE d.identity_id = ? AND d.user_id = ?{det_env_clause}""",
+                det_params,
             ).fetchall()
 
             result.append({
@@ -2823,6 +2830,7 @@ def export_identity_data(
                                  "w": d["bbox_w"], "h": d["bbox_h"]},
                         "detected_at":   d["detected_at"],
                         "review_status": d["review_status"],
+                        "model_name":    d["model_name"],
                     }
                     for d in detections
                 ],
@@ -2932,17 +2940,22 @@ def import_identity_data(
                 if dup:
                     stats["detections_skipped"] += 1
                     continue
+                det_model_name = det.get("model_name")
+                det_model_row = conn.execute(
+                    "SELECT id FROM models WHERE name = ?", (det_model_name,)
+                ).fetchone() if det_model_name else None
                 conn.execute(
                     """INSERT INTO detections
                        (user_id, environment_id, identity_id, source_image_id, type, confidence,
                         bbox_x, bbox_y, bbox_w, bbox_h, crop_path,
-                        review_status, detected_at)
-                       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+                        review_status, detected_at, model_id)
+                       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
                     (user_id, environment_id, identity_id, source_image_id, itype,
                      det.get("confidence", 0.0), bx, by, bw, bh,
                      det.get("crop", ""),
                      det.get("review_status", "confirmed"),
-                     det.get("detected_at")),
+                     det.get("detected_at"),
+                     det_model_row["id"] if det_model_row else None),
                 )
                 stats["detections_imported"] += 1
     return stats
