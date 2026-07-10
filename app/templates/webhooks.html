@@ -117,6 +117,7 @@ if not hmac.compare_digest(sig, expected):
               <code style="font-size:11px">"external_ref_updated"</code>).
               Rename also includes <code style="font-size:11px">label</code> and <code style="font-size:11px">old_label</code>;
               thumbnail_updated includes <code style="font-size:11px">thumbnail_url</code>;
+              embedding_added/removed include <code style="font-size:11px">detection_id</code> (null when the embedding was deleted directly rather than via a detection);
               external_ref_updated includes <code style="font-size:11px">external_ref</code>.
             </p>
           </div>
@@ -181,11 +182,15 @@ if not hmac.compare_digest(sig, expected):
 
 // identity.updated (enrollment)
 { "event": "identity.updated", "timestamp": "...",
-  "data": { "identity_id": 5, "action": "embedding_added" } }
+  "data": { "identity_id": 5, "action": "embedding_added", "detection_id": 17 } }
 
 // identity.updated (unenroll)
 { "event": "identity.updated", "timestamp": "...",
-  "data": { "identity_id": 5, "action": "embedding_removed" } }
+  "data": { "identity_id": 5, "action": "embedding_removed", "detection_id": 17 } }
+
+// identity.updated (embedding deleted directly — no associated detection)
+{ "event": "identity.updated", "timestamp": "...",
+  "data": { "identity_id": 5, "action": "embedding_removed", "detection_id": null } }
 
 // identity.updated (cover changed)
 { "event": "identity.updated", "timestamp": "...",

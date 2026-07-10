@@ -59,6 +59,7 @@ def enroll_from_detection(det: Any, user_id: int, environment_id: int | None = N
     _wh.fire(user_id, _det_env(det, environment_id), "identity.updated", {
         "identity_id": det["identity_id"],
         "action": "embedding_added",
+        "detection_id": det["id"],
     })
     return True
 
@@ -112,6 +113,7 @@ async def unenroll_detection(
         _wh.fire(user_id, environment_id, "identity.updated", {
             "identity_id": det["identity_id"],
             "action": "embedding_removed",
+            "detection_id": detection_id,
         })
     return {"detection_id": detection_id, "identity_id": det["identity_id"],
             "removed": removed, "enrolled": False}
@@ -133,6 +135,7 @@ async def delete_embedding(
     _wh.fire(user_id, environment_id, "identity.updated", {
         "identity_id": emb["identity_id"],
         "action": "embedding_removed",
+        "detection_id": None,
     })
 
 
