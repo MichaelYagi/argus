@@ -14,6 +14,23 @@ router = APIRouter()
 _VALID_TYPES = {"float", "int", "bool", "string"}
 _VALID_CATEGORIES = {"face", "object", "system"}
 
+# (min, max) — None means no bound on that side.
+_RANGE_CONSTRAINTS: dict[str, tuple[float | None, float | None]] = {
+    "face.match_threshold":        (0.0, 1.0),
+    "face.auto_confirm_threshold": (0.0, 1.0),
+    "face.auto_enroll_threshold":  (0.0, 1.0),
+    "face.detection_confidence":   (0.0, 1.0),
+    "face.cluster_threshold":      (0.0, 1.0),
+    "face.min_face_size":          (0, None),
+    "object.detection_confidence": (0.0, 1.0),
+    "object.iou_threshold":        (0.0, 1.0),
+    "system.gallery_page_size":    (1, None),
+    "system.crop_padding":         (0.0, None),
+    "system.url_fetch_timeout_seconds": (1, None),
+    "system.url_fetch_max_size_mb":     (1, None),
+    "system.ingest_jpeg_quality":  (1, 95),
+}
+
 
 # ---------------------------------------------------------------------------
 # Routes
@@ -140,6 +157,18 @@ def _validate_value(key: str, raw: str, value_type: str) -> str:
             raise HTTPException(400, "face.match_strategy must be 'average' or 'best'")
         raw = raw.lower()
 
+    # Numeric range constraints.
+    if key in _RANGE_CONSTRAINTS and value_type in ("float", "int"):
+        num = float(raw) if value_type == "float" else int(raw)
+        lo, hi = _RANGE_CONSTRAINTS[key]
+        if (lo is not None and num < lo) or (hi is not None and num > hi):
+            parts = []
+            if lo is not None:
+                parts.append(f">= {lo}")
+            if hi is not None:
+                parts.append(f"<= {hi}")
+            raise HTTPException(400, f"'{key}' must be {' and '.join(parts)}, got {raw}")
+
     return raw
 
 
@@ -155,9 +184,21 @@ def _require_gpu_available() -> None:
 
 def _apply_reset(key: str, default_value: str) -> None:
     row = store.get_setting(key)
-    if row:
-        store.update_setting(key, default_value)
-        settings_cache.cache.set(key, default_value, row["value_type"])
+    if not row:
+        return
+    store.update_setting(key, default_value)
+    settings_cache.cache.set(key, default_value, row["value_type"])
+
+    if key == "face.match_strategy":
+        model_row = store.get_active_model("face")
+        if model_row:
+            from app.core import face_index
+            face_index.build_all(model_row["id"])
+
+    if key == "system.log_buffer_size":
+        from app.core import activity_buffer, log_buffer
+        log_buffer.resize(int(default_value))
+        activity_buffer.resize(int(default_value))
 
 
 def _fmt(row) -> dict:

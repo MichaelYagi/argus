@@ -4,9 +4,10 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import FileResponse
 
+from app.core.auth import require_auth
 from app.core.paths import crops_dir, sources_dir
 
 router = APIRouter()
@@ -32,7 +33,11 @@ def _thumbnail(path: Path, h: int) -> Path:
 
 
 @router.get("/media/crops/{filename}")
-async def serve_crop(filename: str, h: int | None = Query(None, ge=10, le=4000)):
+async def serve_crop(
+    filename: str,
+    h: int | None = Query(None, ge=10, le=4000),
+    _user_id: int = Depends(require_auth),
+):
     path = crops_dir() / filename
     if not path.exists():
         raise HTTPException(404, "Crop not found")
@@ -42,7 +47,11 @@ async def serve_crop(filename: str, h: int | None = Query(None, ge=10, le=4000))
 
 
 @router.get("/media/sources/{filename}")
-async def serve_source(filename: str, h: int | None = Query(None, ge=10, le=4000)):
+async def serve_source(
+    filename: str,
+    h: int | None = Query(None, ge=10, le=4000),
+    _user_id: int = Depends(require_auth),
+):
     path = sources_dir() / filename
     if not path.exists():
         raise HTTPException(404, "Source image not found")

@@ -14,6 +14,7 @@ _VALID_EVENTS = {
     "job.done",
     "detection.created", "detection.labeled", "detection.deleted",
     "identity.created", "identity.updated", "identity.merged", "identity.deleted",
+    "model.activated",
 }
 
 

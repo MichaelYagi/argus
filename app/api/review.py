@@ -100,8 +100,11 @@ async def get_review_queue(
                 continue
         kept.append(r)
 
+    # Cursor is derived from the last item in `kept` (not `items`) so pagination
+    # advances past what the client actually sees. If the whole page was auto-confirmed,
+    # propagate has_more so the caller keeps paginating rather than stopping.
     next_cursor = (
-        f"{items[-1]['confidence']}_{items[-1]['id']}" if has_more and items else None
+        f"{kept[-1]['confidence']}_{kept[-1]['id']}" if kept and has_more else None
     )
     return {
         "items": [_fmt_review_item(r, model_id, user_id, environment_id) for r in kept],

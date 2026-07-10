@@ -17,6 +17,25 @@ log = logging.getLogger(__name__)
 _TIMEOUT = 10
 
 
+def fire_broadcast(event: str, payload: dict) -> None:
+    """Fire all active webhooks subscribed to event, regardless of user or environment.
+    Used for system-level events (e.g. model.activated) that are not scoped to one env."""
+    hooks = store.list_webhooks_for_event(event)
+    if not hooks:
+        return
+    body = json.dumps({
+        "event": event,
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "data": payload,
+    }).encode()
+    for hook in hooks:
+        threading.Thread(
+            target=_deliver,
+            args=(hook["id"], hook["url"], hook["secret"], body, event),
+            daemon=True,
+        ).start()
+
+
 def fire(user_id: int, environment_id: int, event: str, payload: dict) -> None:
     """Fire all matching active webhooks for this user/env/event in daemon threads."""
     hooks = store.list_webhooks(user_id, environment_id, event, active_only=True)

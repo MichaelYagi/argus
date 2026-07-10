@@ -270,6 +270,7 @@ async def webhooks_page(request: Request):
         "job.done",
         "detection.created", "detection.labeled", "detection.deleted",
         "identity.created", "identity.updated", "identity.merged", "identity.deleted",
+        "model.activated",
     ])
     return _r(request, "webhooks.html", ctx)
 

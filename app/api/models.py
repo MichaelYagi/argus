@@ -108,7 +108,13 @@ async def activate_model(model_id: int, user_id: int = Depends(require_admin)):
 
     store.set_model_active(model_id, row["type"])
     from app.core import activity_buffer as _ab
+    from app.core import webhook as _wh
     _ab.emit("model", f"Model activated: {row['name']} ({row['type']})")
+    _wh.fire_broadcast("model.activated", {
+        "model_id": model_id,
+        "name": row["name"],
+        "type": row["type"],
+    })
     return _fmt(store.get_model(model_id))
 
 

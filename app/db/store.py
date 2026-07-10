@@ -758,8 +758,8 @@ def delete_identity(
         crops = [
             r["crop_path"]
             for r in conn.execute(
-                "SELECT crop_path FROM detections WHERE identity_id = ? AND user_id = ?",
-                (identity_id, user_id),
+                "SELECT crop_path FROM detections WHERE identity_id = ? AND user_id = ? AND environment_id = ?",
+                (identity_id, user_id, env_id),
             ).fetchall()
             if r["crop_path"]
         ]
@@ -767,14 +767,15 @@ def delete_identity(
         source_ids = [
             r[0]
             for r in conn.execute(
-                "SELECT DISTINCT source_image_id FROM detections WHERE identity_id = ? AND user_id = ?",
-                (identity_id, user_id),
+                """SELECT DISTINCT source_image_id FROM detections
+                   WHERE identity_id = ? AND user_id = ? AND environment_id = ?""",
+                (identity_id, user_id, env_id),
             ).fetchall()
         ]
 
         conn.execute(
-            "DELETE FROM detections WHERE identity_id = ? AND user_id = ?",
-            (identity_id, user_id),
+            "DELETE FROM detections WHERE identity_id = ? AND user_id = ? AND environment_id = ?",
+            (identity_id, user_id, env_id),
         )
 
         sources = []
@@ -947,6 +948,7 @@ def get_identity_gallery(
                         ON fe.identity_id = d.identity_id AND fe.source_image_path = d.crop_path
                  LEFT JOIN source_images si ON si.id = d.source_image_id
                  WHERE d.identity_id = ? AND d.user_id = ? AND d.environment_id = ?
+                   AND d.ignored = 0
                    AND (d.review_status IS NULL OR d.review_status != 'rejected')
                    AND NOT EXISTS (
                      SELECT 1 FROM detections d2
@@ -1811,7 +1813,8 @@ def get_review_queue(
                    LEFT JOIN identities i ON d.identity_id = i.id
                    LEFT JOIN source_images si ON si.id = d.source_image_id
                    WHERE d.user_id = ? AND d.environment_id = ?
-                     AND d.review_status = 'pending' AND d.type = 'face'"""
+                     AND d.review_status = 'pending' AND d.type = 'face'
+                     AND d.ignored = 0"""
         if cursor:
             try:
                 c_conf, c_id = cursor.rsplit("_", 1)
@@ -1935,7 +1938,8 @@ def restore_detection(detection_id: int, user_id: int, environment_id: int | Non
     with _connect() as conn:
         env_id = _resolve_env(conn, user_id, environment_id)
         conn.execute(
-            """UPDATE detections SET review_status = 'confirmed', reviewed_at = datetime('now')
+            """UPDATE detections SET review_status = 'confirmed', reviewed_at = datetime('now'),
+               ignored = 0
                WHERE id = ? AND user_id = ? AND environment_id = ? AND review_status = 'rejected'""",
             (detection_id, user_id, env_id),
         )
@@ -2056,7 +2060,8 @@ def label_detection(detection_id: int, user_id: int, identity_id: int, environme
         old_id = _detach_old_reference(conn, detection_id, user_id, identity_id)
         conn.execute(
             """UPDATE detections SET identity_id = ?, review_status = 'confirmed',
-               reviewed_at = datetime('now') WHERE id = ? AND user_id = ? AND environment_id = ?""",
+               reviewed_at = datetime('now'), ignored = 0
+               WHERE id = ? AND user_id = ? AND environment_id = ?""",
             (identity_id, detection_id, user_id, env_id),
         )
         changed = conn.execute("SELECT changes()").fetchone()[0] > 0
@@ -2497,6 +2502,18 @@ def delete_environment(env_id: int, user_id: int) -> tuple[bool, list[str], list
             (env_id, user_id),
         )
         conn.execute(
+            "DELETE FROM webhooks WHERE environment_id = ? AND user_id = ?",
+            (env_id, user_id),
+        )
+        conn.execute(
+            "DELETE FROM api_keys WHERE environment_id = ? AND user_id = ?",
+            (env_id, user_id),
+        )
+        conn.execute(
+            "DELETE FROM changes WHERE environment_id = ? AND user_id = ?",
+            (env_id, user_id),
+        )
+        conn.execute(
             "DELETE FROM environments WHERE id = ? AND user_id = ?",
             (env_id, user_id),
         )
@@ -2650,6 +2667,18 @@ def list_webhooks(
             sql += " AND (',' || events || ',') LIKE ('%,' || ? || ',%')"
             params.append(event)
         return conn.execute(sql, params).fetchall()
+
+
+def list_webhooks_for_event(event: str) -> list[sqlite3.Row]:
+    """All active webhooks subscribed to event, across all users and environments.
+    Used for system-level broadcast events (e.g. model.activated)."""
+    with _connect() as conn:
+        return conn.execute(
+            """SELECT * FROM webhooks
+               WHERE is_active = 1
+                 AND (',' || events || ',') LIKE ('%,' || ? || ',%')""",
+            (event,),
+        ).fetchall()
 
 
 def create_webhook(

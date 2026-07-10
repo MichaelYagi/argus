@@ -68,7 +68,7 @@ if not hmac.compare_digest(sig, expected):
           <div>
             <code style="font-size:12px;background:var(--surface-raised);padding:2px 7px;border-radius:4px">detection.created</code>
             <p class="muted" style="font-size:12px;margin:4px 0 0;line-height:1.5">
-              Fired after each synchronous detect call.
+              Fired after each detect call (synchronous, async, reprocess).
               Payload: <code style="font-size:11px">source_image_id</code>, <code style="font-size:11px">external_ref</code>,
               <code style="font-size:11px">type</code>.
             </p>
@@ -83,10 +83,10 @@ if not hmac.compare_digest(sig, expected):
           <div>
             <code style="font-size:12px;background:var(--surface-raised);padding:2px 7px;border-radius:4px">detection.labeled</code>
             <p class="muted" style="font-size:12px;margin:4px 0 0;line-height:1.5">
-              Fired when a detection is assigned or reassigned to an identity (review queue, tag page,
-              batch label, retroactive scan). Not fired for auto-confirms at detect-time —
-              <code style="font-size:11px">detection.created</code> already carries <code style="font-size:11px">identity_id</code>
-              in that case.
+              Fired when a detection is assigned, reassigned, rejected, or unidentified (review queue,
+              tag page, batch label, retroactive scan). Also fires when review-queue auto-confirm
+              triggers. On reject or unidentify, <code style="font-size:11px">identity_id</code> and
+              <code style="font-size:11px">label</code> are <code style="font-size:11px">null</code>.
               Payload: <code style="font-size:11px">detection_id</code>, <code style="font-size:11px">source_image_id</code>,
               <code style="font-size:11px">identity_id</code>, <code style="font-size:11px">label</code>,
               <code style="font-size:11px">type</code>.
@@ -138,6 +138,16 @@ if not hmac.compare_digest(sig, expected):
               <code style="font-size:11px">count</code>.
             </p>
           </div>
+          <div>
+            <code style="font-size:12px;background:var(--surface-raised);padding:2px 7px;border-radius:4px">model.activated</code>
+            <p class="muted" style="font-size:12px;margin:4px 0 0;line-height:1.5">
+              Fired when an admin activates a new model. Broadcast to all subscribers
+              across all environments — model changes affect every detection from that point on.
+              Payload: <code style="font-size:11px">model_id</code>, <code style="font-size:11px">name</code>,
+              <code style="font-size:11px">type</code> (<code style="font-size:11px">"face"</code> or
+              <code style="font-size:11px">"object"</code>).
+            </p>
+          </div>
         </div>
       </div>
       <div style="min-width:0">
@@ -185,7 +195,19 @@ if not hmac.compare_digest(sig, expected):
 
 // detection.deleted
 { "event": "detection.deleted", "timestamp": "...",
-  "data": { "detection_ids": [14, 17, 23], "count": 3 } }</pre>
+  "data": { "detection_ids": [14, 17, 23], "count": 3 } }
+
+// model.activated
+{ "event": "model.activated", "timestamp": "...",
+  "data": { "model_id": 2, "name": "buffalo_l", "type": "face" } }
+
+// job.done (success)
+{ "event": "job.done", "timestamp": "...",
+  "data": { "job_id": "abc-123", "status": "done", "total": 1, "type": "face", ... } }
+
+// job.done (failure)
+{ "event": "job.done", "timestamp": "...",
+  "data": { "job_id": "abc-123", "status": "failed", "error": "..." } }</pre>
       </div>
     </div>
 

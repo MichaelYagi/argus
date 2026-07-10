@@ -5,6 +5,71 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [0.1.0-alpha.11] — 2026-07-10
+
+### Added
+
+- **Free disk space on dashboard.** `GET /api/stats` now returns `storage_free` and `storage_free_bytes` alongside the existing `storage` and `storage_bytes` fields. The dashboard shows a "Storage free" stat card when the value is available.
+- **`sidecar_reachable` in `GET /api/health`.** When running in two-container mode, the health response now includes `"sidecar_reachable": true/false` as a distinct field, so callers can tell whether the sidecar is up regardless of whether a model is loaded.
+- **`identity.created` webhook event.** Fires on every new identity creation path: enroll, detect with a new label, tag page, review reassign, batch label, and `POST /api/identities`. Payload: `identity_id`, `label`, `type`, `external_ref`.
+- **`identity.updated` webhook event.** Fires on rename (with `label` and `old_label`), embedding added/removed (`action: "embedding_added"/"embedding_removed"`), and external_ref change (`action: "external_ref_updated"`). Subscriptions for `identity.updated` are now accepted.
+- **`detection.deleted` webhook event.** Fires after a bulk-delete from the review queue. Payload: `detection_ids` (array), `count`.
+- **`detection.created` from async jobs.** The `detection.created` event now fires from async single-image and bulk-image jobs (`?async=true`) and from `POST /api/images/{id}/reprocess`. Previously only fired from the synchronous detect endpoints.
+- **`model.activated` webhook event.** Fires to all active subscribers whenever a model is hot-swapped via `PUT /api/models/{id}/activate` (system-wide broadcast, not scoped to a single user/environment). Payload: `model_id`, `name`, `type`.
+- **`bbox` in more API responses.** Gallery (`GET /api/identities/{id}/gallery`), rejected-detections list, `GET /api/detections/{id}`, review queue items, and `GET /api/identities/unknown` all now include `"bbox": {"x", "y", "w", "h"}`.
+- **`attributes` in `GET /api/identities/unknown`.** The unknown detections list now includes the parsed `attributes` dict alongside `bbox`.
+- **`cover_detection_id` in identity responses.** `GET /api/identities` and related endpoints now include `cover_detection_id` in each identity object.
+- **`image_tags` and `external_ref` in image responses.** `GET /api/images`, `GET /api/images/{id}/faces`, `POST /api/images/search`, and `GET /api/images?external_ref=` now include `image_tags` (parsed array) and `external_ref` in every item.
+- **`detected_at` in `GET /api/images/{id}/faces`** — was previously missing from the per-detection row in that response.
+- **`confidence` and `bbox` in rejected-detections list** (`GET /api/identities/{id}/rejected`).
+- **`image_tags` chips on `/images` page.** Source image thumbnails show up to three tag chips overlaid in the bottom-left corner; "+N" suffix when more exist. Full tag list shown as a tooltip.
+- **Webhook UI lists all 9 supported events.** The event-subscription checkboxes in the Create/Edit webhook modal now include all current events: `detection.created`, `detection.labeled`, `detection.deleted`, `identity.created`, `identity.updated`, `identity.merged`, `identity.deleted`, `job.done`, `model.activated`.
+- **Settings sliders for all threshold settings.** `face.auto_confirm_threshold`, `face.auto_enroll_threshold`, and `face.cluster_threshold` now render as sliders on the settings page (were plain text inputs).
+- **Dashboard identity thumbnail auto-refreshes on back-navigation.** When returning to the dashboard from an identity gallery page (via browser back or bfcache restore), the thumbnail for that identity is refetched in case the cover photo changed.
+
+### Fixed
+
+- **`GET /api/jobs` was environment-scoped incorrectly.** `store.list_jobs(user_id, environment_id)` was passing `environment_id` as the positional `limit` argument, capping results at 1–5 rows and ignoring environment isolation. Fixed with a keyword argument; `GET /api/jobs`, `GET /api/jobs/{id}`, and `DELETE /api/jobs/{id}` are now fully environment-scoped.
+- **`ignored` flag not cleared on label or restore.** `store.label_detection` and `store.restore_detection` previously left `ignored = 1` intact when relabeling or un-rejecting a detection. Both now set `ignored = 0` in the same UPDATE.
+- **Ignored detections leaked into review queue and gallery.** `get_review_queue` and `get_identity_gallery` were missing `AND d.ignored = 0` filters. Dismissed faces no longer reappear in review or in a person's gallery after being ignored.
+- **`delete_face_embedding` was not environment-scoped.** The DELETE query joined identities by `user_id` only, allowing a caller in one environment to delete a reference embedding that belonged to another environment's identity under the same user. Now filters by both `user_id` and `environment_id`.
+- **`delete_environment` left orphaned webhooks, API keys, and change-feed entries.** These tables had no FK cascade to `environments`; deleting an environment left those rows behind. `store.delete_environment` now explicitly deletes all three.
+- **`delete_identity` detection queries were not environment-scoped.** The crop-path SELECT, source-image SELECT, and detection DELETE inside `store.delete_identity` all lacked `AND environment_id = ?`, allowing cross-environment data deletion under the same user.
+- **`export_identity_data` and `import_identity_data` now environment-scoped.** Export verifies identities belong to the caller's environment; import scopes new identity rows and face_embeddings inserts to the caller's environment (previously used a bare default fallback with no scoping).
+- **Review queue auto-confirm no longer fires webhooks silently.** When a face is auto-confirmed during `GET /api/review/queue`, `detection.labeled` is now fired for each auto-confirmed detection.
+- **Review queue cursor could point past actual results after auto-confirm.** If all items on a page were auto-confirmed, the `next_cursor` was built from the pre-filter list (`items`) instead of the post-filter kept list, producing an empty page with `has_more: true` and immediate re-request loop. Fixed to use the last item in `kept`.
+- **`reject` and `unidentify` endpoints now fire `detection.labeled`.** Previously these review actions mutated the detection without sending a webhook. Both now fire `detection.labeled` with `identity_id: null` and `label: null`.
+- **Bulk-review `reject` action now fires `detection.labeled`** per rejected detection (was silently missing).
+- **Identity cover ignores rejected detections.** `list_identities_summary`, `get_identity_with_counts`, and `get_oldest_detection_id` no longer select rejected detections as the default cover; cover subqueries now filter `review_status != 'rejected'`. Also adds `ORDER BY detected_at ASC, id ASC` for deterministic selection.
+- **Search cover subquery scoped to environment.** The fallback cover-crop subquery in `search_identities` previously could pick a crop from a different environment. Now adds `AND environment_id = i.environment_id` and excludes rejected detections.
+- **`GET /api/detections/{id}` no longer leaks internal fields.** Previously returned a raw `dict(det)` with `user_id`, `environment_id`, `model_id`, `ignored`, and `reviewed_at` included. Now returns an explicit shaped response with `attributes` parsed from JSON and `bbox` as a nested object.
+- **Webhook CRUD is now fully environment-scoped.** `GET/PUT/DELETE /api/webhooks/{id}`, `GET /api/webhooks/{id}/deliveries`, and `POST /api/webhooks/{id}/test` all verify that the webhook's `environment_id` matches the caller's environment (previously only checked `user_id`).
+- **`rename_identity` now fires `identity.updated`.** Previously renaming an identity did not send a webhook. Now fires with `action: "renamed"`, the new `label`, and `old_label`. Also returns 404 immediately if the identity doesn't exist before attempting the rename.
+- **`create_identity` via `POST /api/identities` now fires `identity.created`** (was missing; only detect/enroll paths fired it).
+- **`set_external_ref` now fires `identity.updated`** with `action: "external_ref_updated"`.
+- **`POST /api/faces/enroll` (new face) now fires `identity.created`** and `enroll_existing` fires `identity.updated` with `action: "embedding_added"`.
+- **`POST /api/identities/{id}/cover` validates detection ownership.** Previously set the cover without checking whether `detection_id` belongs to the specified identity. Now returns 400 if the detection exists but belongs to a different identity.
+- **`job.done` payload `status` field normalized.** Async jobs now report `"status": "done"` (not `"complete"`) in both the stored result and the `job.done` webhook payload, matching what `GET /api/jobs/{id}` returns.
+- **Activity feed returned oldest-first in some paths.** `GET /api/activity` no longer reverses the event list (the buffer already yields newest-first); events are now consistently newest-first.
+- **Environment switcher now redirects to `/` after switching.** Previously redirected to `referer`, which could be a page in the old environment (e.g. a specific identity gallery). Now always lands on the dashboard.
+
+### Internal
+
+- **Modal scroll lock.** `lockScroll()` and `unlockScroll()` (reference-counted, globally available) prevent the page from scrolling behind an open modal. All existing modals — confirm, message, rename, merge, export, key-rename, reprocess, env-modal, about, settings/logs, and webhook create/edit — now call these. `overscroll-behavior: contain` added to all scrollable modal interiors. `body.modal-open { overflow: hidden }` added to the stylesheet.
+- **`_VALID_EVENTS` in `webhooks.py` is the single source of truth.** `main_pages.py` `valid_events` list is now synced to match (both have all 9 events); the webhook UI and documentation page reflect the same set.
+- **`get_or_create_identity` now returns `(identity_id, was_created: bool)`.** All call sites (detect, review, images, enroll, tag, batch) unpack the tuple and conditionally fire `identity.created` only when `was_created=True`.
+- **`fire_broadcast(event, payload)` in `webhook.py`.** System-level events that are not user/env scoped (i.e. `model.activated`) fire to all active subscribers across all users and environments via a new `store.list_webhooks_for_event(event)` query.
+- **`store.list_source_images` and `store.search_source_images` now SELECT `image_tags` and `external_ref`** — previously omitted despite those columns existing in the table.
+- **`store.get_image_detections` now SELECTs `detected_at`** — was missing from the column list.
+- **`store.get_identity_gallery` now SELECTs `bbox_x/y/w/h`** — was missing.
+- **`store.get_unknown_detections` now SELECTs `bbox_x/y/w/h` and `attributes`** — both were missing.
+- **`store.get_review_queue` now SELECTs `bbox_x/y/w/h`** — was missing.
+- **`store.get_rejected_detections` now SELECTs `confidence` and `bbox_x/y/w/h`** — both were missing.
+- **`_compute_storage` now returns `(used_str, free_str, used_bytes, free_bytes)`** — expanded return type; `_cached_storage` and callers updated accordingly.
+- **`_CreateBody` and `_RenameBody` in `identities.py` use Pydantic `Field(max_length=…)` constraints** — `label` capped at 200 chars, `external_ref` at 500.
+
+---
+
 ## [0.1.0-alpha.10] — 2026-07-09
 
 ### Changed
