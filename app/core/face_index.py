@@ -203,7 +203,14 @@ def search(
     if not used_faiss:
         if index is None or not hasattr(index, "shape"):
             return []
-        sims = index @ vec
+        try:
+            sims = index @ vec
+        except ValueError:
+            log.warning(
+                "face index / query dimension mismatch (index=%s, query dim=%d) — model swap in progress?",
+                index.shape, vec.shape[0],
+            )
+            return []
         pairs = [(id_map[i], float(sims[i])) for i in range(len(id_map))]
 
     # Collapse to the best score per identity (no-op when one vector per identity).

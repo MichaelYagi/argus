@@ -272,14 +272,19 @@ async def bulk_review(
             results.append({"detection_id": item.detection_id, "status": "rejected"})
         elif item.action == "reassign":
             iid = item.identity_id
-            if not iid and item.label:
+            if iid:
+                if not store.get_identity(iid, user_id, environment_id):
+                    results.append({"detection_id": item.detection_id, "status": "error",
+                                     "detail": "Identity not found"})
+                    continue
+            elif item.label:
                 iid, _created = store.get_or_create_identity(user_id, "face", item.label.strip(), environment_id)
                 if _created:
                     _webhook.fire(user_id, environment_id, "identity.created", {
                         "identity_id": iid, "label": item.label.strip(),
                         "type": "face", "external_ref": None,
                     })
-            if not iid:
+            else:
                 results.append({"detection_id": item.detection_id, "status": "error",
                                  "detail": "Provide identity_id or label"})
                 continue
@@ -482,7 +487,12 @@ async def label_detections_batch(
             results.append({"detection_id": item.detection_id, "ok": False, "error": "Detection not found"})
             continue
         identity_id = item.identity_id
-        if not identity_id:
+        if identity_id:
+            if not store.get_identity(identity_id, user_id, environment_id):
+                results.append({"detection_id": item.detection_id, "ok": False,
+                                "error": "Identity not found"})
+                continue
+        else:
             assert item.label  # loop guard above ensures label is truthy when identity_id is absent
             identity_id, _created = store.get_or_create_identity(
                 user_id, det["type"], item.label.strip(), environment_id

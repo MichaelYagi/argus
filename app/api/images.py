@@ -240,7 +240,12 @@ async def tag_image(
             continue
 
         identity_id = item.identity_id
-        if not identity_id and item.label:
+        if identity_id:
+            if not store.get_identity(identity_id, user_id, environment_id):
+                results.append({"detection_id": item.detection_id, "status": "error",
+                                 "detail": "Identity not found"})
+                continue
+        elif item.label:
             identity_id, _created = store.get_or_create_identity(
                 user_id, det["type"], item.label.strip(), environment_id
             )

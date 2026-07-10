@@ -238,13 +238,18 @@ def _migrate(conn: sqlite3.Connection) -> None:
     # Reconcile orphaned references left by older builds / direct DB edits.
     _reconcile_orphan_references(conn)
 
-    # Remove identities that have zero detections (left by older builds).
-    conn.execute(
-        """DELETE FROM identities
-           WHERE id NOT IN (
-             SELECT DISTINCT identity_id FROM detections WHERE identity_id IS NOT NULL
-           )"""
-    )
+    # Purge identities with no detections, scoped per user+env so we never touch
+    # another user's data. The NOT EXISTS + matching user_id/env means a fresh
+    # identity in env A is not affected by detections belonging to env B.
+    conn.execute("""
+        DELETE FROM identities
+        WHERE NOT EXISTS (
+            SELECT 1 FROM detections d
+            WHERE d.identity_id = identities.id
+              AND d.user_id = identities.user_id
+              AND d.environment_id = identities.environment_id
+        )
+    """)
 
     # Ensure FTS triggers store LOWER(label) for case-insensitive search.
     # If the existing trigger still inserts new.label (not LOWER), drop and recreate all three.
@@ -2857,6 +2862,7 @@ def import_identity_data(
         "identities_merged": 0,
         "embeddings_imported": 0,
         "embeddings_skipped": 0,
+        "embeddings_model_not_found": 0,
         "detections_imported": 0,
         "detections_skipped": 0,
     }
@@ -2905,11 +2911,14 @@ def import_identity_data(
                 model_row = conn.execute(
                     "SELECT id FROM models WHERE name = ?", (model_name,)
                 ).fetchone()
+                if not model_row:
+                    stats["embeddings_model_not_found"] += 1
+                    continue
                 conn.execute(
                     """INSERT INTO face_embeddings
                        (identity_id, environment_id, model_id, embedding, source_image_path)
                        VALUES (?, ?, ?, ?, ?)""",
-                    (identity_id, environment_id, model_row["id"] if model_row else None,
+                    (identity_id, environment_id, model_row["id"],
                      base64.b64decode(emb["embedding_b64"]), source_image),
                 )
                 stats["embeddings_imported"] += 1

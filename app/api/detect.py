@@ -145,12 +145,18 @@ async def detect_bulk(
 ):
     """Batch detect across multiple images.
 
-    Multipart: one or more ``file`` fields plus optional ``type`` field.
-    JSON: ``{"image_urls": [...], "type": "faces|objects|all"}``
+    Multipart: one or more ``file`` fields, optional ``type`` field, optional
+    ``external_refs`` field (JSON array of strings, parallel to files by index).
+
+    JSON (preferred): ``{"images": [{"url": "...", "external_ref": "...?"}, ...],
+    "type": "faces|objects|all"}``
+
+    JSON (legacy): ``{"image_urls": [...], "type": "faces|objects|all"}``
+    (external_ref will be null for every item)
     """
     content_type = request.headers.get("content-type", "")
     detect_type = "all"
-    jobs: list[tuple[str, bytes]] = []  # (label, raw_bytes)
+    jobs: list[tuple[str, bytes, str | None]] = []  # (label, raw_bytes, external_ref)
 
     if "multipart/form-data" in content_type:
         form = await request.form()
@@ -158,22 +164,42 @@ async def detect_bulk(
         files = form.getlist("file")
         if not files:
             raise HTTPException(400, "No files provided")
-        for f in files:
-            jobs.append((getattr(f, "filename", "") or "upload", await f.read()))
+        ext_refs_raw = form.get("external_refs")
+        ext_refs: list = []
+        if ext_refs_raw:
+            try:
+                ext_refs = json.loads(ext_refs_raw)
+            except Exception:
+                raise HTTPException(400, "external_refs must be a JSON array of strings")
+        for idx, f in enumerate(files):
+            ext_ref = ext_refs[idx] if idx < len(ext_refs) else None
+            jobs.append((getattr(f, "filename", "") or "upload", await f.read(), ext_ref))
     elif "application/json" in content_type:
         try:
             body = await request.json()
         except Exception:
             raise HTTPException(400, "Invalid JSON body")
         detect_type = body.get("type", "all")
-        urls = body.get("image_urls", [])
-        if not urls:
-            raise HTTPException(400, "No image_urls provided")
-        for url in urls:
-            try:
-                jobs.append((url, await fetch_url(url)))
-            except HTTPException as exc:
-                jobs.append((url, b"__error__:" + exc.detail.encode()))
+        images = body.get("images")
+        if images is not None:
+            if not images:
+                raise HTTPException(400, "No images provided")
+            for item in images:
+                url = item.get("url") or item.get("image_url", "")
+                ext_ref = item.get("external_ref")
+                try:
+                    jobs.append((url, await fetch_url(url), ext_ref))
+                except HTTPException as exc:
+                    jobs.append((url, b"__error__:" + exc.detail.encode(), ext_ref))
+        else:
+            urls = body.get("image_urls", [])
+            if not urls:
+                raise HTTPException(400, "No images or image_urls provided")
+            for url in urls:
+                try:
+                    jobs.append((url, await fetch_url(url), None))
+                except HTTPException as exc:
+                    jobs.append((url, b"__error__:" + exc.detail.encode(), None))
     else:
         raise HTTPException(400, "Content-Type must be multipart/form-data or application/json")
 
@@ -186,15 +212,15 @@ async def detect_bulk(
         return {"job_id": job_id, "status": "pending", "total": len(jobs)}
 
     results = []
-    for i, (label, raw) in enumerate(jobs):
-        base: dict = {"index": i, "filename": label}
+    for i, (label, raw, ext_ref) in enumerate(jobs):
+        base: dict = {"index": i, "filename": label, "external_ref": ext_ref}
         if raw.startswith(b"__error__:"):
             base["error"] = raw[len(b"__error__:"):].decode()
             results.append(base)
             continue
         try:
             img = open_and_validate(raw)
-            _, src_id = _save_source_image(user_id, environment_id, raw, img)
+            _, src_id = _save_source_image(user_id, environment_id, raw, img, ext_ref)
             base["source_image_id"] = src_id
             if detect_type in ("faces", "all"):
                 base["faces"] = _run_faces(user_id, environment_id, img, src_id)
@@ -204,7 +230,7 @@ async def detect_bulk(
                 if img_tags is not None:
                     base["image_tags"] = img_tags
             _webhook.fire(user_id, environment_id, "detection.created",
-                          {"source_image_id": src_id, "external_ref": None, "type": detect_type})
+                          {"source_image_id": src_id, "external_ref": ext_ref, "type": detect_type})
         except HTTPException as exc:
             base["error"] = exc.detail
         except Exception as exc:
@@ -516,21 +542,21 @@ def _run_bulk_job(
     job_id: str,
     user_id: int,
     environment_id: int,
-    jobs: list[tuple[str, bytes]],
+    jobs: list[tuple[str, bytes, str | None]],
     detect_type: str,
 ) -> None:
     from app.core import webhook
     results = []
     store.update_job(job_id, "running")
-    for i, (label, raw) in enumerate(jobs):
-        base: dict = {"index": i, "filename": label}
+    for i, (label, raw, ext_ref) in enumerate(jobs):
+        base: dict = {"index": i, "filename": label, "external_ref": ext_ref}
         if raw.startswith(b"__error__:"):
             base["error"] = raw[len(b"__error__:"):].decode()
             results.append(base)
             continue
         try:
             img = open_and_validate(raw)
-            _, src_id = _save_source_image(user_id, environment_id, raw, img)
+            _, src_id = _save_source_image(user_id, environment_id, raw, img, ext_ref)
             base["source_image_id"] = src_id
             if detect_type in ("faces", "all"):
                 base["faces"] = _run_faces(user_id, environment_id, img, src_id)
@@ -539,18 +565,20 @@ def _run_bulk_job(
                 base["objects"] = objs
                 if img_tags is not None:
                     base["image_tags"] = img_tags
+            webhook.fire(user_id, environment_id, "detection.created", {
+                "source_image_id": base.get("source_image_id"),
+                "external_ref": ext_ref,
+                "type": detect_type,
+            })
         except HTTPException as exc:
             base["error"] = exc.detail
         except Exception as exc:
             base["error"] = str(exc)
-        else:
-            webhook.fire(user_id, environment_id, "detection.created", {
-                "source_image_id": base.get("source_image_id"),
-                "external_ref": None,
-                "type": detect_type,
-            })
         results.append(base)
-        store.update_job(job_id, "running", {"processed": i + 1, "total": len(jobs)})
+        try:
+            store.update_job(job_id, "running", {"processed": i + 1, "total": len(jobs)})
+        except Exception:
+            pass
     nf = sum(len(r.get("faces", [])) for r in results if "faces" in r)
     no = sum(len(r.get("objects", [])) for r in results if "objects" in r)
     n_imgs = sum(1 for r in results if "source_image_id" in r)
@@ -705,7 +733,7 @@ def _run_objects(
     raw_dets, image_tags, model_row = infer_objects(img_array)
 
     # Persistence phase
-    if image_tags:
+    if image_tags is not None:
         store.set_source_image_tags(source_id, json.dumps(image_tags))
 
     padding = settings_cache.cache.get_or("system.crop_padding", 0.2)
@@ -781,6 +809,11 @@ def _save_crop(img: Any, bbox: tuple[int, int, int, int], padding: float) -> str
     y1 = max(0, y - pad_y)
     x2 = min(img.width, x + w + pad_x)
     y2 = min(img.height, y + h + pad_y)
+    # Guard against degenerate bbox where origin exceeds image bounds after clamping.
+    if x2 <= x1:
+        x1, x2 = max(0, img.width - 2), img.width
+    if y2 <= y1:
+        y1, y2 = max(0, img.height - 2), img.height
     crop = img.crop((x1, y1, x2, y2))
     if crop.mode != "RGB":
         crop = crop.convert("RGB")

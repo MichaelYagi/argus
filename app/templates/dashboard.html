@@ -168,18 +168,30 @@ function deleteSelected() {
 }
 
 function makeCard(d, type) {
-  const img = d.thumbnail_url
-    ? `<img src="${d.thumbnail_url}" alt="${d.label}">`
-    : `<div class="it-ph">?</div>`;
   const a = document.createElement('a');
   a.href = '/identities/' + d.id;
   a.className = 'identity-thumb';
   a.dataset.id = d.id;
   a.style.position = 'relative';
-  const countLine = `${d.detection_count} photo${d.detection_count !== 1 ? 's' : ''}`;
-  a.innerHTML = img +
-    `<div class="it-name">${d.label}</div>` +
-    `<div class="it-count">${countLine}</div>`;
+  if (d.thumbnail_url) {
+    const imgEl = document.createElement('img');
+    imgEl.src = d.thumbnail_url;
+    imgEl.alt = d.label;
+    a.appendChild(imgEl);
+  } else {
+    const ph = document.createElement('div');
+    ph.className = 'it-ph';
+    ph.textContent = '?';
+    a.appendChild(ph);
+  }
+  const nameDiv = document.createElement('div');
+  nameDiv.className = 'it-name';
+  nameDiv.textContent = d.label;
+  a.appendChild(nameDiv);
+  const countDiv = document.createElement('div');
+  countDiv.className = 'it-count';
+  countDiv.textContent = `${d.detection_count} photo${d.detection_count !== 1 ? 's' : ''}`;
+  a.appendChild(countDiv);
 
   const cb = document.createElement('input');
   cb.type = 'checkbox';

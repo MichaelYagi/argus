@@ -139,20 +139,24 @@ document.addEventListener('DOMContentLoaded', function() {
     let timer = null;
     let lastQ  = '';
 
+    function _esc(s) {
+      return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/”/g,'&quot;');
+    }
+
     function close() { drop.style.display = 'none'; drop.innerHTML = ''; }
 
     function render(items, q) {
       if (!items.length) {
-        drop.innerHTML = '<div class="ns-empty">No results for “' + q + '”</div>';
+        drop.innerHTML = '<div class=”ns-empty”>No results for “' + _esc(q) + '”</div>';
       } else {
         drop.innerHTML = items.map(function(it) {
           var thumb = it.cover_url
-            ? '<img src="' + it.cover_url + '" class="ns-thumb" alt="">'
-            : '<span class="ns-thumb ns-ph">' + (it.label[0] || '?') + '</span>';
-          var badge = '<span class="ns-badge ns-badge-' + it.type + '">' + it.type + '</span>';
-          var cnt   = it.detection_count ? '<span class="ns-count">' + it.detection_count + '</span>' : '';
-          return '<a href="/identities/' + it.id + '" class="ns-item">'
-            + thumb + '<span class="ns-label">' + it.label + '</span>' + badge + cnt + '</a>';
+            ? '<img src=”' + it.cover_url + '” class=”ns-thumb” alt=””>'
+            : '<span class=”ns-thumb ns-ph”>' + _esc(it.label[0] || '?') + '</span>';
+          var badge = '<span class=”ns-badge ns-badge-' + it.type + '”>' + it.type + '</span>';
+          var cnt   = it.detection_count ? '<span class=”ns-count”>' + it.detection_count + '</span>' : '';
+          return '<a href=”/identities/' + it.id + '” class=”ns-item”>'
+            + thumb + '<span class=”ns-label”>' + _esc(it.label) + '</span>' + badge + cnt + '</a>';
         }).join('');
       }
       drop.style.display = 'block';
