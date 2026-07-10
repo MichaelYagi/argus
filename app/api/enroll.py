@@ -81,6 +81,12 @@ async def enroll_detection(
         raise HTTPException(409, "No embedding stored for this detection")
 
     added = enroll_from_detection(det, user_id, environment_id)
+    if added:
+        from app.core import webhook as _wh
+        _wh.fire(user_id, environment_id, "identity.updated", {
+            "identity_id": det["identity_id"],
+            "action": "embedding_added",
+        })
     return {"detection_id": detection_id, "identity_id": det["identity_id"], "added": added, "enrolled": True}
 
 
@@ -98,6 +104,11 @@ async def unenroll_detection(
     if removed:
         from app.core import face_index as _fi
         _fi.rebuild_user(user_id, environment_id)
+        from app.core import webhook as _wh
+        _wh.fire(user_id, environment_id, "identity.updated", {
+            "identity_id": det["identity_id"],
+            "action": "embedding_removed",
+        })
     return {"detection_id": detection_id, "identity_id": det["identity_id"],
             "removed": removed, "enrolled": False}
 
@@ -108,7 +119,7 @@ async def delete_embedding(
     user_id: int = Depends(require_auth),
     environment_id: int = Depends(require_env_id),
 ):
-    if not store.delete_face_embedding(embedding_id, user_id):
+    if not store.delete_face_embedding(embedding_id, user_id, environment_id):
         raise HTTPException(404, "Embedding not found")
     if _active_face_model_id():
         from app.core import face_index as _fi

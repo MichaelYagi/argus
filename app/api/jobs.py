@@ -29,7 +29,7 @@ async def list_jobs(
     user_id: int = Depends(require_auth),
     environment_id: int = Depends(require_env_id),
 ):
-    return [_fmt(r) for r in store.list_jobs(user_id, environment_id)]
+    return [_fmt(r) for r in store.list_jobs(user_id, environment_id=environment_id)]
 
 
 @router.get("/api/jobs/{job_id}")

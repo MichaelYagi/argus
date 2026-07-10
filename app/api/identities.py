@@ -227,6 +227,11 @@ async def set_external_ref(
     ext = (body.external_ref or "").strip() or None
     if not store.set_identity_external_ref(identity_id, user_id, ext, environment_id):
         raise HTTPException(404, "Identity not found")
+    _webhook.fire(user_id, environment_id, "identity.updated", {
+        "identity_id": identity_id,
+        "external_ref": ext,
+        "action": "external_ref_updated",
+    })
     return {"id": identity_id, "external_ref": ext}
 
 
@@ -473,6 +478,7 @@ async def search_images(
                 "width": r["width"],
                 "height": r["height"],
                 "uploaded_at": r["uploaded_at"],
+                "image_tags": json.loads(r["image_tags"]) if r["image_tags"] else [],
             }
             for r in items
         ],

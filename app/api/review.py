@@ -95,6 +95,8 @@ async def get_review_queue(
             if suggested and suggested[0]["similarity"] >= auto_thr:
                 store.label_detection(r["id"], user_id, suggested[0]["identity_id"], environment_id)
                 _auto_enroll(r["id"], user_id, environment_id)
+                _webhook.fire_detection_labeled(r["id"], user_id, environment_id,
+                                               identity_id=suggested[0]["identity_id"])
                 continue
         kept.append(r)
 
@@ -133,10 +135,19 @@ async def unidentify(
 ):
     """Clear identity and return to unidentified queue (re-label path).
     Distinct from reject: reject marks the match wrong but keeps the identity link."""
+    det = store.get_detection(detection_id, user_id, environment_id)
     if not store.unidentify_detection(detection_id, user_id, environment_id):
         raise HTTPException(404, "Detection not found")
     from app.core import face_index as _fi
     _fi.rebuild_user(user_id, environment_id)
+    if det:
+        _webhook.fire(user_id, environment_id, "detection.labeled", {
+            "detection_id": detection_id,
+            "source_image_id": det["source_image_id"],
+            "identity_id": None,
+            "label": None,
+            "type": det["type"],
+        })
     return {"detection_id": detection_id, "identity_id": None, "review_status": None}
 
 
@@ -146,11 +157,20 @@ async def reject(
     user_id: int = Depends(require_auth),
     environment_id: int = Depends(require_env_id),
 ):
+    det = store.get_detection(detection_id, user_id, environment_id)
     if not store.reject_detection(detection_id, user_id, environment_id):
         raise HTTPException(404, "Detection not found")
     # Rejection drops the face reference — refresh the index.
     from app.core import face_index as _fi
     _fi.rebuild_user(user_id, environment_id)
+    if det:
+        _webhook.fire(user_id, environment_id, "detection.labeled", {
+            "detection_id": detection_id,
+            "source_image_id": det["source_image_id"],
+            "identity_id": None,
+            "label": None,
+            "type": det["type"],
+        })
     return {"detection_id": detection_id, "review_status": "rejected"}
 
 
@@ -228,7 +248,16 @@ async def bulk_review(
             _webhook.fire_detection_labeled(item.detection_id, user_id, environment_id)
             results.append({"detection_id": item.detection_id, "status": "confirmed"})
         elif item.action == "reject":
+            det = store.get_detection(item.detection_id, user_id, environment_id)
             store.reject_detection(item.detection_id, user_id, environment_id)
+            if det:
+                _webhook.fire(user_id, environment_id, "detection.labeled", {
+                    "detection_id": item.detection_id,
+                    "source_image_id": det["source_image_id"],
+                    "identity_id": None,
+                    "label": None,
+                    "type": det["type"],
+                })
             results.append({"detection_id": item.detection_id, "status": "rejected"})
         elif item.action == "reassign":
             iid = item.identity_id
@@ -281,15 +310,22 @@ async def get_detection(
     det = store.get_detection(detection_id, user_id, environment_id)
     if not det:
         raise HTTPException(404, "Detection not found")
-    d = dict(det)
-    d.pop("embedding", None)
-    d["crop_url"] = f"/media/crops/{d['crop_path']}" if d.get("crop_path") else None
-    raw_attrs = d.pop("attributes", None)
     try:
-        d["attributes"] = json.loads(raw_attrs) if raw_attrs else {}
+        attrs = json.loads(det["attributes"]) if det["attributes"] else {}
     except (ValueError, TypeError):
-        d["attributes"] = {}
-    return d
+        attrs = {}
+    return {
+        "detection_id": det["id"],
+        "type": det["type"],
+        "confidence": det["confidence"],
+        "bbox": {"x": det["bbox_x"], "y": det["bbox_y"], "w": det["bbox_w"], "h": det["bbox_h"]},
+        "crop_url": f"/media/crops/{det['crop_path']}" if det["crop_path"] else None,
+        "identity_id": det["identity_id"],
+        "source_image_id": det["source_image_id"],
+        "review_status": det["review_status"],
+        "detected_at": det["detected_at"],
+        "attributes": attrs,
+    }
 
 
 @router.get("/api/detections/{detection_id}/img")

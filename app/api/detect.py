@@ -499,6 +499,9 @@ def _run_detection_job(
             if img_tags is not None:
                 result["image_tags"] = img_tags
         _emit_det(len(result.get("faces", [])), len(result.get("objects", [])), external_ref)
+        webhook.fire(user_id, environment_id, "detection.created", {
+            "source_image_id": source_id, "external_ref": external_ref, "type": det_type,
+        })
         store.update_job(job_id, "done", result)
         webhook.fire(user_id, environment_id, "job.done", {"job_id": job_id, "status": "done", **result})
     except HTTPException as exc:
@@ -540,6 +543,12 @@ def _run_bulk_job(
             base["error"] = exc.detail
         except Exception as exc:
             base["error"] = str(exc)
+        else:
+            webhook.fire(user_id, environment_id, "detection.created", {
+                "source_image_id": base.get("source_image_id"),
+                "external_ref": None,
+                "type": detect_type,
+            })
         results.append(base)
         store.update_job(job_id, "running", {"processed": i + 1, "total": len(jobs)})
     nf = sum(len(r.get("faces", [])) for r in results if "faces" in r)

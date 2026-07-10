@@ -248,6 +248,10 @@ async def tag_image(
 
         store.label_detection(item.detection_id, user_id, identity_id, environment_id)
         identity = store.get_identity(identity_id, user_id, environment_id)
+        _webhook.fire_detection_labeled(
+            item.detection_id, user_id, environment_id,
+            identity_id=identity_id, label=identity["label"] if identity else None,
+        )
         results.append({
             "detection_id": item.detection_id,
             "identity_id": identity_id,

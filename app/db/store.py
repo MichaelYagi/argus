@@ -1213,7 +1213,7 @@ def get_image_detections(
         env_id = _resolve_env(conn, user_id, environment_id)
         sql = """SELECT d.id, d.type, d.identity_id, d.confidence, d.embedding,
                         d.bbox_x, d.bbox_y, d.bbox_w, d.bbox_h,
-                        d.crop_path, d.review_status, d.attributes,
+                        d.crop_path, d.review_status, d.detected_at, d.attributes,
                         i.label AS identity_label
                  FROM detections d
                  LEFT JOIN identities i ON d.identity_id = i.id
@@ -1419,14 +1419,19 @@ def embedding_exists(identity_id: int, source_image_path: str) -> bool:
         ).fetchone() is not None
 
 
-def delete_face_embedding(embedding_id: int, user_id: int) -> bool:
-    """Delete a single reference embedding. Verifies ownership via the identity's user_id."""
+def delete_face_embedding(
+    embedding_id: int, user_id: int, environment_id: int | None = None
+) -> bool:
+    """Delete a single reference embedding. Verifies ownership via user_id and environment_id."""
     with _connect() as conn:
+        env_id = _resolve_env(conn, user_id, environment_id)
         conn.execute(
             """DELETE FROM face_embeddings
                WHERE id = ?
-                 AND identity_id IN (SELECT id FROM identities WHERE user_id = ?)""",
-            (embedding_id, user_id),
+                 AND identity_id IN (
+                   SELECT id FROM identities WHERE user_id = ? AND environment_id = ?
+                 )""",
+            (embedding_id, user_id, env_id),
         )
         return conn.execute("SELECT changes()").fetchone()[0] > 0
 
@@ -2619,7 +2624,7 @@ def search_source_images(
             where_clause = " AND " + " AND ".join(extra_where)
 
         sql = f"""SELECT si.id AS source_image_id, si.file_path, si.external_ref,
-                         si.width, si.height, si.uploaded_at
+                         si.width, si.height, si.uploaded_at, si.image_tags
                   FROM source_images si
                   WHERE si.user_id = ? AND si.environment_id = ?{where_clause}
                   ORDER BY si.uploaded_at DESC, si.id DESC LIMIT ?"""
