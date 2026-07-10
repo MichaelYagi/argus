@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import shutil
 import time as _time
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -28,21 +29,26 @@ class _CreateBody(BaseModel):
 # Identity CRUD
 # ---------------------------------------------------------------------------
 
-_storage_cache: tuple[float, str] | None = None
+_storage_cache: tuple[float, tuple[str, str | None]] | None = None
 _STORAGE_TTL = 300  # seconds
 _storage_lock = asyncio.Lock()
 
 
-def _compute_storage() -> str:
-    return fmt_bytes(dir_size(crops_dir()) + dir_size(sources_dir()))
+def _compute_storage() -> tuple[str, str | None]:
+    used = dir_size(crops_dir()) + dir_size(sources_dir())
+    try:
+        free = shutil.disk_usage(crops_dir()).free
+        free_str = fmt_bytes(free)
+    except OSError:
+        free_str = None
+    return fmt_bytes(used), free_str
 
 
-async def _cached_storage() -> str:
+async def _cached_storage() -> tuple[str, str | None]:
     global _storage_cache
     if _storage_cache is not None and _time.monotonic() - _storage_cache[0] <= _STORAGE_TTL:
         return _storage_cache[1]
     async with _storage_lock:
-        # Re-check after acquiring lock — another coroutine may have just refreshed it.
         if _storage_cache is not None and _time.monotonic() - _storage_cache[0] <= _STORAGE_TTL:
             return _storage_cache[1]
         result = await asyncio.to_thread(_compute_storage)
@@ -56,6 +62,7 @@ async def stats(
     environment_id: int = Depends(require_env_id),
 ):
     """Aggregate counts for the dashboard — single round-trip."""
+    storage_used, storage_free = await _cached_storage()
     return {
         "people":         store.count_identities(user_id, identity_type="face", environment_id=environment_id),
         "objects":        store.count_identities(user_id, identity_type="object", environment_id=environment_id),
@@ -63,7 +70,8 @@ async def stats(
         "detections":     store.count_detections(user_id, environment_id),
         "pending_review": store.count_pending_review(user_id, environment_id),
         "unidentified":   store.count_unidentified(user_id, environment_id),
-        "storage":        await _cached_storage(),
+        "storage":        storage_used,
+        "storage_free":   storage_free,
     }
 
 

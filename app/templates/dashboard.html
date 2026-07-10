@@ -24,6 +24,8 @@
     <div class="num" id="s-detections">—</div><div class="lbl">Total detections</div></div>
   <div class="stat">
     <div class="num" id="s-storage">—</div><div class="lbl">Storage used</div></div>
+  <div class="stat" id="s-free-wrap" style="display:none">
+    <div class="num" id="s-storage-free">—</div><div class="lbl">Storage free</div></div>
 </div>
 
 <div class="tab-bar">
@@ -318,6 +320,10 @@ async function refreshStats() {
   document.getElementById('s-review').textContent       = d.pending_review ?? 0;
   document.getElementById('s-unidentified').textContent = d.unidentified   ?? 0;
   document.getElementById('s-storage').textContent      = d.storage        ?? '—';
+  if (d.storage_free != null) {
+    document.getElementById('s-storage-free').textContent = d.storage_free;
+    document.getElementById('s-free-wrap').style.display = '';
+  }
   setTabBadge('face',   d.people  ?? 0);
   setTabBadge('object', d.objects ?? 0);
 }
