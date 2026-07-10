@@ -636,7 +636,7 @@ def _run_faces(user_id: int, environment_id: int, img: Any, source_id: int, labe
             identity_id, _created = store.get_or_create_identity(user_id, "face", label, environment_id)
             if _created:
                 _webhook.fire(user_id, environment_id, "identity.created",
-                              {"identity_id": identity_id, "label": label, "type": "face"})
+                              {"identity_id": identity_id, "label": label, "type": "face", "external_ref": None})
             sim = 1.0
             review_status = "confirmed"
         else:
@@ -714,7 +714,7 @@ def _run_objects(
         identity_id, _created = store.get_or_create_identity(user_id, "object", det.class_name, environment_id)
         if _created:
             _webhook.fire(user_id, environment_id, "identity.created",
-                          {"identity_id": identity_id, "label": det.class_name, "type": "object"})
+                          {"identity_id": identity_id, "label": det.class_name, "type": "object", "external_ref": None})
         crop_filename = _save_crop(img, det.bbox, padding)
         detection_id = store.insert_detection(
             user_id=user_id,

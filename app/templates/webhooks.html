@@ -68,16 +68,22 @@ if not hmac.compare_digest(sig, expected):
           <div>
             <code style="font-size:12px;background:var(--surface-raised);padding:2px 7px;border-radius:4px">detection.created</code>
             <p class="muted" style="font-size:12px;margin:4px 0 0;line-height:1.5">
-              Fired after each detect call (synchronous, async, reprocess).
+              Fired after each detect call (synchronous, async, reprocess, bulk upload).
               Payload: <code style="font-size:11px">source_image_id</code>, <code style="font-size:11px">external_ref</code>,
-              <code style="font-size:11px">type</code>.
+              <code style="font-size:11px">type</code>. The <code style="font-size:11px">type</code> value reflects
+              what was requested: <code style="font-size:11px">"face"</code>, <code style="font-size:11px">"object"</code>,
+              or <code style="font-size:11px">"all"</code>.
             </p>
           </div>
           <div>
             <code style="font-size:12px;background:var(--surface-raised);padding:2px 7px;border-radius:4px">job.done</code>
             <p class="muted" style="font-size:12px;margin:4px 0 0;line-height:1.5">
-              Fired when an async batch job completes or fails.
-              Payload: <code style="font-size:11px">job_id</code>, <code style="font-size:11px">status</code>, full result on success.
+              Fired when an async job completes or fails. On success the full result is merged into the payload.
+              Single-image async jobs include <code style="font-size:11px">source_image_id</code>, <code style="font-size:11px">external_ref</code>,
+              and detection arrays (<code style="font-size:11px">faces</code>/<code style="font-size:11px">objects</code>).
+              Bulk upload jobs include <code style="font-size:11px">total</code>, <code style="font-size:11px">type</code>,
+              and a <code style="font-size:11px">results</code> array (one entry per image).
+              Payload always includes: <code style="font-size:11px">job_id</code>, <code style="font-size:11px">status</code>.
             </p>
           </div>
           <div>
@@ -133,7 +139,7 @@ if not hmac.compare_digest(sig, expected):
           <div>
             <code style="font-size:12px;background:var(--surface-raised);padding:2px 7px;border-radius:4px">detection.deleted</code>
             <p class="muted" style="font-size:12px;margin:4px 0 0;line-height:1.5">
-              Fired after bulk-deleting detections from the review queue.
+              Fired when detections are deleted: single deletion, bulk delete from the review queue, or source image deletion (which cascades to all its detections).
               Payload: <code style="font-size:11px">detection_ids</code> (array of deleted ids),
               <code style="font-size:11px">count</code>.
             </p>
@@ -201,9 +207,16 @@ if not hmac.compare_digest(sig, expected):
 { "event": "model.activated", "timestamp": "...",
   "data": { "model_id": 2, "name": "buffalo_l", "type": "face" } }
 
-// job.done (success)
+// job.done — single-image async (success)
 { "event": "job.done", "timestamp": "...",
-  "data": { "job_id": "abc-123", "status": "done", "total": 1, "type": "face", ... } }
+  "data": { "job_id": "abc-123", "status": "done",
+            "source_image_id": 42, "external_ref": "photo-123",
+            "faces": [...], "objects": [...] } }
+
+// job.done — bulk upload async (success)
+{ "event": "job.done", "timestamp": "...",
+  "data": { "job_id": "abc-456", "status": "done",
+            "total": 5, "type": "face", "results": [...] } }
 
 // job.done (failure)
 { "event": "job.done", "timestamp": "...",

@@ -1262,11 +1262,12 @@ def clear_detections_for_source(
         return crops
 
 
-def delete_source_image(source_image_id: int, user_id: int, environment_id: int | None = None) -> list[str] | None:
+def delete_source_image(
+    source_image_id: int, user_id: int, environment_id: int | None = None
+) -> tuple[list[int], list[str]] | None:
     """Delete a source image and cascade-delete all its detections (faces + objects).
 
-    Returns the list of crop filenames that were removed (so the caller can delete
-    the files on disk), or None if the source image was not found for this user.
+    Returns (deleted_detection_ids, crop_filenames), or None if not found.
     The content-hash source file itself is intentionally left on disk — it may be
     shared with other users/rows.
     """
@@ -1282,6 +1283,7 @@ def delete_source_image(source_image_id: int, user_id: int, environment_id: int 
             "SELECT id, crop_path FROM detections WHERE source_image_id = ? AND user_id = ?",
             (source_image_id, user_id),
         ).fetchall()
+        ids = [r["id"] for r in dets]
         crops = [r["crop_path"] for r in dets]
         # FK ON DELETE CASCADE removes the detections; SET NULL clears cover refs.
         conn.execute(
@@ -1294,7 +1296,7 @@ def delete_source_image(source_image_id: int, user_id: int, environment_id: int 
         # not an FK) — reconcile so no orphaned references remain.
         _reconcile_orphan_references(conn, user_id)
         _purge_empty_identities(conn, user_id, env_id)
-        return crops
+        return ids, crops
 
 
 def get_or_create_source_image(

@@ -133,17 +133,22 @@ async def delete_source_image(
     Use this before re-detecting a photo to avoid duplicate detections. References
     enrolled from the removed crops are dropped too, so no orphaned references remain.
     """
-    crops = store.delete_source_image(source_image_id, user_id, environment_id)
-    if crops is None:
+    result = store.delete_source_image(source_image_id, user_id, environment_id)
+    if result is None:
         raise HTTPException(404, "Source image not found")
 
+    deleted_ids, crops = result
     removed = delete_crops(crops)
 
     # References enrolled from the removed crops were dropped too — refresh the index.
     from app.core import face_index
     face_index.rebuild_user(user_id, environment_id)
 
-    return {"source_image_id": source_image_id, "detections_deleted": len(crops),
+    if deleted_ids:
+        _webhook.fire(user_id, environment_id, "detection.deleted",
+                      {"detection_ids": deleted_ids, "count": len(deleted_ids)})
+
+    return {"source_image_id": source_image_id, "detections_deleted": len(deleted_ids),
             "crops_removed": removed}
 
 
@@ -179,7 +184,7 @@ async def reprocess_source_image(
 
     if run_async:
         from app.api.detect import _run_detection_job
-        _DET_TYPE_SINGULAR = {"faces": "face", "objects": "object", "all": None}
+        _DET_TYPE_SINGULAR = {"faces": "face", "objects": "object", "all": "all"}
         job_id = store.create_job(user_id, "reprocess", environment_id)
         background_tasks.add_task(
             _run_detection_job, job_id, user_id, environment_id,
@@ -240,8 +245,10 @@ async def tag_image(
                 user_id, det["type"], item.label.strip(), environment_id
             )
             if _created:
-                _webhook.fire(user_id, environment_id, "identity.created",
-                              {"identity_id": identity_id, "label": item.label.strip(), "type": det["type"]})
+                _webhook.fire(user_id, environment_id, "identity.created", {
+                    "identity_id": identity_id, "label": item.label.strip(),
+                    "type": det["type"], "external_ref": None,
+                })
         if not identity_id:
             results.append({"detection_id": item.detection_id, "status": "error",
                              "detail": "Provide identity_id or label"})
