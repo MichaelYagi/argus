@@ -3,11 +3,12 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import shutil
 import time as _time
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from app.api._utils import delete_crops, delete_sources, dir_size, fmt_bytes, gc_source_files, paginate
 from app.core import settings_cache
@@ -20,9 +21,9 @@ router = APIRouter()
 
 
 class _CreateBody(BaseModel):
-    label: str
+    label: str = Field(..., max_length=200)
     type: str
-    external_ref: str | None = None
+    external_ref: str | None = Field(None, max_length=500)
 
 
 # ---------------------------------------------------------------------------
@@ -180,7 +181,7 @@ async def create_identity(
 
 
 class _RenameBody(BaseModel):
-    label: str
+    label: str = Field(..., max_length=200)
 
 
 @router.put("/api/identities/{identity_id}", status_code=200)
@@ -193,12 +194,22 @@ async def rename_identity(
     label = body.label.strip()
     if not label:
         raise HTTPException(400, "label is required")
+    ident = store.get_identity(identity_id, user_id, environment_id)
+    if not ident:
+        raise HTTPException(404, "Identity not found")
+    old_label = ident["label"]
     try:
         ok = store.rename_identity(identity_id, user_id, label, environment_id)
     except store.DuplicateError:
         raise HTTPException(409, f"Identity '{label}' already exists in this environment")
     if not ok:
         raise HTTPException(404, "Identity not found")
+    _webhook.fire(user_id, environment_id, "identity.updated", {
+        "identity_id": identity_id,
+        "label": label,
+        "old_label": old_label,
+        "action": "renamed",
+    })
     return {"id": identity_id, "label": label}
 
 
@@ -230,6 +241,9 @@ async def set_cover(
     user_id: int = Depends(require_auth),
     environment_id: int = Depends(require_env_id),
 ):
+    det = store.get_detection(body.detection_id, user_id, environment_id)
+    if not det or det["identity_id"] != identity_id:
+        raise HTTPException(400, "Detection does not belong to this identity")
     if not store.set_identity_cover(identity_id, user_id, body.detection_id, environment_id):
         raise HTTPException(404, "Identity not found")
     return {"identity_id": identity_id, "cover_detection_id": body.detection_id}
@@ -337,6 +351,7 @@ async def identity_gallery(
         "source_image_url": f"/media/sources/{r['source_image_path']}" if r["source_image_path"] else None,
         "crop_url": f"/media/crops/{r['crop_path']}",
         "confidence": r["confidence"],
+        "bbox": {"x": r["bbox_x"], "y": r["bbox_y"], "w": r["bbox_w"], "h": r["bbox_h"]},
         "similarity": sim_fn(r["embedding"]),
         "detected_at": r["detected_at"],
         "review_status": r["review_status"],
@@ -359,6 +374,8 @@ async def identity_rejected(
             "source_image_id": r["source_image_id"],
             "source_image_url": f"/media/sources/{r['source_image_path']}" if r["source_image_path"] else None,
             "crop_url": f"/media/crops/{r['crop_path']}",
+            "confidence": r["confidence"],
+            "bbox": {"x": r["bbox_x"], "y": r["bbox_y"], "w": r["bbox_w"], "h": r["bbox_h"]},
             "detected_at": r["detected_at"],
         }
         for r in rows
@@ -483,6 +500,8 @@ async def unknown_detections(
         "type": r["type"],
         "crop_url": f"/media/crops/{r['crop_path']}?h=300",
         "confidence": r["confidence"],
+        "bbox": {"x": r["bbox_x"], "y": r["bbox_y"], "w": r["bbox_w"], "h": r["bbox_h"]},
+        "attributes": _safe_json(r, "attributes"),
         "detected_at": r["detected_at"],
         "source_image_id": r["source_image_id"],
         "source_image_url": f"/media/sources/{r['source_image_path']}" if r["source_image_path"] else None,
@@ -510,5 +529,15 @@ def _safe(row, key):
         return row[key]
     except (IndexError, KeyError):
         return None
+
+
+def _safe_json(row, key) -> dict:
+    raw = _safe(row, key)
+    if not raw:
+        return {}
+    try:
+        return json.loads(raw) or {}
+    except (ValueError, TypeError):
+        return {}
 
 

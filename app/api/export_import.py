@@ -13,7 +13,7 @@ from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
 from app import __version__
-from app.core.auth import require_auth
+from app.core.auth import require_auth, require_env_id
 from app.core.paths import crops_dir, sources_dir
 from app.db import store
 
@@ -29,11 +29,15 @@ class _ExportBody(BaseModel):
 # ---------------------------------------------------------------------------
 
 @router.post("/api/export")
-async def export_data(body: _ExportBody, user_id: int = Depends(require_auth)):
+async def export_data(
+    body: _ExportBody,
+    user_id: int = Depends(require_auth),
+    environment_id: int = Depends(require_env_id),
+):
     if not body.identity_ids:
         raise HTTPException(400, "Select at least one identity to export")
 
-    identities_data = store.export_identity_data(user_id, body.identity_ids)
+    identities_data = store.export_identity_data(user_id, body.identity_ids, environment_id)
 
     # Collect all image filenames referenced by the exported data.
     source_files: set[str] = set()
@@ -87,6 +91,7 @@ async def export_data(body: _ExportBody, user_id: int = Depends(require_auth)):
 async def import_data(
     file: UploadFile = File(...),
     user_id: int = Depends(require_auth),
+    environment_id: int = Depends(require_env_id),
 ):
     content = await file.read()
 
@@ -124,6 +129,6 @@ async def import_data(
 
     zf.close()
 
-    stats = store.import_identity_data(user_id, export.get("identities", []))
+    stats = store.import_identity_data(user_id, export.get("identities", []), environment_id)
     stats["images_copied"] = images_copied
     return stats

@@ -573,7 +573,7 @@ def search_identities(
 ) -> list[sqlite3.Row]:
     """FTS5 trigram search over identity labels; falls back to LIKE for <3-char queries."""
     _COLS = """
-        SELECT i.id, i.label, i.type,
+        SELECT i.id, i.label, i.type, i.external_ref,
                COALESCE(d.crop_path, (
                    SELECT crop_path FROM detections
                    WHERE identity_id = i.id AND environment_id = i.environment_id
@@ -609,7 +609,7 @@ def search_identities(
             try:
                 rows = conn.execute(
                     f"""
-                    SELECT i.id, i.label, i.type,
+                    SELECT i.id, i.label, i.type, i.external_ref,
                            COALESCE(d.crop_path, (
                                SELECT crop_path FROM detections
                                WHERE identity_id = i.id AND environment_id = i.environment_id
@@ -939,7 +939,8 @@ def get_identity_gallery(
         # LEFT JOIN face_embeddings (enrolled references are keyed by crop_path) so each
         # crop carries whether it's currently part of the reference set.
         sql = """SELECT d.id, d.crop_path, d.confidence, d.detected_at, d.review_status,
-                        d.source_image_id, d.embedding, fe.id AS embedding_id,
+                        d.source_image_id, d.embedding, d.bbox_x, d.bbox_y, d.bbox_w, d.bbox_h,
+                        fe.id AS embedding_id,
                         si.file_path AS source_image_path
                  FROM detections d
                  LEFT JOIN face_embeddings fe
@@ -1047,7 +1048,8 @@ def get_unknown_detections(
     with _connect() as conn:
         env_id = _resolve_env(conn, user_id, environment_id)
         sql = """SELECT d.id, d.type, d.crop_path, d.confidence, d.detected_at,
-                        d.source_image_id, si.file_path AS source_image_path
+                        d.source_image_id, d.bbox_x, d.bbox_y, d.bbox_w, d.bbox_h, d.attributes,
+                        si.file_path AS source_image_path
                  FROM detections d
                  LEFT JOIN source_images si ON si.id = d.source_image_id
                  WHERE d.user_id = ? AND d.environment_id = ? AND d.identity_id IS NULL
@@ -1702,7 +1704,8 @@ def list_source_images(
         if identity_id is not None:
             join = """JOIN detections _id_f
                         ON _id_f.source_image_id = si.id AND _id_f.identity_id = ?"""
-        sql = f"""SELECT si.id, si.file_path, si.width, si.height, si.uploaded_at, si.image_tags,
+        sql = f"""SELECT si.id, si.file_path, si.width, si.height, si.uploaded_at,
+                         si.image_tags, si.external_ref,
                          COUNT(DISTINCT d.id) AS detection_count
                   FROM source_images si
                   {join}
@@ -1796,6 +1799,7 @@ def get_review_queue(
                    )"""
         base_select = """SELECT d.id, d.source_image_id, d.model_id, d.confidence,
                           d.crop_path, d.detected_at, d.identity_id, d.embedding,
+                          d.bbox_x, d.bbox_y, d.bbox_w, d.bbox_h,
                           i.label AS current_label,
                           si.file_path AS source_image_path
                    FROM detections d
@@ -1943,6 +1947,7 @@ def get_rejected_detections(
         env_id = _resolve_env(conn, user_id, environment_id)
         return conn.execute(
             """SELECT d.id, d.crop_path, d.detected_at, d.source_image_id,
+                      d.confidence, d.bbox_x, d.bbox_y, d.bbox_w, d.bbox_h,
                       si.file_path AS source_image_path
                FROM detections d
                LEFT JOIN source_images si ON si.id = d.source_image_id
@@ -2723,7 +2728,9 @@ def list_deliveries(webhook_id: int, user_id: int, limit: int = 50) -> list:
 # Export / Import
 # ---------------------------------------------------------------------------
 
-def export_identity_data(user_id: int, identity_ids: list[int]) -> list[dict]:
+def export_identity_data(
+    user_id: int, identity_ids: list[int], environment_id: int | None = None
+) -> list[dict]:
     """Return serializable data for the requested identities (owned by user_id).
 
     Each entry contains the identity's type/label, its face embeddings (with
@@ -2733,10 +2740,12 @@ def export_identity_data(user_id: int, identity_ids: list[int]) -> list[dict]:
     result = []
     with _connect() as conn:
         for iid in identity_ids:
-            row = conn.execute(
-                "SELECT * FROM identities WHERE id = ? AND user_id = ?",
-                (iid, user_id),
-            ).fetchone()
+            query = "SELECT * FROM identities WHERE id = ? AND user_id = ?"
+            params: tuple = (iid, user_id)
+            if environment_id is not None:
+                query += " AND environment_id = ?"
+                params += (environment_id,)
+            row = conn.execute(query, params).fetchone()
             if not row:
                 continue
 
@@ -2787,9 +2796,14 @@ def export_identity_data(user_id: int, identity_ids: list[int]) -> list[dict]:
     return result
 
 
-def import_identity_data(user_id: int, identities: list[dict]) -> dict:
-    """Merge exported identities into this user's data (no environment scoping —
-    imports land in the default scope, same as before environments were added).
+def import_identity_data(
+    user_id: int, identities: list[dict], environment_id: int | None = None
+) -> dict:
+    """Merge exported identities into this user's data.
+
+    When environment_id is provided, identities are scoped to that environment
+    and duplicate-detection also filters by environment. When None, falls back
+    to the default environment for backward compatibility.
 
     Returns a stats dict: identities_created, identities_merged,
     embeddings_imported, embeddings_skipped, detections_imported, detections_skipped.
@@ -2803,13 +2817,21 @@ def import_identity_data(user_id: int, identities: list[dict]) -> dict:
         "detections_skipped": 0,
     }
     with _connect() as conn:
+        if environment_id is None:
+            env_row = conn.execute(
+                "SELECT id FROM environments WHERE user_id = ? ORDER BY id LIMIT 1",
+                (user_id,),
+            ).fetchone()
+            environment_id = env_row["id"] if env_row else None
+
         for id_data in identities:
             itype = id_data["type"]
             label = id_data["label"]
 
             existing = conn.execute(
-                "SELECT id FROM identities WHERE user_id = ? AND type = ? AND label = ?",
-                (user_id, itype, label),
+                """SELECT id FROM identities
+                   WHERE user_id = ? AND type = ? AND label = ? AND environment_id = ?""",
+                (user_id, itype, label, environment_id),
             ).fetchone()
 
             if existing:
@@ -2817,8 +2839,8 @@ def import_identity_data(user_id: int, identities: list[dict]) -> dict:
                 stats["identities_merged"] += 1
             else:
                 conn.execute(
-                    "INSERT INTO identities (user_id, type, label) VALUES (?, ?, ?)",
-                    (user_id, itype, label),
+                    "INSERT INTO identities (user_id, type, label, environment_id) VALUES (?, ?, ?, ?)",
+                    (user_id, itype, label, environment_id),
                 )
                 identity_id = conn.execute("SELECT last_insert_rowid()").fetchone()[0]
                 stats["identities_created"] += 1
@@ -2841,9 +2863,9 @@ def import_identity_data(user_id: int, identities: list[dict]) -> dict:
                 ).fetchone()
                 conn.execute(
                     """INSERT INTO face_embeddings
-                       (identity_id, model_id, embedding, source_image_path)
-                       VALUES (?, ?, ?, ?)""",
-                    (identity_id, model_row["id"] if model_row else None,
+                       (identity_id, environment_id, model_id, embedding, source_image_path)
+                       VALUES (?, ?, ?, ?, ?)""",
+                    (identity_id, environment_id, model_row["id"] if model_row else None,
                      base64.b64decode(emb["embedding_b64"]), source_image),
                 )
                 stats["embeddings_imported"] += 1
@@ -2853,8 +2875,8 @@ def import_identity_data(user_id: int, identities: list[dict]) -> dict:
                 bbox = det.get("bbox", {})
                 bx, by, bw, bh = bbox.get("x", 0), bbox.get("y", 0), bbox.get("w", 0), bbox.get("h", 0)
                 src_row = conn.execute(
-                    "SELECT id FROM source_images WHERE user_id = ? AND file_path = ?",
-                    (user_id, source_image),
+                    "SELECT id FROM source_images WHERE user_id = ? AND file_path = ? AND environment_id = ?",
+                    (user_id, source_image, environment_id),
                 ).fetchone()
                 if src_row:
                     source_image_id = src_row["id"]
@@ -2862,8 +2884,9 @@ def import_identity_data(user_id: int, identities: list[dict]) -> dict:
                     w = det.get("source_width", 0)
                     h = det.get("source_height", 0)
                     conn.execute(
-                        "INSERT INTO source_images (user_id, file_path, width, height) VALUES (?,?,?,?)",
-                        (user_id, source_image, w, h),
+                        """INSERT INTO source_images (user_id, file_path, width, height, environment_id)
+                           VALUES (?,?,?,?,?)""",
+                        (user_id, source_image, w, h, environment_id),
                     )
                     source_image_id = conn.execute("SELECT last_insert_rowid()").fetchone()[0]
                 dup = conn.execute(
@@ -2877,11 +2900,11 @@ def import_identity_data(user_id: int, identities: list[dict]) -> dict:
                     continue
                 conn.execute(
                     """INSERT INTO detections
-                       (user_id, identity_id, source_image_id, type, confidence,
+                       (user_id, environment_id, identity_id, source_image_id, type, confidence,
                         bbox_x, bbox_y, bbox_w, bbox_h, crop_path,
                         review_status, detected_at)
-                       VALUES (?,?,?,?,?,?,?,?,?,?,?,?)""",
-                    (user_id, identity_id, source_image_id, itype,
+                       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+                    (user_id, environment_id, identity_id, source_image_id, itype,
                      det.get("confidence", 0.0), bx, by, bw, bh,
                      det.get("crop", ""),
                      det.get("review_status", "confirmed"),

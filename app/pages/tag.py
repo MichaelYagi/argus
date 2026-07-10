@@ -80,6 +80,11 @@ async def tag_page(source_image_id: int, request: Request):
 
     environments = store.list_environments(user_id)
     env_name = next((e["name"] for e in environments if e["id"] == env_id), "default")
+    try:
+        image_tags = json.loads(src["image_tags"]) if src["image_tags"] else []
+    except (ValueError, TypeError):
+        image_tags = []
+
     return templates.TemplateResponse(request, "tag.html", {
         "username": request.session.get("username", ""),
         "is_admin": is_admin(user_id),
@@ -88,6 +93,7 @@ async def tag_page(source_image_id: int, request: Request):
         "image_url": f"/media/sources/{src['file_path']}",
         "nat_w": src["width"],
         "nat_h": src["height"],
+        "image_tags": image_tags,
         "faces_json": json.dumps(face_data),
         "objects_json": json.dumps(object_data),
         "environments": [dict(e) for e in environments],

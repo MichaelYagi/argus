@@ -11,8 +11,9 @@ from app.db import store
 router = APIRouter()
 
 _VALID_EVENTS = {
-    "job.done", "detection.created", "detection.labeled",
-    "identity.created", "identity.merged", "identity.deleted",
+    "job.done",
+    "detection.created", "detection.labeled", "detection.deleted",
+    "identity.created", "identity.updated", "identity.merged", "identity.deleted",
 }
 
 
@@ -67,18 +68,31 @@ async def create_webhook(
     return _fmt(row)
 
 
-@router.get("/api/webhooks/{webhook_id}")
-async def get_webhook(webhook_id: int, user_id: int = Depends(require_auth)):
+def _get_webhook_scoped(webhook_id: int, user_id: int, environment_id: int):
+    """Fetch webhook and verify it belongs to the caller's environment."""
     row = store.get_webhook(webhook_id, user_id)
-    if not row:
+    if not row or row["environment_id"] != environment_id:
         raise HTTPException(404, "Webhook not found")
-    return _fmt(row)
+    return row
+
+
+@router.get("/api/webhooks/{webhook_id}")
+async def get_webhook(
+    webhook_id: int,
+    user_id: int = Depends(require_auth),
+    environment_id: int = Depends(require_env_id),
+):
+    return _fmt(_get_webhook_scoped(webhook_id, user_id, environment_id))
 
 
 @router.put("/api/webhooks/{webhook_id}")
 async def update_webhook(
-    webhook_id: int, body: _UpdateBody, user_id: int = Depends(require_auth),
+    webhook_id: int,
+    body: _UpdateBody,
+    user_id: int = Depends(require_auth),
+    environment_id: int = Depends(require_env_id),
 ):
+    _get_webhook_scoped(webhook_id, user_id, environment_id)
     kwargs: dict = {}
     if body.url is not None:
         kwargs["url"] = str(body.url)
@@ -99,7 +113,12 @@ async def update_webhook(
 
 
 @router.delete("/api/webhooks/{webhook_id}", status_code=204)
-async def delete_webhook(webhook_id: int, user_id: int = Depends(require_auth)):
+async def delete_webhook(
+    webhook_id: int,
+    user_id: int = Depends(require_auth),
+    environment_id: int = Depends(require_env_id),
+):
+    _get_webhook_scoped(webhook_id, user_id, environment_id)
     if not store.delete_webhook(webhook_id, user_id):
         raise HTTPException(404, "Webhook not found")
 
@@ -109,13 +128,20 @@ async def list_webhook_deliveries(
     webhook_id: int,
     limit: int = 50,
     user_id: int = Depends(require_auth),
+    environment_id: int = Depends(require_env_id),
 ):
+    _get_webhook_scoped(webhook_id, user_id, environment_id)
     rows = store.list_deliveries(webhook_id, user_id, min(limit, 100))
     return [dict(r) for r in rows]
 
 
 @router.post("/api/webhooks/{webhook_id}/test")
-async def test_webhook(webhook_id: int, user_id: int = Depends(require_auth)):
+async def test_webhook(
+    webhook_id: int,
+    user_id: int = Depends(require_auth),
+    environment_id: int = Depends(require_env_id),
+):
+    _get_webhook_scoped(webhook_id, user_id, environment_id)
     from app.core import webhook as _webhook
     result = _webhook.fire_test(webhook_id, user_id)
     if result is None:

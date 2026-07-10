@@ -203,6 +203,8 @@ async def detect_bulk(
                 base["objects"] = objs
                 if img_tags is not None:
                     base["image_tags"] = img_tags
+            _webhook.fire(user_id, environment_id, "detection.created",
+                          {"source_image_id": src_id, "external_ref": None, "type": detect_type})
         except HTTPException as exc:
             base["error"] = exc.detail
         except Exception as exc:
@@ -497,8 +499,8 @@ def _run_detection_job(
             if img_tags is not None:
                 result["image_tags"] = img_tags
         _emit_det(len(result.get("faces", [])), len(result.get("objects", [])), external_ref)
-        store.update_job(job_id, "complete", result)
-        webhook.fire(user_id, environment_id, "job.done", {"job_id": job_id, "status": "complete", **result})
+        store.update_job(job_id, "done", result)
+        webhook.fire(user_id, environment_id, "job.done", {"job_id": job_id, "status": "done", **result})
     except HTTPException as exc:
         store.update_job(job_id, "failed", {"error": exc.detail})
         webhook.fire(user_id, environment_id, "job.done", {"job_id": job_id, "status": "failed", "error": exc.detail})
@@ -546,8 +548,8 @@ def _run_bulk_job(
     if n_imgs:
         _emit_det(nf, no, f"{n_imgs} image{'s' if n_imgs != 1 else ''}")
     result = {"total": len(results), "type": detect_type, "results": results}
-    store.update_job(job_id, "complete", result)
-    webhook.fire(user_id, environment_id, "job.done", {"job_id": job_id, "status": "complete", **result})
+    store.update_job(job_id, "done", result)
+    webhook.fire(user_id, environment_id, "job.done", {"job_id": job_id, "status": "done", **result})
 
 
 # ---------------------------------------------------------------------------

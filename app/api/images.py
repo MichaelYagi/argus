@@ -62,6 +62,7 @@ async def list_source_images(
     )
     return paginate(rows, limit, lambda r: {
         "source_image_id": r["id"],
+        "external_ref": r["external_ref"],
         "source_image_url": f"/media/sources/{r['file_path']}?h=300",
         "width": r["width"],
         "height": r["height"],
@@ -99,8 +100,10 @@ async def image_faces(
     rows = store.get_image_detections(source_image_id, user_id, det_type="face", environment_id=environment_id)
     return {
         "source_image_id": source_image_id,
+        "external_ref": src["external_ref"],
         "width": src["width"],
         "height": src["height"],
+        "uploaded_at": src["uploaded_at"],
         "source_image_url": f"/media/sources/{src['file_path']}",
         "image_tags": json.loads(src["image_tags"]) if src["image_tags"] else [],
         "faces": [
@@ -198,6 +201,11 @@ async def reprocess_source_image(
         result["objects"] = objs
         if img_tags is not None:
             result["image_tags"] = img_tags
+    _webhook.fire(user_id, environment_id, "detection.created", {
+        "source_image_id": source_image_id,
+        "external_ref": src["external_ref"],
+        "type": det_type,
+    })
     return result
 
 

@@ -32,11 +32,14 @@ def engine_flags() -> dict:
     return {"face_active": face_active, "object_active": object_active}
 
 SLIDER_RANGES = {
-    "face.match_threshold":        (0.0, 1.0, 0.01),
-    "face.detection_confidence":   (0.0, 1.0, 0.01),
-    "object.detection_confidence": (0.0, 1.0, 0.01),
-    "object.iou_threshold":        (0.0, 1.0, 0.01),
-    "system.crop_padding":         (0.0, 0.5, 0.01),
+    "face.match_threshold":           (0.0, 1.0, 0.01),
+    "face.detection_confidence":      (0.0, 1.0, 0.01),
+    "face.auto_confirm_threshold":    (0.0, 1.0, 0.01),
+    "face.auto_enroll_threshold":     (0.0, 1.0, 0.01),
+    "face.cluster_threshold":         (0.0, 1.0, 0.01),
+    "object.detection_confidence":    (0.0, 1.0, 0.01),
+    "object.iou_threshold":           (0.0, 1.0, 0.01),
+    "system.crop_padding":            (0.0, 0.5, 0.01),
 }
 
 # Settings rendered as a dropdown: key -> [(value, label), ...]
@@ -264,8 +267,9 @@ async def webhooks_page(request: Request):
         webhooks.append(d)
     ctx["webhooks"] = webhooks
     ctx["valid_events"] = sorted([
-        "job.done", "detection.created", "detection.labeled",
-        "identity.created", "identity.merged", "identity.deleted",
+        "job.done",
+        "detection.created", "detection.labeled", "detection.deleted",
+        "identity.created", "identity.updated", "identity.merged", "identity.deleted",
     ])
     return _r(request, "webhooks.html", ctx)
 

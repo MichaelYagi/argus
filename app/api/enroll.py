@@ -221,7 +221,13 @@ async def enroll_existing(
     )
     identity = store.get_identity(identity_id, user_id, environment_id)
     from app.core import activity_buffer as _ab
+    from app.core import webhook as _wh
     _ab.emit("enrollment", f"Face sample added to {identity['label'] if identity else identity_id}")
+    _wh.fire(user_id, environment_id, "identity.updated", {
+        "identity_id": identity_id,
+        "label": identity["label"] if identity else None,
+        "action": "embedding_added",
+    })
     return {
         "embedding_id": result["embedding_id"],
         "identity_id": identity_id,

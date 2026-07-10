@@ -29,6 +29,7 @@ async def search_identities(
                 "id": r["id"],
                 "label": r["label"],
                 "type": r["type"],
+                "external_ref": r["external_ref"],
                 "cover_url": f"/media/crops/{r['cover_crop_path']}" if r["cover_crop_path"] else None,
                 "detection_count": r["detection_count"],
             }

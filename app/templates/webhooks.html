@@ -102,6 +102,15 @@ if not hmac.compare_digest(sig, expected):
             </p>
           </div>
           <div>
+            <code style="font-size:12px;background:var(--surface-raised);padding:2px 7px;border-radius:4px">identity.updated</code>
+            <p class="muted" style="font-size:12px;margin:4px 0 0;line-height:1.5">
+              Fired when an identity is renamed or an enrollment embedding is added.
+              Payload: <code style="font-size:11px">identity_id</code>, <code style="font-size:11px">label</code>,
+              <code style="font-size:11px">old_label</code> (rename only), <code style="font-size:11px">action</code>
+              (<code style="font-size:11px">"renamed"</code> or <code style="font-size:11px">"embedding_added"</code>).
+            </p>
+          </div>
+          <div>
             <code style="font-size:12px;background:var(--surface-raised);padding:2px 7px;border-radius:4px">identity.merged</code>
             <p class="muted" style="font-size:12px;margin:4px 0 0;line-height:1.5">
               Fired when one identity is merged into another (source is deleted).
@@ -116,6 +125,14 @@ if not hmac.compare_digest(sig, expected):
               Fired when a single identity is permanently deleted. Not fired for bulk delete-all.
               Payload: <code style="font-size:11px">identity_id</code>, <code style="font-size:11px">label</code>,
               <code style="font-size:11px">type</code>.
+            </p>
+          </div>
+          <div>
+            <code style="font-size:12px;background:var(--surface-raised);padding:2px 7px;border-radius:4px">detection.deleted</code>
+            <p class="muted" style="font-size:12px;margin:4px 0 0;line-height:1.5">
+              Fired after bulk-deleting detections from the review queue.
+              Payload: <code style="font-size:11px">detection_ids</code> (array of deleted ids),
+              <code style="font-size:11px">count</code>.
             </p>
           </div>
         </div>
@@ -137,6 +154,15 @@ if not hmac.compare_digest(sig, expected):
 { "event": "identity.created", "timestamp": "...",
   "data": { "identity_id": 5, "label": "Daisuke", "type": "face", "external_ref": null } }
 
+// identity.updated (rename)
+{ "event": "identity.updated", "timestamp": "...",
+  "data": { "identity_id": 5, "label": "Daisuke Yamada",
+            "old_label": "Daisuke", "action": "renamed" } }
+
+// identity.updated (enrollment)
+{ "event": "identity.updated", "timestamp": "...",
+  "data": { "identity_id": 5, "action": "embedding_added" } }
+
 // identity.merged  (source deleted, detections moved to target)
 { "event": "identity.merged", "timestamp": "...",
   "data": { "identity_id": 3, "label": "Daisuke (old)",
@@ -144,7 +170,11 @@ if not hmac.compare_digest(sig, expected):
 
 // identity.deleted
 { "event": "identity.deleted", "timestamp": "...",
-  "data": { "identity_id": 9, "label": "Unknown person", "type": "face" } }</pre>
+  "data": { "identity_id": 9, "label": "Unknown person", "type": "face" } }
+
+// detection.deleted
+{ "event": "detection.deleted", "timestamp": "...",
+  "data": { "detection_ids": [14, 17, 23], "count": 3 } }</pre>
       </div>
     </div>
 

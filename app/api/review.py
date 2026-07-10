@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import logging
 from typing import Any
 
@@ -283,6 +284,11 @@ async def get_detection(
     d = dict(det)
     d.pop("embedding", None)
     d["crop_url"] = f"/media/crops/{d['crop_path']}" if d.get("crop_path") else None
+    raw_attrs = d.pop("attributes", None)
+    try:
+        d["attributes"] = json.loads(raw_attrs) if raw_attrs else {}
+    except (ValueError, TypeError):
+        d["attributes"] = {}
     return d
 
 
@@ -484,6 +490,9 @@ async def delete_detections(
     removed = delete_crops(crops)
     from app.core import face_index as _fi
     _fi.rebuild_user(user_id, environment_id)
+    if crops:
+        _webhook.fire(user_id, environment_id, "detection.deleted",
+                      {"detection_ids": body.detection_ids[:len(crops)], "count": len(crops)})
     return {"deleted": len(crops), "crops_removed": removed}
 
 
@@ -507,6 +516,10 @@ def _fmt_review_item(row: Any, model_id: int | None, user_id: int, environment_i
         "source_image_id": row["source_image_id"],
         "source_image_url": f"/media/sources/{src_path}" if src_path else None,
         "confidence": row["confidence"],
+        "bbox": {
+            "x": row["bbox_x"], "y": row["bbox_y"],
+            "w": row["bbox_w"], "h": row["bbox_h"],
+        },
         "detected_at": row["detected_at"],
         "current_identity": current,
         "suggested_matches": suggested,
