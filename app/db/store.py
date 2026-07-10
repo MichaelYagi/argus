@@ -578,7 +578,7 @@ def search_identities(
                    SELECT crop_path FROM detections
                    WHERE identity_id = i.id AND environment_id = i.environment_id
                      AND (review_status IS NULL OR review_status != 'rejected')
-                   ORDER BY confidence DESC, detected_at ASC LIMIT 1
+                   ORDER BY detected_at ASC, id ASC LIMIT 1
                )) AS cover_crop_path,
                (SELECT COUNT(DISTINCT dc.source_image_id) FROM detections dc WHERE dc.identity_id = i.id
                 AND (dc.review_status IS NULL OR dc.review_status != 'rejected')) AS detection_count
@@ -614,7 +614,7 @@ def search_identities(
                                SELECT crop_path FROM detections
                                WHERE identity_id = i.id AND environment_id = i.environment_id
                                  AND (review_status IS NULL OR review_status != 'rejected')
-                               ORDER BY confidence DESC, detected_at ASC LIMIT 1
+                               ORDER BY detected_at ASC, id ASC LIMIT 1
                            )) AS cover_crop_path,
                            (SELECT COUNT(DISTINCT dc.source_image_id) FROM detections dc WHERE dc.identity_id = i.id
                             AND (dc.review_status IS NULL OR dc.review_status != 'rejected')) AS detection_count
@@ -875,7 +875,7 @@ def list_identities_summary(
                            WHERE d2.identity_id = i.id AND d2.user_id = i.user_id
                              AND d2.environment_id = i.environment_id
                              AND (d2.review_status IS NULL OR d2.review_status != 'rejected')
-                           ORDER BY d2.confidence DESC, d2.detected_at ASC LIMIT 1)
+                           ORDER BY d2.detected_at ASC, d2.id ASC LIMIT 1)
                         ) AS thumbnail_crop
                  FROM identities i
                  LEFT JOIN detections d      ON d.identity_id = i.id
@@ -908,7 +908,7 @@ def get_identity_with_counts(identity_id: int, user_id: int, environment_id: int
                          WHERE d2.identity_id = i.id AND d2.user_id = i.user_id
                            AND d2.environment_id = i.environment_id
                            AND (d2.review_status IS NULL OR d2.review_status != 'rejected')
-                         ORDER BY d2.confidence DESC, d2.detected_at ASC LIMIT 1)
+                         ORDER BY d2.detected_at ASC, d2.id ASC LIMIT 1)
                       ) AS thumbnail_crop
                FROM identities i
                LEFT JOIN detections d  ON d.identity_id = i.id
@@ -1502,14 +1502,14 @@ def get_identity_reference_blobs(identity_id: int, user_id: int, environment_id:
 
 
 def get_oldest_detection_id(identity_id: int, user_id: int, environment_id: int | None = None) -> int | None:
-    """Highest-confidence non-rejected detection for an identity — the stable default cover."""
+    """Oldest non-rejected detection for an identity — stable default cover."""
     with _connect() as conn:
         env_id = _resolve_env(conn, user_id, environment_id)
         row = conn.execute(
             """SELECT id FROM detections
                WHERE identity_id = ? AND user_id = ? AND environment_id = ?
                  AND (review_status IS NULL OR review_status != 'rejected')
-               ORDER BY confidence DESC, detected_at ASC, id ASC LIMIT 1""",
+               ORDER BY detected_at ASC, id ASC LIMIT 1""",
             (identity_id, user_id, env_id),
         ).fetchone()
         return row["id"] if row else None
