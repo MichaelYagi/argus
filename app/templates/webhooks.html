@@ -110,12 +110,13 @@ if not hmac.compare_digest(sig, expected):
           <div>
             <code style="font-size:12px;background:var(--surface-raised);padding:2px 7px;border-radius:4px">identity.updated</code>
             <p class="muted" style="font-size:12px;margin:4px 0 0;line-height:1.5">
-              Fired when an identity is mutated: renamed, embedding added/removed, or external_ref updated.
+              Fired when an identity is mutated: renamed, embedding added/removed, cover changed, or external_ref updated.
               Payload: <code style="font-size:11px">identity_id</code>, <code style="font-size:11px">action</code>
               (<code style="font-size:11px">"renamed"</code>, <code style="font-size:11px">"embedding_added"</code>,
-              <code style="font-size:11px">"embedding_removed"</code>,
+              <code style="font-size:11px">"embedding_removed"</code>, <code style="font-size:11px">"thumbnail_updated"</code>,
               <code style="font-size:11px">"external_ref_updated"</code>).
               Rename also includes <code style="font-size:11px">label</code> and <code style="font-size:11px">old_label</code>;
+              thumbnail_updated includes <code style="font-size:11px">thumbnail_url</code>;
               external_ref_updated includes <code style="font-size:11px">external_ref</code>.
             </p>
           </div>
@@ -185,6 +186,11 @@ if not hmac.compare_digest(sig, expected):
 // identity.updated (unenroll)
 { "event": "identity.updated", "timestamp": "...",
   "data": { "identity_id": 5, "action": "embedding_removed" } }
+
+// identity.updated (cover changed)
+{ "event": "identity.updated", "timestamp": "...",
+  "data": { "identity_id": 5, "action": "thumbnail_updated",
+            "thumbnail_url": "/media/crops/5/abc123.jpg" } }
 
 // identity.updated (external_ref change)
 { "event": "identity.updated", "timestamp": "...",
