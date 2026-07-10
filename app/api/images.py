@@ -227,7 +227,9 @@ async def tag_image(
 
         identity_id = item.identity_id
         if not identity_id and item.label:
-            identity_id, _created = store.get_or_create_identity(user_id, det["type"], item.label.strip(), environment_id)
+            identity_id, _created = store.get_or_create_identity(
+                user_id, det["type"], item.label.strip(), environment_id
+            )
             if _created:
                 _webhook.fire(user_id, environment_id, "identity.created",
                               {"identity_id": identity_id, "label": item.label.strip(), "type": det["type"]})

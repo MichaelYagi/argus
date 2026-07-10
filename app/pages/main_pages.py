@@ -263,7 +263,10 @@ async def webhooks_page(request: Request):
         d["is_active"] = bool(d.get("is_active", 1))
         webhooks.append(d)
     ctx["webhooks"] = webhooks
-    ctx["valid_events"] = sorted(["job.done", "detection.created", "detection.labeled", "identity.created", "identity.merged", "identity.deleted"])
+    ctx["valid_events"] = sorted([
+        "job.done", "detection.created", "detection.labeled",
+        "identity.created", "identity.merged", "identity.deleted",
+    ])
     return _r(request, "webhooks.html", ctx)
 
 

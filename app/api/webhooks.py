@@ -10,7 +10,10 @@ from app.db import store
 
 router = APIRouter()
 
-_VALID_EVENTS = {"job.done", "detection.created", "detection.labeled", "identity.created", "identity.merged", "identity.deleted"}
+_VALID_EVENTS = {
+    "job.done", "detection.created", "detection.labeled",
+    "identity.created", "identity.merged", "identity.deleted",
+}
 
 
 def _fmt(row) -> dict:
