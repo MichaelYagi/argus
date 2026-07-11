@@ -9,7 +9,7 @@ from fastapi.responses import FileResponse
 
 from app.core import settings_cache
 from app.core.auth import require_auth, require_env_id
-from app.core.image_input import acquire_image, open_and_validate, read_body_field, to_rgb_array
+from app.core.image_input import acquire_image, open_and_validate, read_body_field, resize_for_inference, to_rgb_array
 from app.core.paths import crops_dir
 from app.db import store
 from app.inference.runner import infer_faces
@@ -342,7 +342,10 @@ def _extract_embedding(raw: bytes, img: Any) -> tuple[Any, Any]:
     Uses the highest-confidence face if multiple are detected.
     Raises 503 if no engine is loaded, 400 if no face is found.
     """
-    faces, _ = infer_faces(to_rgb_array(img))
+    from app.core import settings_cache
+    max_size = settings_cache.cache.get_or("system.max_inference_size", 1920)
+    infer_img, _ = resize_for_inference(img, max_size) if max_size else (img, 1.0)
+    faces, _ = infer_faces(to_rgb_array(infer_img))
 
     if not faces:
         raise HTTPException(400, "No face detected in this image.")

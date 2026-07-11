@@ -2416,6 +2416,11 @@ _SETTINGS_SEED: list[tuple] = [
     ("system.log_buffer_size",
      "500",   "int",    "system",
      "Log Buffer Size | Number of recent log lines kept in memory and replayed in the log viewer (100–100000)"),
+    ("system.max_inference_size",
+     "1920",  "int",    "system",
+     "Max Inference Size | Longest image edge (px) before downscaling for detection. "
+     "Images larger than this are resized before running models; bboxes are scaled back to original coordinates. "
+     "0 disables resizing."),
 ]
 
 

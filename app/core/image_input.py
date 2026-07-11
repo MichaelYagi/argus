@@ -166,6 +166,25 @@ def to_rgb_array(img: Any) -> Any:
     return np.array(img.convert("RGB"))
 
 
+def resize_for_inference(img: Any, max_size: int) -> tuple[Any, float]:
+    """Shrink img so its longest edge is <= max_size using LANCZOS.
+
+    Returns (img, scale) where scale is the factor to multiply resized-space
+    bbox coordinates by to recover original-image coordinates.  Returns the
+    original image unchanged with scale=1.0 when already within max_size.
+    """
+    from PIL import Image
+
+    w, h = img.size
+    longest = max(w, h)
+    if longest <= max_size:
+        return img, 1.0
+    scale = longest / max_size
+    new_w = round(w / scale)
+    new_h = round(h / scale)
+    return img.resize((new_w, new_h), Image.LANCZOS), scale
+
+
 # ---------------------------------------------------------------------------
 # Private helpers
 # ---------------------------------------------------------------------------

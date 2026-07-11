@@ -24,6 +24,7 @@ from app.core.image_input import (
     fetch_url,
     open_and_validate,
     read_body_field,
+    resize_for_inference,
     to_rgb_array,
 )
 from app.core.paths import crops_dir, sources_dir
@@ -37,6 +38,26 @@ router = APIRouter()
 
 _FMT_EXT = {"JPEG": "jpg", "PNG": "png", "WEBP": "webp", "BMP": "bmp",
              "GIF": "gif", "TIFF": "tif", "HEIF": "heif", "AVIF": "avif"}
+
+
+def _infer_resize(img: Any) -> tuple[Any, float]:
+    """Resize img for inference per system.max_inference_size setting (0 = disabled).
+    Returns (infer_img, scale) where scale multiplies resized-space coords back to original."""
+    max_size = settings_cache.cache.get_or("system.max_inference_size", 1920)
+    if not max_size:
+        return img, 1.0
+    infer_img, scale = resize_for_inference(img, max_size)
+    if scale != 1.0:
+        logger.debug("inference resize: %dx%d -> %dx%d (scale=%.2fx)",
+                     img.width, img.height, infer_img.width, infer_img.height, scale)
+    return infer_img, scale
+
+
+def _scale_bbox(bbox: tuple, scale: float) -> tuple:
+    """Scale a (x, y, w, h) bbox from inference space back to original image space."""
+    if scale == 1.0:
+        return bbox
+    return (bbox[0] * scale, bbox[1] * scale, bbox[2] * scale, bbox[3] * scale)
 
 
 # ---------------------------------------------------------------------------
@@ -375,10 +396,12 @@ def _stateless_detect(
     Stores nothing. Faces also get a read-only best-match (highest similarity, no
     threshold) against the caller's enrolled people. Shared by /api/test[/batch]."""
     t0 = time.monotonic()
-    img_array = to_rgb_array(img)
+    infer_img, bbox_scale = _infer_resize(img)
+    img_array = to_rgb_array(infer_img)
     t1 = time.monotonic()
-    logger.debug("_stateless_detect: to_rgb=%.0fms type=%s size=%dx%d",
-                 (t1 - t0) * 1000, type_param, img.width, img.height)
+    logger.debug("_stateless_detect: to_rgb=%.0fms type=%s size=%dx%d infer=%dx%d",
+                 (t1 - t0) * 1000, type_param, img.width, img.height,
+                 infer_img.width, infer_img.height)
 
     faces: list[dict] = []
     objects: list[dict] = []
@@ -396,9 +419,10 @@ def _stateless_detect(
             match_ms = 0.0
             db_ms = 0.0
             for det in raw_faces:
+                bbox = _scale_bbox(det.bbox, bbox_scale)
                 face = {
-                    "bbox": {"x": det.bbox[0], "y": det.bbox[1],
-                             "w": det.bbox[2], "h": det.bbox[3]},
+                    "bbox": {"x": bbox[0], "y": bbox[1],
+                             "w": bbox[2], "h": bbox[3]},
                     "confidence": round(float(det.confidence), 4),
                     "identity_id": None, "label": None, "similarity": None,
                     **_face_attrs(det),
@@ -431,9 +455,10 @@ def _stateless_detect(
             logger.debug("_stateless_detect: objects=%d infer=%.0fms",
                          len(raw_dets), (time.monotonic() - to0) * 1000)
             for det in raw_dets:
+                bbox = _scale_bbox(det.bbox, bbox_scale)
                 objects.append({
-                    "bbox": {"x": det.bbox[0], "y": det.bbox[1],
-                             "w": det.bbox[2], "h": det.bbox[3]},
+                    "bbox": {"x": bbox[0], "y": bbox[1],
+                             "w": bbox[2], "h": bbox[3]},
                     "confidence": round(float(det.confidence), 4),
                     "class_name": det.class_name,
                     "class_id": det.class_id,
@@ -675,8 +700,9 @@ def _clear_detections(user_id: int, environment_id: int, source_id: int, det_typ
 
 
 def _run_faces(user_id: int, environment_id: int, img: Any, source_id: int, label: str | None = None) -> list[dict]:
-    # Inference phase
-    img_array = to_rgb_array(img)
+    # Inference phase — resize for speed; crops are saved from original img at scaled-back coords
+    infer_img, bbox_scale = _infer_resize(img)
+    img_array = to_rgb_array(infer_img)
     detections, model_row = infer_faces(img_array)
     logger.debug("_run_faces: model=%s detected=%d image=%dx%d",
                  model_row["name"], len(detections), img.width, img.height)
@@ -698,6 +724,7 @@ def _run_faces(user_id: int, environment_id: int, img: Any, source_id: int, labe
 
     results = []
     for det in detections:
+        bbox = _scale_bbox(det.bbox, bbox_scale)
         identity_id, sim = _match_face(det.embedding, model_row["id"], user_id, environment_id, threshold)
 
         if label and id(det) == labeled_id:
@@ -718,7 +745,7 @@ def _run_faces(user_id: int, environment_id: int, img: Any, source_id: int, labe
             )
 
         attrs = _face_attrs(det)
-        crop_filename = _save_crop(img, det.bbox, padding)
+        crop_filename = _save_crop(img, bbox, padding)
         detection_id = store.insert_detection(
             user_id=user_id,
             environment_id=environment_id,
@@ -727,10 +754,10 @@ def _run_faces(user_id: int, environment_id: int, img: Any, source_id: int, labe
             detection_type="face",
             model_id=model_row["id"],
             confidence=det.confidence,
-            bbox_x=det.bbox[0],
-            bbox_y=det.bbox[1],
-            bbox_w=det.bbox[2],
-            bbox_h=det.bbox[3],
+            bbox_x=bbox[0],
+            bbox_y=bbox[1],
+            bbox_w=bbox[2],
+            bbox_h=bbox[3],
             crop_path=crop_filename,
             embedding=_embedding_to_bytes(det.embedding),
             review_status=review_status,
@@ -748,7 +775,7 @@ def _run_faces(user_id: int, environment_id: int, img: Any, source_id: int, labe
 
         results.append({
             "detection_id": detection_id,
-            "bbox": {"x": det.bbox[0], "y": det.bbox[1], "w": det.bbox[2], "h": det.bbox[3]},
+            "bbox": {"x": bbox[0], "y": bbox[1], "w": bbox[2], "h": bbox[3]},
             "confidence": det.confidence,        # face-detection quality score
             "similarity": round(float(sim), 4),  # match strength vs the enrolled identity
             "identity_id": identity_id,
@@ -772,8 +799,9 @@ def _run_objects(
     image_tags is a list of keyword strings when the active engine is a tagger
     (RAM++ + Grounding DINO); None for all other engines.
     """
-    # Inference phase
-    img_array = to_rgb_array(img)
+    # Inference phase — resize for speed; crops are saved from original img at scaled-back coords
+    infer_img, bbox_scale = _infer_resize(img)
+    img_array = to_rgb_array(infer_img)
     raw_dets, image_tags, model_row = infer_objects(img_array)
     logger.debug("_run_objects: model=%s detected=%d image=%dx%d",
                  model_row["name"], len(raw_dets), img.width, img.height)
@@ -785,11 +813,12 @@ def _run_objects(
     padding = settings_cache.cache.get_or("system.crop_padding", 0.2)
     results = []
     for det in raw_dets:
+        bbox = _scale_bbox(det.bbox, bbox_scale)
         identity_id, _created = store.get_or_create_identity(user_id, "object", det.class_name, environment_id)
         if _created:
             _webhook.fire(user_id, environment_id, "identity.created",
                           {"identity_id": identity_id, "label": det.class_name, "type": "object", "external_ref": None})
-        crop_filename = _save_crop(img, det.bbox, padding)
+        crop_filename = _save_crop(img, bbox, padding)
         detection_id = store.insert_detection(
             user_id=user_id,
             environment_id=environment_id,
@@ -798,15 +827,15 @@ def _run_objects(
             detection_type="object",
             model_id=model_row["id"],
             confidence=det.confidence,
-            bbox_x=det.bbox[0],
-            bbox_y=det.bbox[1],
-            bbox_w=det.bbox[2],
-            bbox_h=det.bbox[3],
+            bbox_x=bbox[0],
+            bbox_y=bbox[1],
+            bbox_w=bbox[2],
+            bbox_h=bbox[3],
             crop_path=crop_filename,
         )
         results.append({
             "detection_id": detection_id,
-            "bbox": {"x": det.bbox[0], "y": det.bbox[1], "w": det.bbox[2], "h": det.bbox[3]},
+            "bbox": {"x": bbox[0], "y": bbox[1], "w": bbox[2], "h": bbox[3]},
             "confidence": det.confidence,
             "class_name": det.class_name,
             "class_id": det.class_id,
