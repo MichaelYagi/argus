@@ -5,6 +5,36 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [0.1.0-alpha.12] — 2026-07-10
+
+### Added
+
+- **Per-item `external_ref` in bulk detect.** The JSON body for `POST /api/detect/bulk` now accepts `{"images": [{"url": "...", "external_ref": "...?"}, ...], "type": "..."}`. Each item's `external_ref` is stored on the source image, included in the `detection.created` webhook payload, and returned in the per-item result. The legacy `image_urls` flat array still works (external_ref is null for those). Multipart form accepts a parallel `external_refs` JSON array (by index). Previously bulk always fired `detection.created` with `external_ref: null`.
+- **`thumbnail_updated` action on `identity.updated`.** `PUT /api/identities/{id}/cover` now fires `identity.updated` with `action: "thumbnail_updated"` and a `thumbnail_url` field pointing to the new cover crop. Previously the cover endpoint fired no webhook.
+- **`detection_id` in `embedding_added`/`embedding_removed` payloads.** `identity.updated` webhook events for enrollment changes now include the detection that triggered the enrollment. Set to `null` when an embedding is deleted directly via `DELETE /api/face_embeddings/{id}` (no associated detection in that path).
+- **`embeddings_model_not_found` stat in import response.** When importing face embeddings whose model name does not exist on the target system, those embeddings are now counted in a new `embeddings_model_not_found` stat and skipped — previously they were silently inserted with `model_id = NULL`, making them invisible to the matching index and miscounted as `embeddings_imported`.
+
+### Fixed
+
+- **`embedding_added`/`embedding_removed` webhooks now fire from all enrollment paths.** Previously only the explicit `POST /api/detections/{id}/enroll` and `DELETE /api/detections/{id}/enroll` API endpoints fired these events. Auto-confirm, confirm, reassign, label, bulk review, and detect-with-label were all silent. Centralized in `enroll_from_detection` so every path is covered.
+- **`DELETE /api/face_embeddings/{id}` now fires `identity.updated / embedding_removed`.** Was missing entirely.
+- **Review queue badge count now filters `ignored = 0`.** `count_pending_review` included ignored (dismissed) detections, so the badge could show N while the queue showed empty. Badge now matches queue.
+- **Face index dimension mismatch no longer 500s during model hot-swap.** If a query vector's dimension differs from the index (possible in the brief window when swapping to a model with a different embedding size), the numpy path now returns `[]` with a warning log instead of propagating a `ValueError` as a 500.
+- **Startup identity purge scoped per user+environment.** The previous `DELETE FROM identities WHERE id NOT IN (SELECT DISTINCT identity_id FROM detections)` ran unscoped across all users, risking deletion of another user's freshly-created identity. Replaced with a `NOT EXISTS` variant that matches on both `user_id` and `environment_id`.
+- **XSS in nav-search dropdown.** Identity labels were rendered via `innerHTML` string concatenation. Now escaped with `_esc()`.
+- **XSS in dashboard identity cards.** `makeCard()` rebuilt using DOM methods (`createElement`, `textContent`) instead of `innerHTML`.
+- **Missing identity ownership checks in three batch endpoints.** `POST /api/review` bulk reassign, `POST /api/review/label` batch label, and `POST /api/images/{id}/tag` were missing ownership checks — a caller could assign a detection to an identity belonging to a different user or environment. All three now verify the target identity exists in the caller's scope before writing.
+- **`_run_bulk_job` webhook fire outside per-image try/except.** A detection error could skip `detection.created` for that item; also `store.update_job` was called outside the try so a job failure could leave progress uncounted. Both are now inside the try block.
+- **`_save_crop` degenerate bbox guard.** When a detection bbox origin exceeds image dimensions (e.g. from a corrupt model output), the padded crop could produce `x2 <= x1` or `y2 <= y1` after clamping, creating a zero-size image. Now clamps to a minimum 2-pixel slice.
+- **`_run_objects` falsy guard for empty tag list.** `if image_tags:` treated an empty list (valid output) as absent and skipped the `store.set_source_image_tags` write. Changed to `if image_tags is not None:`.
+
+### Internal
+
+- Webhook documentation page updated: `thumbnail_updated` action added to the `identity.updated` description and payload examples; `embedding_added`/`embedding_removed` examples updated to show `detection_id`; `null` case for direct embedding deletion documented.
+- Add webhook modal now starts with all event checkboxes unchecked (previously pre-checked `detection.created` and `job.done`).
+
+---
+
 ## [0.1.0-alpha.11] — 2026-07-10
 
 ### Added
@@ -419,6 +449,8 @@ Initial alpha release.
 
 ---
 
+[0.1.0-alpha.12]: https://github.com/MichaelYagi/argus/compare/v0.1.0-alpha.11...v0.1.0-alpha.12
+[0.1.0-alpha.11]: https://github.com/MichaelYagi/argus/compare/v0.1.0-alpha.10...v0.1.0-alpha.11
 [0.1.0-alpha.10]: https://github.com/MichaelYagi/argus/compare/v0.1.0-alpha.9...v0.1.0-alpha.10
 [0.1.0-alpha.9]: https://github.com/MichaelYagi/argus/compare/v0.1.0-alpha.8...v0.1.0-alpha.9
 [0.1.0-alpha.8]: https://github.com/MichaelYagi/argus/compare/v0.1.0-alpha.7...v0.1.0-alpha.8
