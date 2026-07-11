@@ -2407,6 +2407,13 @@ _SETTINGS_SEED: list[tuple] = [
     ("system.ingest_jpeg_quality",
      "85",    "int",    "system",
      "Ingest JPEG Quality | JPEG quality (1–95) used when Compress on Ingest is enabled"),
+    ("system.crop_jpeg_quality",
+     "75",    "int",    "system",
+     "Crop JPEG Quality | JPEG quality (1–95) for saved detection crop thumbnails"),
+    ("system.source_max_size",
+     "1920",  "int",    "system",
+     "Source Max Size | Longest edge (px) to which source images are downscaled before saving. "
+     "0 disables downscaling. Bboxes are stored in the saved image's coordinate space."),
     ("system.use_gpu",
      "true",  "bool",   "system",
      "Use GPU | Enable GPU inference when a CUDA device is available; disable to force CPU"),

@@ -9,7 +9,7 @@ from fastapi.responses import FileResponse
 
 from app.core import settings_cache
 from app.core.auth import require_auth, require_env_id
-from app.core.image_input import acquire_image, open_and_validate, read_body_field, resize_for_inference, to_rgb_array
+from app.core.image_input import acquire_image, open_and_validate, read_body_field, to_rgb_array
 from app.core.paths import crops_dir
 from app.db import store
 from app.inference.runner import infer_faces
@@ -218,6 +218,7 @@ async def enroll_new(
         "external_ref": external_ref,
         "source_image_id": result["source_id"],
         "source_image_url": f"/media/sources/{result['source_filename']}",
+        "source_scale": result["source_scale"],
         "bbox": {"x": face_det.bbox[0], "y": face_det.bbox[1],
                  "w": face_det.bbox[2], "h": face_det.bbox[3]},
     }
@@ -272,13 +273,16 @@ def _persist_enrollment(
 
     Returns {detection_id, embedding_id, source_id, crop_path}.
     """
-    from app.api.detect import _save_crop, _save_source_image
+    from app.api.detect import _save_crop, _save_source_image, _scale_bbox
 
     model_id = _active_face_model_id()
 
-    source_filename, source_id = _save_source_image(user_id, environment_id, raw, img, external_ref)
+    source_filename, source_id, source_scale = _save_source_image(user_id, environment_id, raw, img, external_ref)
     padding = settings_cache.cache.get_or("system.crop_padding", 0.2)
+    # Crop from full-res original image at original bbox coords — preserves quality.
     crop_path = _save_crop(img, face_det.bbox, padding)
+    # Scale bbox to stored source image's coordinate space for DB and tag page overlay.
+    stored_bbox = _scale_bbox(face_det.bbox, 1.0 / source_scale)
 
     detection_id = store.insert_detection(
         user_id=user_id,
@@ -288,8 +292,8 @@ def _persist_enrollment(
         detection_type="face",
         model_id=model_id,
         confidence=face_det.confidence,
-        bbox_x=face_det.bbox[0], bbox_y=face_det.bbox[1],
-        bbox_w=face_det.bbox[2], bbox_h=face_det.bbox[3],
+        bbox_x=stored_bbox[0], bbox_y=stored_bbox[1],
+        bbox_w=stored_bbox[2], bbox_h=stored_bbox[3],
         crop_path=crop_path,
         embedding=_to_bytes(embedding),
         review_status="confirmed",
@@ -312,6 +316,7 @@ def _persist_enrollment(
         "embedding_id": embedding_id,
         "source_id": source_id,
         "source_filename": source_filename,
+        "source_scale": source_scale,
         "crop_path": crop_path,
     }
 
@@ -342,10 +347,9 @@ def _extract_embedding(raw: bytes, img: Any) -> tuple[Any, Any]:
     Uses the highest-confidence face if multiple are detected.
     Raises 503 if no engine is loaded, 400 if no face is found.
     """
-    from app.core import settings_cache
-    max_size = settings_cache.cache.get_or("system.max_inference_size", 1920)
-    infer_img, _ = resize_for_inference(img, max_size) if max_size else (img, 1.0)
-    faces, _ = infer_faces(to_rgb_array(infer_img))
+    # Full-resolution inference — InsightFace is built for large inputs and
+    # resizing degrades confidence. Matches the behaviour in _run_faces.
+    faces, _ = infer_faces(to_rgb_array(img))
 
     if not faces:
         raise HTTPException(400, "No face detected in this image.")

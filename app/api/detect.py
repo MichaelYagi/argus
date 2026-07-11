@@ -82,11 +82,12 @@ async def detect_faces(
             _run_detection_job, job_id, user_id, environment_id, raw, label, replace, "face", external_ref)
         return {"job_id": job_id, "status": "pending"}
     img = open_and_validate(raw)
-    _, source_id = _save_source_image(user_id, environment_id, raw, img, external_ref)
+    _, source_id, source_scale = _save_source_image(user_id, environment_id, raw, img, external_ref)
     if replace:
         _clear_detections(user_id, environment_id, source_id, "face")
     result = {"source_image_id": source_id, "external_ref": external_ref,
-              "faces": _run_faces(user_id, environment_id, img, source_id, label=label)}
+              "source_scale": source_scale,
+              "faces": _run_faces(user_id, environment_id, img, source_id, label=label, source_scale=source_scale)}
     _emit_det(len(result["faces"]), 0, external_ref)
     from app.core import webhook
     webhook.fire(user_id, environment_id, "detection.created",
@@ -111,11 +112,12 @@ async def detect_objects(
             _run_detection_job, job_id, user_id, environment_id, raw, None, replace, "object", external_ref)
         return {"job_id": job_id, "status": "pending"}
     img = open_and_validate(raw)
-    _, source_id = _save_source_image(user_id, environment_id, raw, img, external_ref)
+    _, source_id, source_scale = _save_source_image(user_id, environment_id, raw, img, external_ref)
     if replace:
         _clear_detections(user_id, environment_id, source_id, "object")
-    objs, img_tags = _run_objects(user_id, environment_id, img, source_id)
-    result: dict = {"source_image_id": source_id, "external_ref": external_ref, "objects": objs}
+    objs, img_tags = _run_objects(user_id, environment_id, img, source_id, source_scale)
+    result: dict = {"source_image_id": source_id, "external_ref": external_ref,
+                    "source_scale": source_scale, "objects": objs}
     if img_tags is not None:
         result["image_tags"] = img_tags
     _emit_det(0, len(objs), external_ref)
@@ -143,14 +145,15 @@ async def detect_all(
             _run_detection_job, job_id, user_id, environment_id, raw, label, replace, "all", external_ref)
         return {"job_id": job_id, "status": "pending"}
     img = open_and_validate(raw)
-    _, source_id = _save_source_image(user_id, environment_id, raw, img, external_ref)
+    _, source_id, source_scale = _save_source_image(user_id, environment_id, raw, img, external_ref)
     if replace:
         _clear_detections(user_id, environment_id, source_id, None)  # both faces and objects
-    objs, img_tags = _run_objects(user_id, environment_id, img, source_id)
+    objs, img_tags = _run_objects(user_id, environment_id, img, source_id, source_scale)
     result = {
         "source_image_id": source_id,
         "external_ref": external_ref,
-        "faces": _run_faces(user_id, environment_id, img, source_id, label=label),
+        "source_scale": source_scale,
+        "faces": _run_faces(user_id, environment_id, img, source_id, label=label, source_scale=source_scale),
         "objects": objs,
     }
     if img_tags is not None:
@@ -246,12 +249,13 @@ async def detect_bulk(
             continue
         try:
             img = open_and_validate(raw)
-            _, src_id = _save_source_image(user_id, environment_id, raw, img, ext_ref)
+            _, src_id, src_scale = _save_source_image(user_id, environment_id, raw, img, ext_ref)
             base["source_image_id"] = src_id
+            base["source_scale"] = src_scale
             if detect_type in ("faces", "all"):
-                base["faces"] = _run_faces(user_id, environment_id, img, src_id)
+                base["faces"] = _run_faces(user_id, environment_id, img, src_id, source_scale=src_scale)
             if detect_type in ("objects", "all"):
-                objs, img_tags = _run_objects(user_id, environment_id, img, src_id)
+                objs, img_tags = _run_objects(user_id, environment_id, img, src_id, src_scale)
                 base["objects"] = objs
                 if img_tags is not None:
                     base["image_tags"] = img_tags
@@ -582,14 +586,14 @@ def _run_detection_job(
     try:
         store.update_job(job_id, "running")
         img = open_and_validate(raw)
-        _, source_id = _save_source_image(user_id, environment_id, raw, img, external_ref)
+        _, source_id, source_scale = _save_source_image(user_id, environment_id, raw, img, external_ref)
         if replace:
             _clear_detections(user_id, environment_id, source_id, None if det_type == "all" else det_type)
         result: dict = {"source_image_id": source_id, "external_ref": external_ref}
         if det_type in ("face", "all"):
-            result["faces"] = _run_faces(user_id, environment_id, img, source_id, label=label)
+            result["faces"] = _run_faces(user_id, environment_id, img, source_id, label=label, source_scale=source_scale)
         if det_type in ("object", "all"):
-            objs, img_tags = _run_objects(user_id, environment_id, img, source_id)
+            objs, img_tags = _run_objects(user_id, environment_id, img, source_id, source_scale)
             result["objects"] = objs
             if img_tags is not None:
                 result["image_tags"] = img_tags
@@ -625,12 +629,13 @@ def _run_bulk_job(
             continue
         try:
             img = open_and_validate(raw)
-            _, src_id = _save_source_image(user_id, environment_id, raw, img, ext_ref)
+            _, src_id, src_scale = _save_source_image(user_id, environment_id, raw, img, ext_ref)
             base["source_image_id"] = src_id
+            base["source_scale"] = src_scale
             if detect_type in ("faces", "all"):
-                base["faces"] = _run_faces(user_id, environment_id, img, src_id)
+                base["faces"] = _run_faces(user_id, environment_id, img, src_id, source_scale=src_scale)
             if detect_type in ("objects", "all"):
-                objs, img_tags = _run_objects(user_id, environment_id, img, src_id)
+                objs, img_tags = _run_objects(user_id, environment_id, img, src_id, src_scale)
                 base["objects"] = objs
                 if img_tags is not None:
                     base["image_tags"] = img_tags
@@ -704,7 +709,8 @@ def _clear_detections(user_id: int, environment_id: int, source_id: int, det_typ
         face_index.rebuild_user(user_id, environment_id)
 
 
-def _run_faces(user_id: int, environment_id: int, img: Any, source_id: int, label: str | None = None) -> list[dict]:
+def _run_faces(user_id: int, environment_id: int, img: Any, source_id: int,
+               label: str | None = None, source_scale: float = 1.0) -> list[dict]:
     # Inference phase — full resolution; InsightFace runs its own detection pyramid
     # and is built for large inputs. Resizing degrades confidence on faces.
     img_array = to_rgb_array(img)
@@ -749,7 +755,15 @@ def _run_faces(user_id: int, environment_id: int, img: Any, source_id: int, labe
             )
 
         attrs = _face_attrs(det)
+        # Crop from the full-res original image at original bbox coords — preserves quality.
         crop_filename = _save_crop(img, det.bbox, padding)
+        # Scale bbox to the stored source image's coordinate space for DB and tag page overlay.
+        stored_bbox = _scale_bbox(det.bbox, 1.0 / source_scale)
+        logger.debug(
+            "_run_faces bbox: source_scale=%.3f original=(%d,%d,%d,%d) stored=(%.0f,%.0f,%.0f,%.0f)",
+            source_scale, det.bbox[0], det.bbox[1], det.bbox[2], det.bbox[3],
+            stored_bbox[0], stored_bbox[1], stored_bbox[2], stored_bbox[3],
+        )
         detection_id = store.insert_detection(
             user_id=user_id,
             environment_id=environment_id,
@@ -758,10 +772,10 @@ def _run_faces(user_id: int, environment_id: int, img: Any, source_id: int, labe
             detection_type="face",
             model_id=model_row["id"],
             confidence=det.confidence,
-            bbox_x=det.bbox[0],
-            bbox_y=det.bbox[1],
-            bbox_w=det.bbox[2],
-            bbox_h=det.bbox[3],
+            bbox_x=stored_bbox[0],
+            bbox_y=stored_bbox[1],
+            bbox_w=stored_bbox[2],
+            bbox_h=stored_bbox[3],
             crop_path=crop_filename,
             embedding=_embedding_to_bytes(det.embedding),
             review_status=review_status,
@@ -779,6 +793,7 @@ def _run_faces(user_id: int, environment_id: int, img: Any, source_id: int, labe
 
         results.append({
             "detection_id": detection_id,
+            # Return original-image coords to API callers — they have the original image.
             "bbox": {"x": det.bbox[0], "y": det.bbox[1], "w": det.bbox[2], "h": det.bbox[3]},
             "confidence": det.confidence,        # face-detection quality score
             "similarity": round(float(sim), 4),  # match strength vs the enrolled identity
@@ -796,7 +811,7 @@ def _run_faces(user_id: int, environment_id: int, img: Any, source_id: int, labe
 
 
 def _run_objects(
-    user_id: int, environment_id: int, img: Any, source_id: int
+    user_id: int, environment_id: int, img: Any, source_id: int, source_scale: float = 1.0,
 ) -> tuple[list[dict], list[str] | None]:
     """Run object/tagger detection. Returns (detections, image_tags).
 
@@ -817,11 +832,18 @@ def _run_objects(
     padding = settings_cache.cache.get_or("system.crop_padding", 0.2)
     results = []
     for det in raw_dets:
-        bbox = _scale_bbox(det.bbox, bbox_scale)
+        bbox = _scale_bbox(det.bbox, bbox_scale)  # inference space → original image coords
+        stored_bbox = _scale_bbox(bbox, 1.0 / source_scale)  # original → stored source coords
+        logger.debug(
+            "_run_objects bbox: bbox_scale=%.3f source_scale=%.3f inference=(%.0f,%.0f,%.0f,%.0f) stored=(%.0f,%.0f,%.0f,%.0f)",
+            bbox_scale, source_scale, det.bbox[0], det.bbox[1], det.bbox[2], det.bbox[3],
+            stored_bbox[0], stored_bbox[1], stored_bbox[2], stored_bbox[3],
+        )
         identity_id, _created = store.get_or_create_identity(user_id, "object", det.class_name, environment_id)
         if _created:
             _webhook.fire(user_id, environment_id, "identity.created",
                           {"identity_id": identity_id, "label": det.class_name, "type": "object", "external_ref": None})
+        # Crop from the full-res original image at original coords — preserves quality.
         crop_filename = _save_crop(img, bbox, padding)
         detection_id = store.insert_detection(
             user_id=user_id,
@@ -831,14 +853,15 @@ def _run_objects(
             detection_type="object",
             model_id=model_row["id"],
             confidence=det.confidence,
-            bbox_x=bbox[0],
-            bbox_y=bbox[1],
-            bbox_w=bbox[2],
-            bbox_h=bbox[3],
+            bbox_x=stored_bbox[0],
+            bbox_y=stored_bbox[1],
+            bbox_w=stored_bbox[2],
+            bbox_h=stored_bbox[3],
             crop_path=crop_filename,
         )
         results.append({
             "detection_id": detection_id,
+            # Return original-image coords to API callers — they have the original image.
             "bbox": {"x": bbox[0], "y": bbox[1], "w": bbox[2], "h": bbox[3]},
             "confidence": det.confidence,
             "class_name": det.class_name,
@@ -858,16 +881,39 @@ def _run_objects(
 
 def _save_source_image(
     user_id: int, environment_id: int, raw_bytes: bytes, img: Any, external_ref: str | None = None,
-) -> tuple[str, int]:
-    if settings_cache.cache.get_or("system.compress_on_ingest", True):
+) -> tuple[str, int, float]:
+    """Save source image, optionally resizing and recompressing.
+
+    Returns (filename, source_id, source_scale) where source_scale is the factor
+    by which original bbox coords must be divided to map into the stored image's
+    coordinate space (1.0 when no resize occurred).
+    """
+    max_size = settings_cache.cache.get_or("system.source_max_size", 1920)
+    compress = settings_cache.cache.get_or("system.compress_on_ingest", True)
+    source_scale = 1.0
+
+    if max_size or compress:
         quality = max(1, min(95, int(settings_cache.cache.get_or("system.ingest_jpeg_quality", 85))))
-        buf = io.BytesIO()
         src = img if img.mode == "RGB" else img.convert("RGB")
+        if max_size:
+            src, source_scale = resize_for_inference(src, max_size)
+        buf = io.BytesIO()
         src.save(buf, "JPEG", quality=quality)
         raw_bytes = buf.getvalue()
         ext = "jpg"
+        stored_w, stored_h = src.width, src.height
+        logger.debug(
+            "_save_source_image: original=%dx%d stored=%dx%d scale=%.3f size=%.1fKB quality=%d",
+            img.width, img.height, stored_w, stored_h, source_scale, len(raw_bytes) / 1024, quality,
+        )
     else:
         ext = _FMT_EXT.get(img.format or "JPEG", "jpg")
+        stored_w, stored_h = img.width, img.height
+        logger.debug(
+            "_save_source_image: original=%dx%d stored as-is size=%.1fKB",
+            img.width, img.height, len(raw_bytes) / 1024,
+        )
+
     content_hash = hashlib.sha256(raw_bytes).hexdigest()
     filename = f"{content_hash}.{ext}"
     dest = sources_dir() / filename
@@ -875,9 +921,9 @@ def _save_source_image(
         sources_dir().mkdir(parents=True, exist_ok=True)
         dest.write_bytes(raw_bytes)
     source_id = store.get_or_create_source_image(
-        user_id, filename, img.width, img.height, environment_id, external_ref,
+        user_id, filename, stored_w, stored_h, environment_id, external_ref,
     )
-    return filename, source_id
+    return filename, source_id, source_scale
 
 
 def _save_crop(img: Any, bbox: tuple[int, int, int, int], padding: float) -> str:
@@ -899,7 +945,10 @@ def _save_crop(img: Any, bbox: tuple[int, int, int, int], padding: float) -> str
     crop_dir = crops_dir()
     crop_dir.mkdir(parents=True, exist_ok=True)
     filename = f"{uuid.uuid4().hex}.jpg"
-    crop.save(crop_dir / filename, "JPEG")
+    quality = max(1, min(95, int(settings_cache.cache.get_or("system.crop_jpeg_quality", 75))))
+    crop.save(crop_dir / filename, "JPEG", quality=quality)
+    crop_w, crop_h = x2 - x1, y2 - y1
+    logger.debug("_save_crop: %dx%d quality=%d -> %s", crop_w, crop_h, quality, filename)
     return filename
 
 

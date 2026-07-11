@@ -47,6 +47,7 @@ def _mock_img() -> MagicMock:
     img = MagicMock()
     img.width = 640
     img.height = 480
+    img.mode = "RGB"
     img.format = "JPEG"
     return img
 
@@ -60,7 +61,7 @@ def test_enroll_new_creates_identity(client):
     img = _mock_img()
     _face = MagicMock(bbox=(10, 10, 80, 80), confidence=0.95)
     persist_result = {"detection_id": 1, "embedding_id": 1, "source_id": 1,
-                      "source_filename": "src.jpg", "crop_path": "crop.jpg"}
+                      "source_filename": "src.jpg", "source_scale": 1.0, "crop_path": "crop.jpg"}
     with patch("app.api.enroll.open_and_validate", return_value=img), \
          patch("app.api.enroll._extract_embedding", return_value=(MagicMock(), _face)), \
          patch("app.api.enroll._persist_enrollment", return_value=persist_result), \
@@ -107,7 +108,7 @@ def test_enroll_new_duplicate_name_returns_409(client):
     img = _mock_img()
     _face = MagicMock(bbox=(10, 10, 80, 80), confidence=0.95)
     persist_result = {"detection_id": 1, "embedding_id": 1, "source_id": 1,
-                      "source_filename": "src.jpg", "crop_path": "crop.jpg"}
+                      "source_filename": "src.jpg", "source_scale": 1.0, "crop_path": "crop.jpg"}
     patches = [
         patch("app.api.enroll.open_and_validate", return_value=img),
         patch("app.api.enroll._extract_embedding", return_value=(MagicMock(), _face)),
@@ -140,7 +141,7 @@ def test_enroll_existing_adds_embedding(client):
     img = _mock_img()
     _face = MagicMock(bbox=(10, 10, 80, 80), confidence=0.95)
     persist_result = {"detection_id": 1, "embedding_id": 1, "source_id": 1,
-                      "source_filename": "src.jpg", "crop_path": "crop.jpg"}
+                      "source_filename": "src.jpg", "source_scale": 1.0, "crop_path": "crop.jpg"}
     with patch("app.api.enroll.open_and_validate", return_value=img), \
          patch("app.api.enroll._extract_embedding", return_value=(MagicMock(), _face)), \
          patch("app.api.enroll._persist_enrollment", return_value=persist_result):

@@ -42,6 +42,7 @@ def _mock_image(width: int = 640, height: int = 480, fmt: str = "JPEG") -> Magic
     img = MagicMock()
     img.width = width
     img.height = height
+    img.mode = "RGB"
     img.format = fmt
     img.crop.return_value.save = MagicMock()
     return img
@@ -126,7 +127,7 @@ def test_detect_faces_happy_path(client):
     with patch("app.api.detect.acquire_image", return_value=b"bytes"), \
          patch("app.api.detect.open_and_validate", return_value=mock_img), \
          patch("app.api.detect.to_rgb_array", return_value=MagicMock()), \
-         patch("app.api.detect._save_source_image", return_value=("src.jpg", source_id)), \
+         patch("app.api.detect._save_source_image", return_value=("src.jpg", source_id, 1.0)), \
          patch("app.api.detect._save_crop", return_value="crop.jpg"), \
          patch.object(registry, "get_face_engine", return_value=mock_engine):
         r = client.post("/api/detect/faces", files={"file": FAKE_FILE},
@@ -154,7 +155,7 @@ def test_detect_faces_no_detections(client):
     with patch("app.api.detect.acquire_image", return_value=b"bytes"), \
          patch("app.api.detect.open_and_validate", return_value=mock_img), \
          patch("app.api.detect.to_rgb_array", return_value=MagicMock()), \
-         patch("app.api.detect._save_source_image", return_value=("src.jpg", 1)), \
+         patch("app.api.detect._save_source_image", return_value=("src.jpg", 1, 1.0)), \
          patch.object(registry, "get_face_engine", return_value=mock_engine):
         r = client.post("/api/detect/faces", files={"file": FAKE_FILE},
                         headers={"X-API-Key": key})
@@ -182,7 +183,7 @@ def test_detect_objects_happy_path(client):
     with patch("app.api.detect.acquire_image", return_value=b"bytes"), \
          patch("app.api.detect.open_and_validate", return_value=mock_img), \
          patch("app.api.detect.to_rgb_array", return_value=MagicMock()), \
-         patch("app.api.detect._save_source_image", return_value=("src.jpg", source_id)), \
+         patch("app.api.detect._save_source_image", return_value=("src.jpg", source_id, 1.0)), \
          patch("app.api.detect._save_crop", return_value="crop.jpg"), \
          patch.object(registry, "get_object_engine", return_value=mock_engine):
         r = client.post("/api/detect/objects", files={"file": FAKE_FILE},
@@ -221,7 +222,7 @@ def test_detect_all_happy_path(client):
     with patch("app.api.detect.acquire_image", return_value=b"bytes"), \
          patch("app.api.detect.open_and_validate", return_value=mock_img), \
          patch("app.api.detect.to_rgb_array", return_value=MagicMock()), \
-         patch("app.api.detect._save_source_image", return_value=("src.jpg", source_id)), \
+         patch("app.api.detect._save_source_image", return_value=("src.jpg", source_id, 1.0)), \
          patch("app.api.detect._save_crop", return_value="crop.jpg"), \
          patch.object(registry, "get_face_engine", return_value=face_engine), \
          patch.object(registry, "get_object_engine", return_value=obj_engine):
@@ -261,7 +262,7 @@ def test_detect_faces_replace_clears_prior(client):
         with patch("app.api.detect.acquire_image", return_value=b"bytes"), \
              patch("app.api.detect.open_and_validate", return_value=mock_img), \
              patch("app.api.detect.to_rgb_array", return_value=MagicMock()), \
-             patch("app.api.detect._save_source_image", return_value=("src.jpg", source_id)), \
+             patch("app.api.detect._save_source_image", return_value=("src.jpg", source_id, 1.0)), \
              patch("app.api.detect._save_crop", return_value="crop.jpg"), \
              patch.object(registry, "get_face_engine", return_value=mock_engine):
             return client.post("/api/detect/faces?replace=true", files={"file": FAKE_FILE},
@@ -289,7 +290,7 @@ def test_detect_faces_without_replace_accumulates(client):
         with patch("app.api.detect.acquire_image", return_value=b"bytes"), \
              patch("app.api.detect.open_and_validate", return_value=mock_img), \
              patch("app.api.detect.to_rgb_array", return_value=MagicMock()), \
-             patch("app.api.detect._save_source_image", return_value=("src.jpg", source_id)), \
+             patch("app.api.detect._save_source_image", return_value=("src.jpg", source_id, 1.0)), \
              patch("app.api.detect._save_crop", return_value="crop.jpg"), \
              patch.object(registry, "get_face_engine", return_value=mock_engine):
             client.post("/api/detect/faces", files={"file": FAKE_FILE},
@@ -321,7 +322,7 @@ def test_detect_faces_replace_leaves_objects(client):
     with patch("app.api.detect.acquire_image", return_value=b"bytes"), \
          patch("app.api.detect.open_and_validate", return_value=mock_img), \
          patch("app.api.detect.to_rgb_array", return_value=MagicMock()), \
-         patch("app.api.detect._save_source_image", return_value=("src.jpg", source_id)), \
+         patch("app.api.detect._save_source_image", return_value=("src.jpg", source_id, 1.0)), \
          patch("app.api.detect._save_crop", return_value="crop.jpg"), \
          patch.object(registry, "get_face_engine", return_value=mock_engine):
         client.post("/api/detect/faces?replace=true", files={"file": FAKE_FILE},
@@ -349,7 +350,7 @@ def test_detect_faces_includes_and_stores_attributes(client):
     with patch("app.api.detect.acquire_image", return_value=b"bytes"), \
          patch("app.api.detect.open_and_validate", return_value=_mock_image()), \
          patch("app.api.detect.to_rgb_array", return_value=MagicMock()), \
-         patch("app.api.detect._save_source_image", return_value=("src.jpg", source_id)), \
+         patch("app.api.detect._save_source_image", return_value=("src.jpg", source_id, 1.0)), \
          patch("app.api.detect._save_crop", return_value="crop.jpg"), \
          patch.object(registry, "get_face_engine", return_value=mock_engine):
         r = client.post("/api/detect/faces", files={"file": FAKE_FILE},
@@ -382,7 +383,7 @@ def test_detect_faces_attributes_default_null(client):
     with patch("app.api.detect.acquire_image", return_value=b"bytes"), \
          patch("app.api.detect.open_and_validate", return_value=_mock_image()), \
          patch("app.api.detect.to_rgb_array", return_value=MagicMock()), \
-         patch("app.api.detect._save_source_image", return_value=("src.jpg", source_id)), \
+         patch("app.api.detect._save_source_image", return_value=("src.jpg", source_id, 1.0)), \
          patch("app.api.detect._save_crop", return_value="crop.jpg"), \
          patch.object(registry, "get_face_engine", return_value=mock_engine):
         r = client.post("/api/detect/faces", files={"file": FAKE_FILE},
@@ -698,7 +699,7 @@ def test_detect_faces_label_only_confirms_best_face(client):
     with patch("app.api.detect.acquire_image", return_value=b"bytes"), \
          patch("app.api.detect.open_and_validate", return_value=mock_img), \
          patch("app.api.detect.to_rgb_array", return_value=MagicMock()), \
-         patch("app.api.detect._save_source_image", return_value=("src.jpg", source_id)), \
+         patch("app.api.detect._save_source_image", return_value=("src.jpg", source_id, 1.0)), \
          patch("app.api.detect._save_crop", return_value="crop.jpg"), \
          patch("app.api.enroll.enroll_from_detection", return_value=False), \
          patch.object(registry, "get_face_engine", return_value=mock_engine):
@@ -738,7 +739,7 @@ def test_detect_faces_label_single_face_confirms(client):
     with patch("app.api.detect.acquire_image", return_value=b"bytes"), \
          patch("app.api.detect.open_and_validate", return_value=_mock_image()), \
          patch("app.api.detect.to_rgb_array", return_value=MagicMock()), \
-         patch("app.api.detect._save_source_image", return_value=("src.jpg", source_id)), \
+         patch("app.api.detect._save_source_image", return_value=("src.jpg", source_id, 1.0)), \
          patch("app.api.detect._save_crop", return_value="crop.jpg"), \
          patch("app.api.enroll.enroll_from_detection", return_value=False), \
          patch.object(registry, "get_face_engine", return_value=mock_engine):
@@ -767,7 +768,7 @@ def test_detect_faces_label_no_faces_returns_empty(client):
     with patch("app.api.detect.acquire_image", return_value=b"bytes"), \
          patch("app.api.detect.open_and_validate", return_value=_mock_image()), \
          patch("app.api.detect.to_rgb_array", return_value=MagicMock()), \
-         patch("app.api.detect._save_source_image", return_value=("src.jpg", 1)), \
+         patch("app.api.detect._save_source_image", return_value=("src.jpg", 1, 1.0)), \
          patch.object(registry, "get_face_engine", return_value=mock_engine):
         r = client.post(
             "/api/detect/faces",

@@ -234,10 +234,11 @@ async function _pool(items, concurrency, fn) {
       return;
     }
 
-    const faces   = data.faces   || [];
-    const objects = data.objects || [];
-    const srcId   = data.source_image_id;
-    const allDets = [...faces, ...objects];
+    const faces      = data.faces   || [];
+    const objects    = data.objects || [];
+    const srcId      = data.source_image_id;
+    const srcScale   = data.source_scale || 1;
+    const allDets    = [...faces, ...objects];
 
     const summary = [];
     if (mode !== 'objects' && faces.length)   summary.push(`${faces.length} face${faces.length === 1 ? '' : 's'}`);
@@ -280,10 +281,10 @@ async function _pool(items, concurrency, fn) {
               const b = det.bbox;
               const box = document.createElement('div');
               box.className = 'det-box ' + (det.class_name ? 'object' : 'face');
-              box.style.left   = (b.x * sx) + 'px';
-              box.style.top    = (b.y * sy) + 'px';
-              box.style.width  = (b.w * sx) + 'px';
-              box.style.height = (b.h * sy) + 'px';
+              box.style.left   = (b.x / srcScale * sx) + 'px';
+              box.style.top    = (b.y / srcScale * sy) + 'px';
+              box.style.width  = (b.w / srcScale * sx) + 'px';
+              box.style.height = (b.h / srcScale * sy) + 'px';
               const lbl = document.createElement('div');
               lbl.className = 'det-lbl';
               // Faces show match similarity; objects have no similarity, so show their score.

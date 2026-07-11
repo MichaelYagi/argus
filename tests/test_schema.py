@@ -109,7 +109,7 @@ def test_no_models_downloaded_by_default():
 
 def test_settings_seeded_count():
     rows = _query("SELECT * FROM settings")
-    assert len(rows) == 23
+    assert len(rows) == 25
 
 
 def test_settings_seeded_spot_check():
@@ -139,7 +139,7 @@ def test_settings_categories():
     assert set(by_category.keys()) == {"face", "object", "system"}
     assert len(by_category["face"]) == 8
     assert len(by_category["object"]) == 4
-    assert len(by_category["system"]) == 11
+    assert len(by_category["system"]) == 13
 
 
 # ---------------------------------------------------------------------------
@@ -149,4 +149,4 @@ def test_settings_categories():
 def test_init_db_idempotent():
     store.init_db()  # second call on same DB
     assert len(_query("SELECT * FROM models")) == 25
-    assert len(_query("SELECT * FROM settings")) == 23
+    assert len(_query("SELECT * FROM settings")) == 25

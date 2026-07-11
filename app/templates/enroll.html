@@ -165,13 +165,14 @@
     const draw = () => {
       if (!img.naturalWidth) return;
       wrap.querySelectorAll('.eo-box').forEach(b => b.remove());
+      const ss = data.source_scale || 1;
       const sx = img.clientWidth / img.naturalWidth, sy = img.clientHeight / img.naturalHeight;
       const b = data.bbox;
       const box = document.createElement('div');
       box.className = 'eo-box';
       box.style.cssText =
         `position:absolute;border:2px solid #3a8ef6;border-radius:2px;box-sizing:border-box;` +
-        `left:${b.x * sx}px;top:${b.y * sy}px;width:${b.w * sx}px;height:${b.h * sy}px`;
+        `left:${b.x / ss * sx}px;top:${b.y / ss * sy}px;width:${b.w / ss * sx}px;height:${b.h / ss * sy}px`;
       const tag = document.createElement('span');
       tag.textContent = name;
       tag.style.cssText =
