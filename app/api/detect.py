@@ -591,7 +591,8 @@ def _run_detection_job(
             _clear_detections(user_id, environment_id, source_id, None if det_type == "all" else det_type)
         result: dict = {"source_image_id": source_id, "external_ref": external_ref}
         if det_type in ("face", "all"):
-            result["faces"] = _run_faces(user_id, environment_id, img, source_id, label=label, source_scale=source_scale)
+            result["faces"] = _run_faces(
+                user_id, environment_id, img, source_id, label=label, source_scale=source_scale)
         if det_type in ("object", "all"):
             objs, img_tags = _run_objects(user_id, environment_id, img, source_id, source_scale)
             result["objects"] = objs
@@ -835,7 +836,8 @@ def _run_objects(
         bbox = _scale_bbox(det.bbox, bbox_scale)  # inference space → original image coords
         stored_bbox = _scale_bbox(bbox, 1.0 / source_scale)  # original → stored source coords
         logger.debug(
-            "_run_objects bbox: bbox_scale=%.3f source_scale=%.3f inference=(%.0f,%.0f,%.0f,%.0f) stored=(%.0f,%.0f,%.0f,%.0f)",
+            "_run_objects bbox: bbox_scale=%.3f source_scale=%.3f"
+            " inference=(%.0f,%.0f,%.0f,%.0f) stored=(%.0f,%.0f,%.0f,%.0f)",
             bbox_scale, source_scale, det.bbox[0], det.bbox[1], det.bbox[2], det.bbox[3],
             stored_bbox[0], stored_bbox[1], stored_bbox[2], stored_bbox[3],
         )

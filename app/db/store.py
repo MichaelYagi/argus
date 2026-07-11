@@ -226,6 +226,9 @@ def _migrate(conn: sqlite3.Connection) -> None:
     if "representative_embedding" not in existing_identity_cols:
         conn.execute("ALTER TABLE identities ADD COLUMN representative_embedding BLOB")
 
+    # Remove obsolete settings no longer in the seed
+    conn.execute("DELETE FROM settings WHERE key = 'system.compress_on_ingest'")
+
     # Insert missing seed settings and refresh descriptions on every startup
     existing_keys = {r[0] for r in conn.execute("SELECT key FROM settings")}
     missing = [row for row in _SETTINGS_SEED if row[0] not in existing_keys]
