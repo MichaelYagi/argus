@@ -224,7 +224,11 @@
       "Bash(pip3 show *)",
       "Bash(python3.11 -m ast app/api/jobs.py app/api/webhooks.py app/api/health.py app/api/images.py app/api/identities.py app/api/detect.py app/api/review.py app/api/enroll.py app/db/store.py app/pages/main_pages.py)",
       "Bash(python3.11 -c ' *)",
-      "Bash(xargs -I{} echo {})"
+      "Bash(xargs -I{} echo {})",
+      "Bash(pytest -x -q)",
+      "Bash(/usr/bin/python3 -m pytest -x -q)",
+      "Bash(/mnt/c/Users/Michael/Documents/development/argus/.venv/bin/pytest -x -q)",
+      "Bash(/mnt/c/Users/Michael/Documents/development/argus/.venv/bin/pytest *)"
     ]
   }
 }
