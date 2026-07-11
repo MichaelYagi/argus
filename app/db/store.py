@@ -878,10 +878,16 @@ def list_identities_summary(
     with _connect() as conn:
         tq = time.monotonic()
         env_id = _resolve_env(conn, user_id, environment_id)
+        # Correlated subqueries instead of double LEFT JOIN to avoid the N×M row blowup
+        # that the JOIN creates when an identity has many detections AND many embeddings.
         sql = """SELECT i.*,
-                        COUNT(DISTINCT CASE WHEN d.review_status IS NOT 'rejected'
-                                            THEN d.source_image_id END) AS detection_count,
-                        COUNT(DISTINCT fe.id)                            AS embedding_count,
+                        (SELECT COUNT(DISTINCT d.source_image_id)
+                         FROM detections d
+                         WHERE d.identity_id = i.id
+                           AND d.review_status IS NOT 'rejected') AS detection_count,
+                        (SELECT COUNT(*)
+                         FROM face_embeddings fe
+                         WHERE fe.identity_id = i.id)            AS embedding_count,
                         COALESCE(
                           (SELECT dc.crop_path FROM detections dc
                            WHERE dc.id = i.cover_detection_id),
@@ -892,8 +898,6 @@ def list_identities_summary(
                            ORDER BY d2.detected_at ASC, d2.id ASC LIMIT 1)
                         ) AS thumbnail_crop
                  FROM identities i
-                 LEFT JOIN detections d      ON d.identity_id = i.id
-                 LEFT JOIN face_embeddings fe ON fe.identity_id = i.id
                  WHERE i.user_id = ? AND i.environment_id = ?"""
         params: list = [user_id, env_id]
         if identity_type:
@@ -902,7 +906,7 @@ def list_identities_summary(
         if cursor:
             sql += " AND i.label > ?"
             params.append(cursor)
-        sql += " GROUP BY i.id ORDER BY i.label LIMIT ?"
+        sql += " ORDER BY i.label LIMIT ?"
         params.append(limit + 1)
         rows = conn.execute(sql, params).fetchall()
         tr = time.monotonic()
