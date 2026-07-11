@@ -1733,12 +1733,13 @@ def list_source_images(
     detection_type: str | None = None,
     since: str | None = None,
     until: str | None = None,
+    no_detections: bool = False,
 ) -> list[sqlite3.Row]:
     """Processed source images, newest first, with per-image detection count.
     One row per image (deduped at ingestion by content hash). Cursor = 'uploadedAt_id'
     so ties on the second-precision uploaded_at don't drop or repeat rows across pages.
     Optional filters: identity_id (images containing that identity), detection_type,
-    since/until (ISO timestamps, inclusive)."""
+    since/until (ISO timestamps, inclusive), no_detections (only images with zero detections)."""
     with _connect() as conn:
         env_id = _resolve_env(conn, user_id, environment_id)
         join = ""
@@ -1773,7 +1774,10 @@ def list_source_images(
                 c_ts, id_val = cursor, 0
             sql += " AND (si.uploaded_at < ? OR (si.uploaded_at = ? AND si.id < ?))"
             params.extend([c_ts, c_ts, id_val])
-        sql += " GROUP BY si.id ORDER BY si.uploaded_at DESC, si.id DESC LIMIT ?"
+        sql += " GROUP BY si.id"
+        if no_detections:
+            sql += " HAVING COUNT(DISTINCT d.id) = 0"
+        sql += " ORDER BY si.uploaded_at DESC, si.id DESC LIMIT ?"
         params.append(limit + 1)
         return conn.execute(sql, params).fetchall()
 

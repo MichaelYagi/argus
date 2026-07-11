@@ -33,6 +33,7 @@ window.ArgusGallery = function ArgusGallery(opts) {
       history.replaceState({
         [stateKey]: {
           clickedId, cursor, hasMore, items,
+          scrollY: window.scrollY,
           ...(opts.extraState ? opts.extraState() : {}),
         },
       }, '');
@@ -85,9 +86,20 @@ window.ArgusGallery = function ArgusGallery(opts) {
   }
 
   function relayout() {
+    const scrollY = window.scrollY;
     container.innerHTML = '';
     pending = []; tailEl = null;
     appendItems(items);
+    requestAnimationFrame(() => { if (window.scrollY !== scrollY) window.scrollTo(0, scrollY); });
+  }
+
+  function removeItems(preds) {
+    preds.forEach(pred => {
+      const idx = items.findIndex(pred);
+      if (idx !== -1) items.splice(idx, 1);
+    });
+    relayout();
+    if (items.length === 0 && !hasMore && emptyEl) emptyEl.hidden = false;
   }
 
   async function loadPage() {
@@ -159,7 +171,9 @@ window.ArgusGallery = function ArgusGallery(opts) {
       if (loadingEl) loadingEl.hidden = true;
       if (!hasMore) sentinel.remove();
       observe();
-      if (savedState.clickedId != null) {
+      if (savedState.scrollY != null) {
+        requestAnimationFrame(() => window.scrollTo(0, savedState.scrollY));
+      } else if (savedState.clickedId != null) {
         requestAnimationFrame(() => {
           const el = opts.findEl(container, savedState.clickedId);
           if (el) el.scrollIntoView({ block: 'center' });
@@ -184,5 +198,5 @@ window.ArgusGallery = function ArgusGallery(opts) {
     resizeT = setTimeout(relayout, 150);
   });
 
-  return { reset, removeItem };
+  return { reset, removeItem, removeItems };
 };

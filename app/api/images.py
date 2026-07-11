@@ -53,11 +53,12 @@ async def list_source_images(
     type: str | None = Query(None, description="Filter by detection type: face or object"),
     since: str | None = Query(None, description="ISO timestamp — images uploaded at or after"),
     until: str | None = Query(None, description="ISO timestamp — images uploaded at or before"),
+    no_detections: bool = Query(False, description="Only return images with zero detections"),
     user_id: int = Depends(require_auth),
     environment_id: int = Depends(require_env_id),
 ):
     """Paginated list of all processed source images (one row per image), newest first.
-    Optional filters: identity_id, type (face/object), since, until."""
+    Optional filters: identity_id, type (face/object), since, until, no_detections."""
     t0 = time.monotonic()
     if type and type not in ("face", "object"):
         raise HTTPException(400, "type must be 'face' or 'object'")
@@ -66,6 +67,7 @@ async def list_source_images(
         store.list_source_images,
         user_id, cursor=cursor, limit=limit, environment_id=environment_id,
         identity_id=identity_id, detection_type=type, since=since, until=until,
+        no_detections=no_detections,
     )
     result = paginate(rows, limit, lambda r: {
         "source_image_id": r["id"],

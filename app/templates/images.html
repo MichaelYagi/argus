@@ -51,6 +51,19 @@
   </div>
 </div>
 
+<div id="batch-bar" style="display:none;align-items:center;gap:8px;flex-wrap:wrap;
+     padding:8px 14px;margin-bottom:10px;background:var(--surface);
+     border-radius:var(--radius);box-shadow:var(--shadow)">
+  <span id="batch-count" style="font-size:13px;font-weight:500"></span>
+  <span class="nav-spacer"></span>
+  <button id="batch-no-det-btn" class="btn btn-ghost" style="font-size:12px;padding:4px 12px"
+          onclick="selectOnlyNoDetections()">Select Only No Detections</button>
+  <button class="btn btn-danger" style="font-size:12px;padding:4px 12px"
+          onclick="deleteSelected()">Delete Selected</button>
+  <button class="btn btn-ghost" style="font-size:12px;padding:4px 12px"
+          onclick="clearSelection()">Clear</button>
+</div>
+
 <p class="muted" id="img-empty" hidden style="margin-top:24px">
   No images processed yet. Run <a href="/detect">detection</a> on some photos first.
 </p>
@@ -75,8 +88,94 @@
   window.filterSince = '';
   window.filterUntil = '';
 
-  const gallery = ArgusGallery({
-    container: document.getElementById('gallery'),
+  const container  = document.getElementById('gallery');
+  const batchBar   = document.getElementById('batch-bar');
+  const batchCount = document.getElementById('batch-count');
+  const selected   = new Set();    // Set<source_image_id>
+  const loadedItems = [];          // mirror of gallery items, for "no detections" query
+
+  function updateBatchBar() {
+    const n = selected.size;
+    batchBar.style.display = n > 0 ? 'flex' : 'none';
+    batchCount.textContent = n + ' selected';
+    container.classList.toggle('has-selection', n > 0);
+  }
+
+  window.clearSelection = () => {
+    selected.clear();
+    container.querySelectorAll('.g-item.selected').forEach(el => {
+      el.classList.remove('selected');
+      const cb = el.querySelector('.g-check');
+      if (cb) cb.checked = false;
+    });
+    updateBatchBar();
+  };
+
+  window.selectOnlyNoDetections = async () => {
+    const btn = document.getElementById('batch-no-det-btn');
+    if (btn) btn.disabled = true;
+    try {
+      const ids = new Set();
+      let cur = null;
+      do {
+        const params = new URLSearchParams({ no_detections: 'true', limit: '200' });
+        if (cur) params.set('cursor', cur);
+        const resp = await fetch('/api/source-images?' + params);
+        if (!resp.ok) break;
+        const d = await resp.json();
+        d.items.forEach(item => ids.add(item.source_image_id));
+        cur = d.has_more ? d.next_cursor : null;
+      } while (cur);
+
+      selected.clear();
+      ids.forEach(id => selected.add(id));
+      container.querySelectorAll('.g-item[data-id]').forEach(el => {
+        const on = selected.has(+el.dataset.id);
+        el.classList.toggle('selected', on);
+        const cb = el.querySelector('.g-check');
+        if (cb) cb.checked = on;
+      });
+      updateBatchBar();
+    } finally {
+      if (btn) btn.disabled = false;
+    }
+  };
+
+  window.deleteSelected = () => {
+    const n = selected.size;
+    if (!n) return;
+    showConfirm(
+      `Permanently delete ${n} image${n === 1 ? '' : 's'} and all their detections, labels, and crops?\n\nThis cannot be undone.`,
+      async () => {
+        const ids = [...selected];
+        const succeeded = [];
+        await Promise.all(ids.map(async id => {
+          try {
+            const resp = await fetch('/api/images/' + id, { method: 'DELETE' });
+            if (resp.ok) succeeded.push(id);
+          } catch (_) {}
+        }));
+        succeeded.forEach(id => {
+          const idx = loadedItems.findIndex(i => i.source_image_id === id);
+          if (idx !== -1) loadedItems.splice(idx, 1);
+          selected.delete(id);
+        });
+        gallery.removeItems(succeeded.map(id => i => i.source_image_id === id));
+        updateBatchBar();
+        const failed = ids.length - succeeded.length;
+        if (succeeded.length && window.showToast)
+          showToast(succeeded.length + ' image' + (succeeded.length === 1 ? '' : 's') + ' deleted', 'success');
+        if (failed && window.showToast)
+          showToast(failed + ' deletion' + (failed === 1 ? '' : 's') + ' failed', 'error');
+      },
+      { confirmText: 'Delete ' + n, danger: true }
+    );
+  };
+
+  let gallery;
+
+  gallery = ArgusGallery({
+    container,
     emptyEl:   document.getElementById('img-empty'),
     loadingEl: document.getElementById('img-loading'),
     stateKey:  '_argus_images',
@@ -85,8 +184,9 @@
 
     buildItem(item, { saveState, removeItem }) {
       const a = document.createElement('a');
-      a.className = 'g-item';
+      a.className = 'g-item' + (selected.has(item.source_image_id) ? ' selected' : '');
       a.href = '/tag/' + item.source_image_id;
+      a.dataset.id = item.source_image_id;
       a.addEventListener('click', () => saveState(item.source_image_id));
 
       const img = document.createElement('img');
@@ -103,30 +203,6 @@
           'background:rgba(0,0,0,.6);color:#fff;border-radius:99px;padding:1px 7px;' +
           'font-size:11px;font-weight:600;line-height:16px';
         a.appendChild(badge);
-      }
-
-      if (item.image_tags && item.image_tags.length) {
-        a.title = item.image_tags.join(', ');
-        const strip = document.createElement('div');
-        strip.style.cssText = 'position:absolute;bottom:6px;left:6px;z-index:2;' +
-          'display:flex;gap:3px;max-width:calc(100% - 48px);overflow:hidden';
-        const visible = item.image_tags.slice(0, 3);
-        visible.forEach(tag => {
-          const chip = document.createElement('span');
-          chip.textContent = tag;
-          chip.style.cssText = 'background:rgba(0,0,0,.6);color:#e2e8f0;border-radius:3px;' +
-            'padding:1px 5px;font-size:10px;font-weight:500;white-space:nowrap;' +
-            'overflow:hidden;text-overflow:ellipsis;max-width:70px';
-          strip.appendChild(chip);
-        });
-        if (item.image_tags.length > 3) {
-          const more = document.createElement('span');
-          more.textContent = '+' + (item.image_tags.length - 3);
-          more.style.cssText = 'background:rgba(0,0,0,.4);color:#cbd5e0;border-radius:3px;' +
-            'padding:1px 4px;font-size:10px;white-space:nowrap';
-          strip.appendChild(more);
-        }
-        a.appendChild(strip);
       }
 
       const delBtn = document.createElement('button');
@@ -148,6 +224,10 @@
           async () => {
             const resp = await fetch('/api/images/' + item.source_image_id, { method: 'DELETE' });
             if (resp.ok) {
+              const idx = loadedItems.findIndex(i => i.source_image_id === item.source_image_id);
+              if (idx !== -1) loadedItems.splice(idx, 1);
+              selected.delete(item.source_image_id);
+              updateBatchBar();
               removeItem(i => i.source_image_id === item.source_image_id);
               if (window.showToast) showToast('Image deleted', 'success');
             } else if (window.showToast) {
@@ -158,10 +238,23 @@
         );
       });
       a.appendChild(delBtn);
+
+      const cb = document.createElement('input');
+      cb.type = 'checkbox';
+      cb.className = 'g-check';
+      cb.checked = selected.has(item.source_image_id);
+      cb.addEventListener('click', e => {
+        e.stopPropagation();
+        if (cb.checked) selected.add(item.source_image_id); else selected.delete(item.source_image_id);
+        a.classList.toggle('selected', cb.checked);
+        updateBatchBar();
+      });
+      a.appendChild(cb);
+
       return a;
     },
 
-    findEl: (c, id) => c.querySelector('a[href="/tag/' + id + '"]'),
+    findEl: (c, id) => c.querySelector('[data-id="' + id + '"]'),
 
     async fetchPage(cursor) {
       const params = new URLSearchParams({ limit: 40 });
@@ -173,6 +266,7 @@
       const resp = await fetch('/api/source-images?' + params);
       if (!resp.ok) throw new Error('fetch failed');
       const d = await resp.json();
+      loadedItems.push(...d.items);
       return { items: d.items, nextCursor: d.next_cursor, hasMore: d.has_more };
     },
 
@@ -182,6 +276,7 @@
       filterType:          window.filterType,
       filterSince:         window.filterSince,
       filterUntil:         window.filterUntil,
+      selectedIds:         [...selected],
     }),
 
     restoreExtra(state) {
@@ -200,10 +295,20 @@
         const el = document.getElementById(id);
         if (el) el.value = val;
       }
+      loadedItems.length = 0;
+      loadedItems.push(...(state.items || []));
+      selected.clear();
+      (state.selectedIds || []).forEach(id => selected.add(id));
+      updateBatchBar();
     },
   });
 
-  window.resetGallery = gallery.reset;
+  window.resetGallery = () => {
+    loadedItems.length = 0;
+    selected.clear();
+    updateBatchBar();
+    gallery.reset();
+  };
 
   const toTop = document.getElementById('scroll-top');
   const updateToTop = () => { toTop.style.display = window.scrollY > 300 ? 'flex' : 'none'; };
