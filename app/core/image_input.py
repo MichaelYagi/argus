@@ -182,9 +182,9 @@ def resize_for_inference(img: Any, max_size: int) -> tuple[Any, float]:
     scale = longest / max_size
     new_w = round(w / scale)
     new_h = round(h / scale)
-    # BILINEAR is fast and sufficient for ML inference — LANCZOS is visually
-    # better but ~5x slower on large images with no meaningful detection improvement.
-    return img.resize((new_w, new_h), Image.BILINEAR), scale
+    # NEAREST is the fastest resampling filter and sufficient for ML inference —
+    # detection models are robust to pixel-level interpolation differences.
+    return img.resize((new_w, new_h), Image.NEAREST), scale
 
 
 # ---------------------------------------------------------------------------
