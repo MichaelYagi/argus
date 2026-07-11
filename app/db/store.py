@@ -7,6 +7,7 @@ import json
 import logging
 import os
 import sqlite3
+import time
 import uuid
 from contextlib import contextmanager
 from pathlib import Path
@@ -42,13 +43,17 @@ def _resolved_db_path() -> Path:
 def _connect():
     path = _resolved_db_path()
     path.parent.mkdir(parents=True, exist_ok=True)
+    t0 = time.monotonic()
     conn = sqlite3.connect(str(path), check_same_thread=False)
     conn.row_factory = sqlite3.Row
+    t1 = time.monotonic()
     try:
         conn.execute("PRAGMA journal_mode=WAL")
         conn.execute("PRAGMA synchronous=NORMAL")
         conn.execute("PRAGMA busy_timeout=5000")
         conn.execute("PRAGMA foreign_keys = ON")
+        t2 = time.monotonic()
+        log.debug("_connect: open=%.0fms pragmas=%.0fms", (t1 - t0) * 1000, (t2 - t1) * 1000)
         yield conn
         conn.commit()
     except Exception:
@@ -869,7 +874,9 @@ def list_identities_summary(
     environment_id: int | None = None,
 ) -> tuple[list[sqlite3.Row], int]:
     """Return (rows, total_count) in one connection — avoids a second concurrent open."""
+    tc = time.monotonic()
     with _connect() as conn:
+        tq = time.monotonic()
         env_id = _resolve_env(conn, user_id, environment_id)
         sql = """SELECT i.*,
                         COUNT(DISTINCT CASE WHEN d.review_status IS NOT 'rejected'
@@ -898,12 +905,18 @@ def list_identities_summary(
         sql += " GROUP BY i.id ORDER BY i.label LIMIT ?"
         params.append(limit + 1)
         rows = conn.execute(sql, params).fetchall()
+        tr = time.monotonic()
         count_sql = "SELECT COUNT(*) FROM identities WHERE user_id = ? AND environment_id = ?"
         count_params: list = [user_id, env_id]
         if identity_type:
             count_sql += " AND type = ?"
             count_params.append(identity_type)
         total = conn.execute(count_sql, count_params).fetchone()[0]
+        tk = time.monotonic()
+        log.debug(
+            "list_identities_summary: connect=%.0fms summary_query=%.0fms count_query=%.0fms",
+            (tq - tc) * 1000, (tr - tq) * 1000, (tk - tr) * 1000,
+        )
         return rows, total
 
 
@@ -1800,7 +1813,9 @@ def count_pending_review(user_id: int, environment_id: int | None = None) -> int
 
 def get_dashboard_stats(user_id: int, environment_id: int | None = None) -> dict:
     """All dashboard counts in a single DB connection — identities, images, detections."""
+    tc = time.monotonic()
     with _connect() as conn:
+        tq = time.monotonic()
         env_id = _resolve_env(conn, user_id, environment_id)
         id_row = conn.execute(
             """SELECT
@@ -1822,6 +1837,9 @@ def get_dashboard_stats(user_id: int, environment_id: int | None = None) -> dict
                FROM detections WHERE user_id = ? AND environment_id = ?""",
             (user_id, env_id),
         ).fetchone()
+        tk = time.monotonic()
+        log.debug("get_dashboard_stats: connect=%.0fms queries=%.0fms",
+                  (tq - tc) * 1000, (tk - tq) * 1000)
         return {
             "people":         id_row["people"]         or 0,
             "objects":        id_row["objects"]        or 0,
