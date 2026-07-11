@@ -52,10 +52,10 @@ def _compute_storage() -> tuple[str, str | None, int, int | None]:
 
 
 async def _refresh_storage_bg() -> None:
+    global _storage_cache
     async with _storage_lock:
         if _storage_cache is not None and (_time.monotonic() - _storage_cache[0]) <= _STORAGE_TTL:
             return
-        global _storage_cache
         _storage_cache = (_time.monotonic(), await asyncio.to_thread(_compute_storage))
 
 
