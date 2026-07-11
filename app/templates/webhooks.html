@@ -345,9 +345,8 @@ if not hmac.compare_digest(sig, expected):
     document.getElementById('wh-url').value   = wh ? wh.url   : '';
     document.getElementById('wh-label').value = wh ? wh.label : '';
     document.getElementById('wh-secret').value = '';
-    const defaultEvents = ['detection.created', 'job.done'];
     document.querySelectorAll('.wh-evt').forEach(cb => {
-      cb.checked = wh ? wh.event_list.includes(cb.value) : defaultEvents.includes(cb.value);
+      cb.checked = wh ? wh.event_list.includes(cb.value) : false;
     });
     document.getElementById('modal-err').style.display = 'none';
     document.getElementById('wh-modal').style.display = 'flex';
