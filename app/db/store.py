@@ -867,8 +867,8 @@ def list_identities_summary(
     cursor: str | None = None,
     limit: int = 30,
     environment_id: int | None = None,
-) -> list[sqlite3.Row]:
-    """Return identities with counts and thumbnail in a single query."""
+) -> tuple[list[sqlite3.Row], int]:
+    """Return (rows, total_count) in one connection — avoids a second concurrent open."""
     with _connect() as conn:
         env_id = _resolve_env(conn, user_id, environment_id)
         sql = """SELECT i.*,
@@ -897,7 +897,14 @@ def list_identities_summary(
             params.append(cursor)
         sql += " GROUP BY i.id ORDER BY i.label LIMIT ?"
         params.append(limit + 1)
-        return conn.execute(sql, params).fetchall()
+        rows = conn.execute(sql, params).fetchall()
+        count_sql = "SELECT COUNT(*) FROM identities WHERE user_id = ? AND environment_id = ?"
+        count_params: list = [user_id, env_id]
+        if identity_type:
+            count_sql += " AND type = ?"
+            count_params.append(identity_type)
+        total = conn.execute(count_sql, count_params).fetchone()[0]
+        return rows, total
 
 
 def get_identity_with_counts(identity_id: int, user_id: int, environment_id: int | None = None) -> sqlite3.Row | None:

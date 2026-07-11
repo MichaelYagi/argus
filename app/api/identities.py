@@ -93,12 +93,10 @@ async def identities_summary(
     t0 = _time.monotonic()
     if type and type not in ("face", "object"):
         raise HTTPException(400, "type must be 'face' or 'object'")
-    rows, total = await asyncio.gather(
-        asyncio.to_thread(store.list_identities_summary,
-                          user_id, identity_type=type, cursor=cursor,
-                          limit=limit, environment_id=environment_id),
-        asyncio.to_thread(store.count_identities,
-                          user_id, identity_type=type, environment_id=environment_id),
+    rows, total = await asyncio.to_thread(
+        store.list_identities_summary,
+        user_id, identity_type=type, cursor=cursor,
+        limit=limit, environment_id=environment_id,
     )
     has_more = len(rows) > limit
     items    = rows[:limit]
