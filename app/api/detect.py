@@ -6,6 +6,7 @@ import hashlib
 import io
 import json
 import logging
+import time
 import uuid
 from typing import Any
 
@@ -348,13 +349,22 @@ async def test_detect(
     engines run; an engine that isn't loaded is simply skipped (its list is
     empty and ``available`` is false), so the call never 503s on a missing model.
     """
+    t0 = time.monotonic()
     type_param = (request.query_params.get("type") or "all").strip().lower()
     if type_param not in ("faces", "objects", "all"):
         raise HTTPException(400, "type must be faces, objects, or all")
 
     raw = await acquire_image(request)
+    t1 = time.monotonic()
     img = open_and_validate(raw)
-    return _stateless_detect(img, type_param, user_id, environment_id)
+    t2 = time.monotonic()
+    logger.debug("POST /api/test: acquire=%.0fms decode=%.0fms type=%s size=%dx%d",
+                 (t1 - t0) * 1000, (t2 - t1) * 1000, type_param, img.width, img.height)
+    result = _stateless_detect(img, type_param, user_id, environment_id)
+    logger.debug("POST /api/test: total=%.0fms faces=%d objects=%d",
+                 (time.monotonic() - t0) * 1000,
+                 result["counts"]["faces"], result["counts"]["objects"])
+    return result
 
 
 def _stateless_detect(
@@ -363,7 +373,10 @@ def _stateless_detect(
     """Run the requested engines on one image and return bboxes + counts.
     Stores nothing. Faces also get a read-only best-match (highest similarity, no
     threshold) against the caller's enrolled people. Shared by /api/test[/batch]."""
+    t0 = time.monotonic()
     img_array = to_rgb_array(img)
+    t1 = time.monotonic()
+    logger.debug("_stateless_detect: to_rgb=%.0fms type=%s", (t1 - t0) * 1000, type_param)
 
     faces: list[dict] = []
     objects: list[dict] = []
@@ -373,9 +386,13 @@ def _stateless_detect(
 
     if type_param in ("faces", "all"):
         try:
+            tf0 = time.monotonic()
             raw_faces, _ = infer_faces(img_array)
             face_available = True
+            tf1 = time.monotonic()
             from app.core import face_index
+            match_ms = 0.0
+            db_ms = 0.0
             for det in raw_faces:
                 face = {
                     "bbox": {"x": det.bbox[0], "y": det.bbox[1],
@@ -386,22 +403,31 @@ def _stateless_detect(
                 }
                 # Read-only identification — top match regardless of threshold. No writes.
                 if user_id is not None:
+                    tm0 = time.monotonic()
                     ranked = face_index.search(det.embedding, user_id, environment_id, threshold=0.0, k=1)
+                    match_ms += (time.monotonic() - tm0) * 1000
                     if ranked:
                         iid, sim = ranked[0]
+                        td0 = time.monotonic()
                         ident = store.get_identity(iid, user_id, environment_id)
+                        db_ms += (time.monotonic() - td0) * 1000
                         if ident:
                             face["identity_id"] = iid
                             face["label"] = ident["label"]
                             face["similarity"] = round(float(sim), 4)
                 faces.append(face)
+            logger.debug("_stateless_detect: faces=%d infer=%.0fms match=%.0fms identity_db=%.0fms",
+                         len(raw_faces), (tf1 - tf0) * 1000, match_ms, db_ms)
         except HTTPException:
             pass  # engine unavailable — face_available stays False
 
     if type_param in ("objects", "all"):
         try:
+            to0 = time.monotonic()
             raw_dets, image_tags, _ = infer_objects(img_array)
             object_available = True
+            logger.debug("_stateless_detect: objects=%d infer=%.0fms",
+                         len(raw_dets), (time.monotonic() - to0) * 1000)
             for det in raw_dets:
                 objects.append({
                     "bbox": {"x": det.bbox[0], "y": det.bbox[1],
