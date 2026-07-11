@@ -228,7 +228,8 @@
       "Bash(pytest -x -q)",
       "Bash(/usr/bin/python3 -m pytest -x -q)",
       "Bash(/mnt/c/Users/Michael/Documents/development/argus/.venv/bin/pytest -x -q)",
-      "Bash(/mnt/c/Users/Michael/Documents/development/argus/.venv/bin/pytest *)"
+      "Bash(/mnt/c/Users/Michael/Documents/development/argus/.venv/bin/pytest *)",
+      "Bash(/mnt/c/Users/Michael/Documents/development/argus/.venv/bin/python3 *)"
     ]
   }
 }

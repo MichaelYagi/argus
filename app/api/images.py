@@ -61,7 +61,9 @@ async def list_source_images(
     t0 = time.monotonic()
     if type and type not in ("face", "object"):
         raise HTTPException(400, "type must be 'face' or 'object'")
-    rows = store.list_source_images(
+    import asyncio
+    rows = await asyncio.to_thread(
+        store.list_source_images,
         user_id, cursor=cursor, limit=limit, environment_id=environment_id,
         identity_id=identity_id, detection_type=type, since=since, until=until,
     )

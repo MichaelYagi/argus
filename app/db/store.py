@@ -872,20 +872,20 @@ def list_identities_summary(
     with _connect() as conn:
         env_id = _resolve_env(conn, user_id, environment_id)
         sql = """SELECT i.*,
-                        COUNT(DISTINCT d.source_image_id) AS detection_count,
-                        COUNT(DISTINCT fe.id)             AS embedding_count,
+                        COUNT(DISTINCT CASE WHEN d.review_status IS NOT 'rejected'
+                                            THEN d.source_image_id END) AS detection_count,
+                        COUNT(DISTINCT fe.id)                            AS embedding_count,
                         COALESCE(
                           (SELECT dc.crop_path FROM detections dc
                            WHERE dc.id = i.cover_detection_id),
                           (SELECT d2.crop_path FROM detections d2
                            WHERE d2.identity_id = i.id AND d2.user_id = i.user_id
                              AND d2.environment_id = i.environment_id
-                             AND (d2.review_status IS NULL OR d2.review_status != 'rejected')
+                             AND d2.review_status IS NOT 'rejected'
                            ORDER BY d2.detected_at ASC, d2.id ASC LIMIT 1)
                         ) AS thumbnail_crop
                  FROM identities i
                  LEFT JOIN detections d      ON d.identity_id = i.id
-                                          AND (d.review_status IS NULL OR d.review_status != 'rejected')
                  LEFT JOIN face_embeddings fe ON fe.identity_id = i.id
                  WHERE i.user_id = ? AND i.environment_id = ?"""
         params: list = [user_id, env_id]
