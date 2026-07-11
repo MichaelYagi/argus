@@ -1786,7 +1786,7 @@ def count_pending_review(user_id: int, environment_id: int | None = None) -> int
         return conn.execute(
             """SELECT COUNT(*) FROM detections
                WHERE user_id = ? AND environment_id = ?
-                 AND review_status = 'pending' AND type = 'face'""",
+                 AND review_status = 'pending' AND type = 'face' AND ignored = 0""",
             (user_id, env_id),
         ).fetchone()[0]
 
