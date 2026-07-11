@@ -395,14 +395,11 @@ def _stateless_detect(
     """Run the requested engines on one image and return bboxes + counts.
     Stores nothing. Faces also get a read-only best-match (highest similarity, no
     threshold) against the caller's enrolled people. Shared by /api/test[/batch]."""
-    t0 = time.monotonic()
-    infer_img, bbox_scale = _infer_resize(img)
-    img_array = to_rgb_array(infer_img)
-    t1 = time.monotonic()
-    logger.debug("_stateless_detect: to_rgb=%.0fms type=%s size=%dx%d infer=%dx%d",
-                 (t1 - t0) * 1000, type_param, img.width, img.height,
-                 infer_img.width, infer_img.height)
-
+    # Face detection runs at full resolution — InsightFace handles its own internal
+    # pyramid and resizing degrades detection confidence on large images.
+    # Object detection runs on the resized image — object models resize to a small
+    # fixed input internally anyway (YOLO→640px, Florence→768px), so passing a
+    # smaller array saves preprocessing time with no accuracy loss.
     faces: list[dict] = []
     objects: list[dict] = []
     face_available = False
@@ -412,17 +409,18 @@ def _stateless_detect(
     if type_param in ("faces", "all"):
         try:
             tf0 = time.monotonic()
+            img_array = to_rgb_array(img)
+            tf1 = time.monotonic()
             raw_faces, _ = infer_faces(img_array)
             face_available = True
-            tf1 = time.monotonic()
+            tf2 = time.monotonic()
             from app.core import face_index
             match_ms = 0.0
             db_ms = 0.0
             for det in raw_faces:
-                bbox = _scale_bbox(det.bbox, bbox_scale)
                 face = {
-                    "bbox": {"x": bbox[0], "y": bbox[1],
-                             "w": bbox[2], "h": bbox[3]},
+                    "bbox": {"x": det.bbox[0], "y": det.bbox[1],
+                             "w": det.bbox[2], "h": det.bbox[3]},
                     "confidence": round(float(det.confidence), 4),
                     "identity_id": None, "label": None, "similarity": None,
                     **_face_attrs(det),
@@ -442,18 +440,25 @@ def _stateless_detect(
                             face["label"] = ident["label"]
                             face["similarity"] = round(float(sim), 4)
                 faces.append(face)
-            logger.debug("_stateless_detect: faces=%d infer=%.0fms match=%.0fms identity_db=%.0fms",
-                         len(raw_faces), (tf1 - tf0) * 1000, match_ms, db_ms)
+            logger.debug(
+                "_stateless_detect: faces=%d size=%dx%d to_rgb=%.0fms infer=%.0fms match=%.0fms identity_db=%.0fms",
+                len(raw_faces), img.width, img.height,
+                (tf1 - tf0) * 1000, (tf2 - tf1) * 1000, match_ms, db_ms,
+            )
         except HTTPException:
             pass  # engine unavailable — face_available stays False
 
     if type_param in ("objects", "all"):
         try:
             to0 = time.monotonic()
-            raw_dets, image_tags, _ = infer_objects(img_array)
+            infer_img, bbox_scale = _infer_resize(img)
+            obj_array = to_rgb_array(infer_img)
+            to1 = time.monotonic()
+            raw_dets, image_tags, _ = infer_objects(obj_array)
             object_available = True
-            logger.debug("_stateless_detect: objects=%d infer=%.0fms",
-                         len(raw_dets), (time.monotonic() - to0) * 1000)
+            logger.debug("_stateless_detect: objects=%d to_rgb=%.0fms infer=%dx%d infer_model=%.0fms",
+                         len(raw_dets), (to1 - to0) * 1000, infer_img.width, infer_img.height,
+                         (time.monotonic() - to1) * 1000)
             for det in raw_dets:
                 bbox = _scale_bbox(det.bbox, bbox_scale)
                 objects.append({
@@ -700,9 +705,9 @@ def _clear_detections(user_id: int, environment_id: int, source_id: int, det_typ
 
 
 def _run_faces(user_id: int, environment_id: int, img: Any, source_id: int, label: str | None = None) -> list[dict]:
-    # Inference phase — resize for speed; crops are saved from original img at scaled-back coords
-    infer_img, bbox_scale = _infer_resize(img)
-    img_array = to_rgb_array(infer_img)
+    # Inference phase — full resolution; InsightFace runs its own detection pyramid
+    # and is built for large inputs. Resizing degrades confidence on faces.
+    img_array = to_rgb_array(img)
     detections, model_row = infer_faces(img_array)
     logger.debug("_run_faces: model=%s detected=%d image=%dx%d",
                  model_row["name"], len(detections), img.width, img.height)
@@ -724,7 +729,6 @@ def _run_faces(user_id: int, environment_id: int, img: Any, source_id: int, labe
 
     results = []
     for det in detections:
-        bbox = _scale_bbox(det.bbox, bbox_scale)
         identity_id, sim = _match_face(det.embedding, model_row["id"], user_id, environment_id, threshold)
 
         if label and id(det) == labeled_id:
@@ -745,7 +749,7 @@ def _run_faces(user_id: int, environment_id: int, img: Any, source_id: int, labe
             )
 
         attrs = _face_attrs(det)
-        crop_filename = _save_crop(img, bbox, padding)
+        crop_filename = _save_crop(img, det.bbox, padding)
         detection_id = store.insert_detection(
             user_id=user_id,
             environment_id=environment_id,
@@ -754,10 +758,10 @@ def _run_faces(user_id: int, environment_id: int, img: Any, source_id: int, labe
             detection_type="face",
             model_id=model_row["id"],
             confidence=det.confidence,
-            bbox_x=bbox[0],
-            bbox_y=bbox[1],
-            bbox_w=bbox[2],
-            bbox_h=bbox[3],
+            bbox_x=det.bbox[0],
+            bbox_y=det.bbox[1],
+            bbox_w=det.bbox[2],
+            bbox_h=det.bbox[3],
             crop_path=crop_filename,
             embedding=_embedding_to_bytes(det.embedding),
             review_status=review_status,
@@ -775,7 +779,7 @@ def _run_faces(user_id: int, environment_id: int, img: Any, source_id: int, labe
 
         results.append({
             "detection_id": detection_id,
-            "bbox": {"x": bbox[0], "y": bbox[1], "w": bbox[2], "h": bbox[3]},
+            "bbox": {"x": det.bbox[0], "y": det.bbox[1], "w": det.bbox[2], "h": det.bbox[3]},
             "confidence": det.confidence,        # face-detection quality score
             "similarity": round(float(sim), 4),  # match strength vs the enrolled identity
             "identity_id": identity_id,
