@@ -1791,6 +1791,40 @@ def count_pending_review(user_id: int, environment_id: int | None = None) -> int
         ).fetchone()[0]
 
 
+def get_dashboard_stats(user_id: int, environment_id: int | None = None) -> dict:
+    """All dashboard counts in a single DB connection — identities, images, detections."""
+    with _connect() as conn:
+        env_id = _resolve_env(conn, user_id, environment_id)
+        id_row = conn.execute(
+            """SELECT
+                   SUM(CASE WHEN type = 'face'   THEN 1 ELSE 0 END) AS people,
+                   SUM(CASE WHEN type = 'object' THEN 1 ELSE 0 END) AS objects
+               FROM identities WHERE user_id = ? AND environment_id = ?""",
+            (user_id, env_id),
+        ).fetchone()
+        images = conn.execute(
+            "SELECT COUNT(*) FROM source_images WHERE user_id = ? AND environment_id = ?",
+            (user_id, env_id),
+        ).fetchone()[0]
+        det_row = conn.execute(
+            """SELECT
+                   COUNT(*) AS detections,
+                   SUM(CASE WHEN identity_id IS NULL AND ignored = 0 THEN 1 ELSE 0 END) AS unidentified,
+                   SUM(CASE WHEN review_status = 'pending' AND type = 'face'
+                                AND ignored = 0 THEN 1 ELSE 0 END) AS pending_review
+               FROM detections WHERE user_id = ? AND environment_id = ?""",
+            (user_id, env_id),
+        ).fetchone()
+        return {
+            "people":         id_row["people"]         or 0,
+            "objects":        id_row["objects"]        or 0,
+            "images":         images                   or 0,
+            "detections":     det_row["detections"]    or 0,
+            "unidentified":   det_row["unidentified"]  or 0,
+            "pending_review": det_row["pending_review"] or 0,
+        }
+
+
 def get_review_queue(
     user_id: int,
     cursor: str | None = None,

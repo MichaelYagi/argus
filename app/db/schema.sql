@@ -122,6 +122,8 @@ CREATE INDEX IF NOT EXISTS idx_detections_review
     ON detections(user_id, review_status, type, confidence);
 CREATE INDEX IF NOT EXISTS idx_detections_source_image
     ON detections(source_image_id);
+CREATE INDEX IF NOT EXISTS idx_detections_identity_env_thumb
+    ON detections(identity_id, user_id, environment_id, detected_at, id);
 
 -- models: shared registry of available face/object models (admin-managed)
 -- config: optional JSON for compound models (e.g. {"tagger":"ram-plus-plus","detector":"grounding-dino-base"})

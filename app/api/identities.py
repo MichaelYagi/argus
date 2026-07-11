@@ -64,18 +64,15 @@ async def stats(
     environment_id: int = Depends(require_env_id),
 ):
     """Aggregate counts for the dashboard — single round-trip."""
-    storage_used, storage_free, storage_bytes, storage_free_bytes = await _cached_storage()
+    storage_task = asyncio.create_task(_cached_storage())
+    counts = await asyncio.to_thread(store.get_dashboard_stats, user_id, environment_id)
+    storage_used, storage_free, storage_bytes, storage_free_bytes = await storage_task
     return {
-        "people":              store.count_identities(user_id, identity_type="face", environment_id=environment_id),
-        "objects":             store.count_identities(user_id, identity_type="object", environment_id=environment_id),
-        "images":              store.count_source_images(user_id, environment_id),
-        "detections":          store.count_detections(user_id, environment_id),
-        "pending_review":      store.count_pending_review(user_id, environment_id),
-        "unidentified":        store.count_unidentified(user_id, environment_id),
-        "storage":             storage_used,
-        "storage_free":        storage_free,
-        "storage_bytes":       storage_bytes,
-        "storage_free_bytes":  storage_free_bytes,
+        **counts,
+        "storage":            storage_used,
+        "storage_free":       storage_free,
+        "storage_bytes":      storage_bytes,
+        "storage_free_bytes": storage_free_bytes,
     }
 
 
