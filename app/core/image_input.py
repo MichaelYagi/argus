@@ -175,7 +175,7 @@ def resize_for_inference(img: Any, max_size: int) -> tuple[Any, float]:
     """
     from PIL import Image
 
-    w, h = img.size
+    w, h = img.width, img.height
     longest = max(w, h)
     if longest <= max_size:
         return img, 1.0

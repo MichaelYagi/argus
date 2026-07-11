@@ -44,7 +44,7 @@ def test_list_settings_grouped(client):
     assert set(data.keys()) == {"face", "object", "system"}
     assert len(data["face"]) == 8
     assert len(data["object"]) == 4
-    assert len(data["system"]) == 10
+    assert len(data["system"]) == 11
 
 
 def test_list_settings_values_are_typed(client):
