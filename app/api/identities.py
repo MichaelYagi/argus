@@ -39,6 +39,7 @@ _storage_lock = asyncio.Lock()
 
 
 def _compute_storage() -> tuple[str, str | None, int, int | None]:
+    t0 = _time.monotonic()
     used = dir_size(crops_dir()) + dir_size(sources_dir())
     try:
         free = shutil.disk_usage(crops_dir()).free
@@ -46,19 +47,33 @@ def _compute_storage() -> tuple[str, str | None, int, int | None]:
     except OSError:
         free = None
         free_str = None
+    logger.debug("_compute_storage: dir_scan=%.0fms", (_time.monotonic() - t0) * 1000)
     return fmt_bytes(used), free_str, used, free
+
+
+async def _refresh_storage_bg() -> None:
+    async with _storage_lock:
+        if _storage_cache is not None and (_time.monotonic() - _storage_cache[0]) <= _STORAGE_TTL:
+            return
+        global _storage_cache
+        _storage_cache = (_time.monotonic(), await asyncio.to_thread(_compute_storage))
 
 
 async def _cached_storage() -> tuple[str, str | None, int, int | None]:
     global _storage_cache
-    if _storage_cache is not None and _time.monotonic() - _storage_cache[0] <= _STORAGE_TTL:
-        return _storage_cache[1]
-    async with _storage_lock:
-        if _storage_cache is not None and _time.monotonic() - _storage_cache[0] <= _STORAGE_TTL:
+    now = _time.monotonic()
+    if _storage_cache is not None:
+        if now - _storage_cache[0] <= _STORAGE_TTL:
             return _storage_cache[1]
-        result = await asyncio.to_thread(_compute_storage)
-        _storage_cache = (_time.monotonic(), result)
-        return result
+        # Stale: return old value immediately, refresh in background
+        asyncio.ensure_future(_refresh_storage_bg())
+        return _storage_cache[1]
+    # No cache at all (first request after startup): must block once
+    async with _storage_lock:
+        if _storage_cache is not None:
+            return _storage_cache[1]
+        _storage_cache = (_time.monotonic(), await asyncio.to_thread(_compute_storage))
+        return _storage_cache[1]
 
 
 @router.get("/api/stats")
