@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import hashlib
 import io
 import json
@@ -360,7 +361,7 @@ async def test_detect(
     t2 = time.monotonic()
     logger.debug("POST /api/test: acquire=%.0fms decode=%.0fms type=%s size=%dx%d",
                  (t1 - t0) * 1000, (t2 - t1) * 1000, type_param, img.width, img.height)
-    result = _stateless_detect(img, type_param, user_id, environment_id)
+    result = await asyncio.to_thread(_stateless_detect, img, type_param, user_id, environment_id)
     logger.debug("POST /api/test: total=%.0fms faces=%d objects=%d",
                  (time.monotonic() - t0) * 1000,
                  result["counts"]["faces"], result["counts"]["objects"])
@@ -376,7 +377,8 @@ def _stateless_detect(
     t0 = time.monotonic()
     img_array = to_rgb_array(img)
     t1 = time.monotonic()
-    logger.debug("_stateless_detect: to_rgb=%.0fms type=%s", (t1 - t0) * 1000, type_param)
+    logger.debug("_stateless_detect: to_rgb=%.0fms type=%s size=%dx%d",
+                 (t1 - t0) * 1000, type_param, img.width, img.height)
 
     faces: list[dict] = []
     objects: list[dict] = []
@@ -505,22 +507,30 @@ async def test_detect_batch(
     if len(jobs) > _TEST_BATCH_MAX:
         raise HTTPException(400, f"Too many images (max {_TEST_BATCH_MAX})")
 
-    results = []
-    for i, (label, raw) in enumerate(jobs):
-        base: dict = {"index": i, "filename": label}
-        if raw.startswith(b"__error__:"):
-            base["error"] = raw[len(b"__error__:"):].decode()
-            results.append(base)
-            continue
-        try:
-            img = open_and_validate(raw)
-            base.update(_stateless_detect(img, detect_type, user_id, environment_id))
-        except HTTPException as exc:
-            base["error"] = exc.detail
-        except Exception as exc:
-            base["error"] = str(exc)
-        results.append(base)
+    def _run_batch() -> list[dict]:
+        out = []
+        for i, (label, raw) in enumerate(jobs):
+            base: dict = {"index": i, "filename": label}
+            if raw.startswith(b"__error__:"):
+                base["error"] = raw[len(b"__error__:"):].decode()
+                out.append(base)
+                continue
+            try:
+                ti = time.monotonic()
+                img = open_and_validate(raw)
+                base.update(_stateless_detect(img, detect_type, user_id, environment_id))
+                logger.debug("test/batch image[%d] %s: %.0fms", i, label, (time.monotonic() - ti) * 1000)
+            except HTTPException as exc:
+                base["error"] = exc.detail
+            except Exception as exc:
+                base["error"] = str(exc)
+            out.append(base)
+        return out
 
+    tb0 = time.monotonic()
+    results = await asyncio.to_thread(_run_batch)
+    logger.debug("POST /api/test/batch: %d images total=%.0fms type=%s",
+                 len(jobs), (time.monotonic() - tb0) * 1000, detect_type)
     return {"total": len(results), "type": detect_type, "results": results}
 
 
