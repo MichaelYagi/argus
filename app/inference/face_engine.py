@@ -4,11 +4,15 @@ from __future__ import annotations
 
 import contextlib
 import io
+import logging
+import time
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
 from app.core import settings_cache
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -42,9 +46,14 @@ class FaceEngine:
         from insightface.app import FaceAnalysis
 
         self._model_name = model_name
+        ctx_id = _face_ctx_id()
+        provider = "CUDA" if ctx_id == 0 else "CPU"
+        logger.debug("loading face engine: model=%s provider=%s", model_name, provider)
+        t0 = time.monotonic()
         with contextlib.redirect_stdout(io.StringIO()):
             self._app = FaceAnalysis(name=model_name, root=str(model_root))
-            self._app.prepare(ctx_id=_face_ctx_id(), det_size=(640, 640))
+            self._app.prepare(ctx_id=ctx_id, det_size=(640, 640))
+        logger.debug("face engine ready: model=%s provider=%s in %.1fs", model_name, provider, time.monotonic() - t0)
 
     @property
     def model_name(self) -> str:
@@ -56,8 +65,10 @@ class FaceEngine:
         min_conf = settings_cache.cache.get_or("face.detection_confidence", 0.6)
         min_size = settings_cache.cache.get_or("face.min_face_size", 40)
 
+        t0 = time.monotonic()
+        raw = self._app.get(image)
         detections: list[FaceDetection] = []
-        for face in self._app.get(image):
+        for face in raw:
             if float(face.det_score) < min_conf:
                 continue
             x1, y1, x2, y2 = (int(v) for v in face.bbox)
@@ -76,6 +87,10 @@ class FaceEngine:
                 landmark_2d_106=_attr_landmarks(face, "landmark_2d_106"),
                 landmark_3d_68=_attr_landmarks(face, "landmark_3d_68"),
             ))
+        logger.debug(
+            "face detect: raw=%d passed=%d (min_conf=%.2f min_size=%d) in %.0fms",
+            len(raw), len(detections), min_conf, min_size, (time.monotonic() - t0) * 1000,
+        )
         return detections
 
 

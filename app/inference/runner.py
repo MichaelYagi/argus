@@ -12,13 +12,17 @@ the same FaceDetection / ObjectDetection list comes out.
 from __future__ import annotations
 
 import base64
+import logging
 import os
+import time
 from typing import Any
 
 from fastapi import HTTPException
 
 from app.db import store
 from app.inference.registry import registry
+
+logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
 # URL check
@@ -115,8 +119,12 @@ def _remote_infer_objects(img_array: Any, url: str) -> tuple[list[Any], list[str
 def infer_faces(img_array: Any) -> tuple[list[Any], Any]:
     """Detect faces. Routes to the inference sidecar when INFERENCE_URL is set."""
     url = _inference_url()
+    t0 = time.monotonic()
     if url:
-        return _remote_infer_faces(img_array, url)
+        faces, model_row = _remote_infer_faces(img_array, url)
+        logger.debug("infer_faces: remote url=%s model=%s -> %d faces in %.0fms",
+                     url, model_row.get("name"), len(faces), (time.monotonic() - t0) * 1000)
+        return faces, model_row
 
     model_row = store.get_active_model("face")
     if model_row is None:
@@ -124,14 +132,21 @@ def infer_faces(img_array: Any) -> tuple[list[Any], Any]:
     engine = registry.get_face_engine()
     if engine is None:
         raise HTTPException(503, "Face engine not loaded. Activate a model via /api/models/{id}/activate.")
-    return engine.detect(img_array), model_row
+    faces = engine.detect(img_array)
+    logger.debug("infer_faces: in-process model=%s -> %d faces in %.0fms",
+                 model_row["name"], len(faces), (time.monotonic() - t0) * 1000)
+    return faces, model_row
 
 
 def infer_objects(img_array: Any) -> tuple[list[Any], list[str] | None, Any]:
     """Detect objects. Routes to the inference sidecar when INFERENCE_URL is set."""
     url = _inference_url()
+    t0 = time.monotonic()
     if url:
-        return _remote_infer_objects(img_array, url)
+        raw_dets, image_tags, model_row = _remote_infer_objects(img_array, url)
+        logger.debug("infer_objects: remote url=%s model=%s -> %d objects in %.0fms",
+                     url, model_row.get("name"), len(raw_dets), (time.monotonic() - t0) * 1000)
+        return raw_dets, image_tags, model_row
 
     model_row = store.get_active_model("object")
     if model_row is None:
@@ -143,4 +158,6 @@ def infer_objects(img_array: Any) -> tuple[list[Any], list[str] | None, Any]:
         image_tags, raw_dets = engine.detect_with_tags(img_array)
     else:
         image_tags, raw_dets = None, engine.detect(img_array)
+    logger.debug("infer_objects: in-process model=%s -> %d objects in %.0fms",
+                 model_row["name"], len(raw_dets), (time.monotonic() - t0) * 1000)
     return raw_dets, image_tags, model_row

@@ -2,10 +2,13 @@
 
 from __future__ import annotations
 
+import logging
 import threading
 from typing import Any
 
 from app.db import store
+
+logger = logging.getLogger(__name__)
 
 
 def coerce_setting(value: str, value_type: str) -> Any:
@@ -28,6 +31,7 @@ class SettingsCache:
         rows = store.get_all_settings()
         with self._lock:
             self._data = {r["key"]: coerce_setting(r["value"], r["value_type"]) for r in rows}
+        logger.debug("settings cache loaded: %d keys", len(self._data))
 
     def get(self, key: str) -> Any:
         with self._lock:
@@ -39,8 +43,10 @@ class SettingsCache:
 
     def set(self, key: str, raw_value: str, value_type: str) -> None:
         """Update a single entry without a full reload. Call after writing to DB."""
+        coerced = coerce_setting(raw_value, value_type)
         with self._lock:
-            self._data[key] = coerce_setting(raw_value, value_type)
+            self._data[key] = coerced
+        logger.debug("settings cache updated: %s = %r", key, coerced)
 
     def all(self) -> dict[str, Any]:
         with self._lock:

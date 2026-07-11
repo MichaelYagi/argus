@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import io
 import json
+import logging
 import uuid
 from typing import Any
 
@@ -27,6 +28,8 @@ from app.core.paths import crops_dir, sources_dir
 from app.db import store
 from app.inference.registry import registry
 from app.inference.runner import _inference_url, infer_faces, infer_objects
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -639,6 +642,8 @@ def _run_faces(user_id: int, environment_id: int, img: Any, source_id: int, labe
     # Inference phase
     img_array = to_rgb_array(img)
     detections, model_row = infer_faces(img_array)
+    logger.debug("_run_faces: model=%s detected=%d image=%dx%d",
+                 model_row["name"], len(detections), img.width, img.height)
 
     # Persistence phase
     threshold = settings_cache.cache.get_or("face.match_threshold", 0.5)
@@ -717,6 +722,9 @@ def _run_faces(user_id: int, environment_id: int, img: Any, source_id: int, labe
             **attrs,
         })
 
+    matched = sum(1 for r in results if r["identity_id"] is not None)
+    logger.debug("_run_faces: saved=%d matched=%d/%d threshold=%.2f",
+                 len(results), matched, len(detections), settings_cache.cache.get_or("face.match_threshold", 0.5))
     return results
 
 
@@ -731,6 +739,8 @@ def _run_objects(
     # Inference phase
     img_array = to_rgb_array(img)
     raw_dets, image_tags, model_row = infer_objects(img_array)
+    logger.debug("_run_objects: model=%s detected=%d image=%dx%d",
+                 model_row["name"], len(raw_dets), img.width, img.height)
 
     # Persistence phase
     if image_tags is not None:
@@ -900,10 +910,17 @@ def _match_face(
     from app.core import face_index
     results = face_index.search(embedding, user_id, environment_id, threshold=threshold, k=1)
     if results:
-        return results[0]
+        identity_id, sim = results[0]
+        logger.debug("face match: sim=%.4f >= threshold=%.2f -> identity_id=%d", sim, threshold, identity_id)
+        return identity_id, sim
     # Below threshold — get best anyway for review queue context
     best = face_index.search(embedding, user_id, environment_id, threshold=0.0, k=1)
-    return (None, best[0][1]) if best else (None, 0.0)
+    if best:
+        sim = best[0][1]
+        logger.debug("face match: best sim=%.4f < threshold=%.2f -> no match", sim, threshold)
+        return None, sim
+    logger.debug("face match: no enrolled faces (threshold=%.2f)", threshold)
+    return None, 0.0
 
 
 def scan_unidentified(user_id: int, environment_id: int) -> dict:

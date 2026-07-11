@@ -73,6 +73,8 @@ def install(size: int) -> None:
     root.addHandler(_handler)
     if root.level == logging.NOTSET or root.level > logging.INFO:
         root.setLevel(logging.INFO)
+    # Let all app.* loggers emit DEBUG; third-party loggers stay at INFO.
+    logging.getLogger("app").setLevel(logging.DEBUG)
 
     # uvicorn's loggers set propagate=False, so they never reach the root handler.
     # Attach directly so the viewer mirrors the console: server lifecycle + errors

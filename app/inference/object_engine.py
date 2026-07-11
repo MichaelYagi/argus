@@ -2,12 +2,16 @@
 
 from __future__ import annotations
 
+import logging
+import time
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
 from app.core import settings_cache
 from app.inference.device import torch_device
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -24,6 +28,9 @@ class ObjectEngine:
         self._is_world   = "world" in model_name.lower()
         self._device     = torch_device(mps=False)
 
+        kind = "YOLOWorld" if self._is_world else ("RTDETR" if "rtdetr" in model_name.lower() else "YOLO")
+        logger.debug("loading object engine: model=%s kind=%s device=%s", model_name, kind, self._device)
+        t0 = time.monotonic()
         if self._is_world:
             from ultralytics import YOLOWorld
             self._model = YOLOWorld(str(model_path))
@@ -36,6 +43,7 @@ class ObjectEngine:
         else:
             from ultralytics import YOLO
             self._model = YOLO(str(model_path))
+        logger.debug("object engine ready: model=%s in %.1fs", model_name, time.monotonic() - t0)
 
     @property
     def model_name(self) -> str:
@@ -55,6 +63,7 @@ class ObjectEngine:
     def detect(self, image: Any) -> list[ObjectDetection]:
         min_conf = settings_cache.cache.get_or("object.detection_confidence", 0.5)
         iou      = settings_cache.cache.get_or("object.iou_threshold", 0.45)
+        t0 = time.monotonic()
 
         if self._is_world:
             # Only re-encode vocabulary if it changed since last call
@@ -89,4 +98,8 @@ class ObjectEngine:
                     class_name=cls_name,
                     class_id=cls_id,
                 ))
+        logger.debug(
+            "object detect: %d detections (min_conf=%.2f iou=%.2f) in %.0fms",
+            len(detections), min_conf, iou, (time.monotonic() - t0) * 1000,
+        )
         return detections

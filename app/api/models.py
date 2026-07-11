@@ -3,8 +3,10 @@
 from __future__ import annotations
 
 import json
+import logging
 import shutil
 import threading
+import time
 from typing import Any
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query
@@ -13,6 +15,8 @@ from app.core.auth import require_admin
 from app.core.paths import models_dir
 from app.db import store
 from app.inference.registry import registry
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -97,7 +101,10 @@ async def activate_model(model_id: int, user_id: int = Depends(require_admin)):
 
     if engine is None:
         # Not cached — load from disk (e.g. after a restart)
+        logger.debug("activate model id=%d: not cached, loading from disk", model_id)
         engine = _load_engine(row["type"], row["name"])
+    else:
+        logger.debug("activate model id=%d: using cached engine", model_id)
 
     if row["type"] == "face":
         registry.swap_face_engine(engine)
@@ -146,14 +153,17 @@ async def delete_model(model_id: int, user_id: int = Depends(require_admin)):
 
 def _run_download(model_id: int, model_type: str, model_name: str) -> None:
     """Background task: download weights and cache the loaded engine."""
+    logger.debug("download starting: model_id=%d name=%s", model_id, model_name)
     try:
         engine = _load_engine(model_type, model_name)
         with _loaded_lock:
             _loaded[model_id] = engine
         store.set_model_downloaded(model_id, True)
         _progress[model_id] = {"status": "complete", "error": None}
+        logger.debug("download complete: model_id=%d name=%s", model_id, model_name)
     except Exception as exc:
         _progress[model_id] = {"status": "failed", "error": str(exc)}
+        logger.debug("download failed: model_id=%d name=%s: %s", model_id, model_name, exc)
 
 
 def _is_florence(model_name: str) -> bool:
@@ -166,17 +176,22 @@ def _is_tagger(model_name: str) -> bool:
 
 def _load_engine(model_type: str, model_name: str) -> Any:
     """Load (and if necessary download) an engine. Slow for large models."""
+    logger.debug("_load_engine: type=%s name=%s", model_type, model_name)
+    t0 = time.monotonic()
     if model_type == "face":
         from app.inference.face_engine import FaceEngine
-        return FaceEngine(model_name, models_dir())
-    if _is_tagger(model_name):
+        engine = FaceEngine(model_name, models_dir())
+    elif _is_tagger(model_name):
         from app.inference.tagger_engine import TaggerEngine
-        return TaggerEngine(models_dir())
-    if _is_florence(model_name):
+        engine = TaggerEngine(models_dir())
+    elif _is_florence(model_name):
         from app.inference.florence_engine import FlorenceEngine
-        return FlorenceEngine(models_dir())
-    from app.inference.object_engine import ObjectEngine
-    return ObjectEngine(model_name, models_dir() / f"{model_name}.pt")
+        engine = FlorenceEngine(models_dir())
+    else:
+        from app.inference.object_engine import ObjectEngine
+        engine = ObjectEngine(model_name, models_dir() / f"{model_name}.pt")
+    logger.debug("_load_engine: type=%s name=%s ready in %.1fs", model_type, model_name, time.monotonic() - t0)
+    return engine
 
 
 def _delete_files(model_type: str, model_name: str) -> None:
