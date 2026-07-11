@@ -889,30 +889,21 @@ def _save_source_image(
     coordinate space (1.0 when no resize occurred).
     """
     max_size = settings_cache.cache.get_or("system.source_max_size", 1920)
-    compress = settings_cache.cache.get_or("system.compress_on_ingest", True)
+    quality = max(1, min(95, int(settings_cache.cache.get_or("system.ingest_jpeg_quality", 85))))
     source_scale = 1.0
 
-    if max_size or compress:
-        quality = max(1, min(95, int(settings_cache.cache.get_or("system.ingest_jpeg_quality", 85))))
-        src = img if img.mode == "RGB" else img.convert("RGB")
-        if max_size:
-            src, source_scale = resize_for_inference(src, max_size)
-        buf = io.BytesIO()
-        src.save(buf, "JPEG", quality=quality)
-        raw_bytes = buf.getvalue()
-        ext = "jpg"
-        stored_w, stored_h = src.width, src.height
-        logger.debug(
-            "_save_source_image: original=%dx%d stored=%dx%d scale=%.3f size=%.1fKB quality=%d",
-            img.width, img.height, stored_w, stored_h, source_scale, len(raw_bytes) / 1024, quality,
-        )
-    else:
-        ext = _FMT_EXT.get(img.format or "JPEG", "jpg")
-        stored_w, stored_h = img.width, img.height
-        logger.debug(
-            "_save_source_image: original=%dx%d stored as-is size=%.1fKB",
-            img.width, img.height, len(raw_bytes) / 1024,
-        )
+    src = img if img.mode == "RGB" else img.convert("RGB")
+    if max_size:
+        src, source_scale = resize_for_inference(src, max_size)
+    buf = io.BytesIO()
+    src.save(buf, "JPEG", quality=quality)
+    raw_bytes = buf.getvalue()
+    ext = "jpg"
+    stored_w, stored_h = src.width, src.height
+    logger.debug(
+        "_save_source_image: original=%dx%d stored=%dx%d scale=%.3f size=%.1fKB quality=%d",
+        img.width, img.height, stored_w, stored_h, source_scale, len(raw_bytes) / 1024, quality,
+    )
 
     content_hash = hashlib.sha256(raw_bytes).hexdigest()
     filename = f"{content_hash}.{ext}"
