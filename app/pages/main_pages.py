@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import json
+import logging
+import time
 
 from fastapi import APIRouter, Form, Request
 from fastapi.responses import RedirectResponse
@@ -12,6 +14,8 @@ from app import __version__
 from app.api._utils import delete_crops, delete_sources, gc_source_files
 from app.core.auth import get_session_env, get_session_user
 from app.db import store
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 templates = Jinja2Templates(directory="app/templates")
@@ -113,10 +117,13 @@ def _r(request: Request, name: str, ctx: dict, **kw):
 
 @router.get("/")
 async def dashboard(request: Request):
+    t0 = time.monotonic()
     ctx = _base(request, "dashboard")
     if not ctx:
         return RedirectResponse("/login" if store.count_users() else "/signup")
-    return _r(request, "dashboard.html", ctx)
+    resp = _r(request, "dashboard.html", ctx)
+    logger.debug("page dashboard: %.0fms", (time.monotonic() - t0) * 1000)
+    return resp
 
 
 @router.get("/identities/{identity_id}")
@@ -179,10 +186,13 @@ async def review_page(request: Request):
 
 @router.get("/images")
 async def images_page(request: Request):
+    t0 = time.monotonic()
     ctx = _base(request, "images")
     if not ctx:
         return RedirectResponse("/login")
-    return _r(request, "images.html", ctx)
+    resp = _r(request, "images.html", ctx)
+    logger.debug("page images: %.0fms", (time.monotonic() - t0) * 1000)
+    return resp
 
 
 @router.get("/test")
@@ -203,10 +213,13 @@ async def clusters_page(request: Request):
 
 @router.get("/unidentified")
 async def unidentified_page(request: Request):
+    t0 = time.monotonic()
     ctx = _base(request, "unidentified")
     if not ctx:
         return RedirectResponse("/login")
-    return _r(request, "unidentified.html", ctx)
+    resp = _r(request, "unidentified.html", ctx)
+    logger.debug("page unidentified: %.0fms", (time.monotonic() - t0) * 1000)
+    return resp
 
 
 @router.get("/models")

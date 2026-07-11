@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import json
+import logging
+import time
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, Request
 from pydantic import BaseModel
@@ -12,6 +14,8 @@ from app.core import webhook as _webhook
 from app.core.auth import require_auth, require_env_id
 from app.core.paths import sources_dir
 from app.db import store
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -54,13 +58,14 @@ async def list_source_images(
 ):
     """Paginated list of all processed source images (one row per image), newest first.
     Optional filters: identity_id, type (face/object), since, until."""
+    t0 = time.monotonic()
     if type and type not in ("face", "object"):
         raise HTTPException(400, "type must be 'face' or 'object'")
     rows = store.list_source_images(
         user_id, cursor=cursor, limit=limit, environment_id=environment_id,
         identity_id=identity_id, detection_type=type, since=since, until=until,
     )
-    return paginate(rows, limit, lambda r: {
+    result = paginate(rows, limit, lambda r: {
         "source_image_id": r["id"],
         "external_ref": r["external_ref"],
         "source_image_url": f"/media/sources/{r['file_path']}?h=300",
@@ -70,6 +75,9 @@ async def list_source_images(
         "uploaded_at": r["uploaded_at"],
         "image_tags": json.loads(r["image_tags"]) if r["image_tags"] else [],
     }, cursor_fn=lambda r: f"{r['uploaded_at']}_{r['id']}")
+    logger.debug("GET /api/source-images: %d items %.0fms",
+                 len(result.get("items", [])), (time.monotonic() - t0) * 1000)
+    return result
 
 
 def _parse_attributes(row) -> dict:

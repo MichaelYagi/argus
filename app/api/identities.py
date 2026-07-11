@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import logging
 import shutil
 import time as _time
 
@@ -16,6 +17,8 @@ from app.core import webhook as _webhook
 from app.core.auth import require_auth, require_env_id
 from app.core.paths import crops_dir, sources_dir
 from app.db import store
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -64,9 +67,11 @@ async def stats(
     environment_id: int = Depends(require_env_id),
 ):
     """Aggregate counts for the dashboard — single round-trip."""
+    t0 = _time.monotonic()
     storage_task = asyncio.create_task(_cached_storage())
     counts = await asyncio.to_thread(store.get_dashboard_stats, user_id, environment_id)
     storage_used, storage_free, storage_bytes, storage_free_bytes = await storage_task
+    logger.debug("GET /api/stats: %.0fms", (_time.monotonic() - t0) * 1000)
     return {
         **counts,
         "storage":            storage_used,
@@ -85,6 +90,7 @@ async def identities_summary(
     environment_id: int = Depends(require_env_id),
 ):
     """Identities with counts + thumbnail in one query — for paginated dashboard grid."""
+    t0 = _time.monotonic()
     if type and type not in ("face", "object"):
         raise HTTPException(400, "type must be 'face' or 'object'")
     rows     = store.list_identities_summary(
@@ -93,6 +99,8 @@ async def identities_summary(
     has_more = len(rows) > limit
     items    = rows[:limit]
     total    = store.count_identities(user_id, identity_type=type, environment_id=environment_id)
+    logger.debug("GET /api/identities/summary: %d items total=%d %.0fms",
+                 len(items), total, (_time.monotonic() - t0) * 1000)
     return {
         "items": [
             {
@@ -497,13 +505,14 @@ async def unknown_detections(
     user_id: int = Depends(require_auth),
     environment_id: int = Depends(require_env_id),
 ):
+    t0 = _time.monotonic()
     if type and type not in ("face", "object"):
         raise HTTPException(400, "type must be 'face' or 'object'")
     page_size = limit or settings_cache.cache.get_or("system.gallery_page_size", 30)
     rows = store.get_unknown_detections(
         user_id, detection_type=type, cursor=cursor, limit=page_size, environment_id=environment_id
     )
-    return paginate(rows, page_size, lambda r: {
+    result = paginate(rows, page_size, lambda r: {
         "detection_id": r["id"],
         "type": r["type"],
         "crop_url": f"/media/crops/{r['crop_path']}?h=300",
@@ -514,6 +523,9 @@ async def unknown_detections(
         "source_image_id": r["source_image_id"],
         "source_image_url": f"/media/sources/{r['source_image_path']}" if r["source_image_path"] else None,
     })
+    logger.debug("GET /api/detections/unknown: %d items %.0fms",
+                 len(result.get("items", [])), (_time.monotonic() - t0) * 1000)
+    return result
 
 
 # ---------------------------------------------------------------------------
