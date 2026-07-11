@@ -239,13 +239,14 @@ async function _pool(items, concurrency, fn) {
     const srcId      = data.source_image_id;
     const srcScale   = data.source_scale || 1;
     const allDets    = [...faces, ...objects];
+    const discarded  = !!data.discarded;
 
     const summary = [];
     if (mode !== 'objects' && faces.length)   summary.push(`${faces.length} face${faces.length === 1 ? '' : 's'}`);
     if (mode !== 'faces'   && objects.length) summary.push(`${objects.length} object${objects.length === 1 ? '' : 's'}`);
     const desc = summary.length ? summary.join(', ') + ' detected' : 'Nothing detected';
 
-    const tagLink = srcId ? `<a href="/tag/${srcId}" style="font-size:12px">Tag</a>` : '';
+    const tagLink = srcId && !discarded ? `<a href="/tag/${srcId}" style="font-size:12px">Tag</a>` : '';
     const thumbs = allDets.slice(0, 8).map(d =>
       `<img src="${d.crop_url}" title="${esc(d.label || d.class_name || 'Unknown')}"
             style="width:48px;height:48px;object-fit:cover;border-radius:3px">`
@@ -259,8 +260,11 @@ async function _pool(items, concurrency, fn) {
           <span class="muted" style="font-size:11px;white-space:nowrap">${desc}</span>
           ${tagLink}
         </div>
-        ${thumbs ? `<div style="display:flex;gap:4px;flex-wrap:wrap;margin-bottom:8px">${thumbs}</div>` : ''}
-        ${allDets.length ? `<div id="overlay-wrap-${i}" style="position:relative;display:inline-block;max-width:100%"></div>` : ''}
+        ${discarded
+          ? `<div class="alert alert-warning" style="margin:0">No detections — image was not saved.</div>`
+          : (thumbs ? `<div style="display:flex;gap:4px;flex-wrap:wrap;margin-bottom:8px">${thumbs}</div>` : '') +
+            (allDets.length ? `<div id="overlay-wrap-${i}" style="position:relative;display:inline-block;max-width:100%"></div>` : '')
+        }
       </div>`;
 
     // If there's a source image, render it with bbox overlays

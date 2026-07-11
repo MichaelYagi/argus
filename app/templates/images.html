@@ -56,8 +56,6 @@
      border-radius:var(--radius);box-shadow:var(--shadow)">
   <span id="batch-count" style="font-size:13px;font-weight:500"></span>
   <span class="nav-spacer"></span>
-  <button id="batch-no-det-btn" class="btn btn-ghost" style="font-size:12px;padding:4px 12px"
-          onclick="selectOnlyNoDetections()">Select Only No Detections</button>
   <button class="btn btn-danger" style="font-size:12px;padding:4px 12px"
           onclick="deleteSelected()">Delete Selected</button>
   <button class="btn btn-ghost" style="font-size:12px;padding:4px 12px"
@@ -109,36 +107,6 @@
       if (cb) cb.checked = false;
     });
     updateBatchBar();
-  };
-
-  window.selectOnlyNoDetections = async () => {
-    const btn = document.getElementById('batch-no-det-btn');
-    if (btn) btn.disabled = true;
-    try {
-      const ids = new Set();
-      let cur = null;
-      do {
-        const params = new URLSearchParams({ no_detections: 'true', limit: '200' });
-        if (cur) params.set('cursor', cur);
-        const resp = await fetch('/api/source-images?' + params);
-        if (!resp.ok) break;
-        const d = await resp.json();
-        d.items.forEach(item => ids.add(item.source_image_id));
-        cur = d.has_more ? d.next_cursor : null;
-      } while (cur);
-
-      selected.clear();
-      ids.forEach(id => selected.add(id));
-      container.querySelectorAll('.g-item[data-id]').forEach(el => {
-        const on = selected.has(+el.dataset.id);
-        el.classList.toggle('selected', on);
-        const cb = el.querySelector('.g-check');
-        if (cb) cb.checked = on;
-      });
-      updateBatchBar();
-    } finally {
-      if (btn) btn.disabled = false;
-    }
   };
 
   window.deleteSelected = () => {

@@ -9,7 +9,7 @@ import time
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, Request
 from pydantic import BaseModel
 
-from app.api._utils import delete_crops, is_truthy, paginate
+from app.api._utils import delete_crops, delete_sources, is_truthy, paginate
 from app.core import webhook as _webhook
 from app.core.auth import require_auth, require_env_id
 from app.core.paths import sources_dir
@@ -149,8 +149,10 @@ async def delete_source_image(
     if result is None:
         raise HTTPException(404, "Source image not found")
 
-    deleted_ids, crops = result
+    deleted_ids, crops, src_file, _ = result
     removed = delete_crops(crops)
+    if src_file:
+        delete_sources([src_file])
 
     # References enrolled from the removed crops were dropped too — refresh the index.
     from app.core import face_index
@@ -204,7 +206,7 @@ async def reprocess_source_image(
         )
         return {"job_id": job_id, "status": "pending", "source_image_id": source_image_id}
 
-    from app.api.detect import _clear_detections, _run_faces, _run_objects
+    from app.api.detect import _cleanup_if_no_detections, _clear_detections, _run_faces, _run_objects
     from app.core.image_input import open_and_validate
 
     img = open_and_validate(raw)
@@ -219,6 +221,8 @@ async def reprocess_source_image(
         result["objects"] = objs
         if img_tags is not None:
             result["image_tags"] = img_tags
+    if _cleanup_if_no_detections(source_image_id, user_id, environment_id):
+        result["discarded"] = True
     _webhook.fire(user_id, environment_id, "detection.created", {
         "source_image_id": source_image_id,
         "external_ref": src["external_ref"],

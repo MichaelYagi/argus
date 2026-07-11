@@ -525,6 +525,10 @@ input[type=range] { width: 150px; cursor: pointer; }
 .alert { padding: 10px 14px; border-radius: var(--radius); font-size: 13px; margin-bottom: 12px; }
 .alert-error   { background: rgba(239,68,68,.12);  color: var(--danger);  border: 1px solid rgba(239,68,68,.3); }
 .alert-success { background: rgba(52,211,153,.12); color: var(--success); border: 1px solid rgba(52,211,153,.3); }
+.alert-warning { background: rgba(251,191,36,.12); color: #b45309;        border: 1px solid rgba(251,191,36,.3); }
+@media (prefers-color-scheme: dark) { .alert-warning { color: #fbbf24; } }
+:root[data-theme="dark"]  .alert-warning { color: #fbbf24; }
+:root[data-theme="light"] .alert-warning { color: #b45309; }
 .muted { color: var(--muted); }
 .loading { text-align: center; padding: 24px; color: var(--muted); }
 

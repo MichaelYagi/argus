@@ -13,7 +13,7 @@ from typing import Any
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request
 
-from app.api._utils import delete_crops, is_truthy
+from app.api._utils import delete_crops, delete_sources, is_truthy
 from app.core import settings_cache
 from app.core import webhook as _webhook
 from app.core.auth import require_auth, require_env_id
@@ -60,6 +60,28 @@ def _scale_bbox(bbox: tuple, scale: float) -> tuple:
     return (bbox[0] * scale, bbox[1] * scale, bbox[2] * scale, bbox[3] * scale)
 
 
+def _cleanup_if_no_detections(source_id: int, user_id: int, environment_id: int) -> bool:
+    """Delete source image and its files if it now has zero total detections.
+
+    Called after every detection run so images that yielded nothing are not kept.
+    Returns True if the source image was deleted.
+    """
+    if store.count_detections_for_source(source_id, user_id) > 0:
+        return False
+    result = store.delete_source_image(source_id, user_id, environment_id, action="discarded")
+    if result:
+        _, crops, src_file, ext_ref = result
+        delete_crops(crops)
+        if src_file:
+            delete_sources([src_file])
+        from app.core import activity_buffer as _ab
+        msg = "Image discarded — no detections found"
+        if ext_ref:
+            msg += f" ({ext_ref})"
+        _ab.emit("detection", msg)
+    return True
+
+
 # ---------------------------------------------------------------------------
 # Routes
 # ---------------------------------------------------------------------------
@@ -89,6 +111,8 @@ async def detect_faces(
               "source_scale": source_scale,
               "faces": _run_faces(user_id, environment_id, img, source_id, label=label, source_scale=source_scale)}
     _emit_det(len(result["faces"]), 0, external_ref)
+    if _cleanup_if_no_detections(source_id, user_id, environment_id):
+        result["discarded"] = True
     from app.core import webhook
     webhook.fire(user_id, environment_id, "detection.created",
                  {"source_image_id": source_id, "external_ref": external_ref, "type": "face"})
@@ -121,6 +145,8 @@ async def detect_objects(
     if img_tags is not None:
         result["image_tags"] = img_tags
     _emit_det(0, len(objs), external_ref)
+    if _cleanup_if_no_detections(source_id, user_id, environment_id):
+        result["discarded"] = True
     from app.core import webhook
     webhook.fire(user_id, environment_id, "detection.created",
                  {"source_image_id": source_id, "external_ref": external_ref, "type": "object"})
@@ -159,6 +185,8 @@ async def detect_all(
     if img_tags is not None:
         result["image_tags"] = img_tags
     _emit_det(len(result["faces"]), len(objs), external_ref)
+    if _cleanup_if_no_detections(source_id, user_id, environment_id):
+        result["discarded"] = True
     from app.core import webhook
     webhook.fire(user_id, environment_id, "detection.created",
                  {"source_image_id": source_id, "external_ref": external_ref, "type": "all"})
@@ -259,6 +287,8 @@ async def detect_bulk(
                 base["objects"] = objs
                 if img_tags is not None:
                     base["image_tags"] = img_tags
+            if _cleanup_if_no_detections(src_id, user_id, environment_id):
+                base["discarded"] = True
             _webhook.fire(user_id, environment_id, "detection.created",
                           {"source_image_id": src_id, "external_ref": ext_ref, "type": detect_type})
         except HTTPException as exc:
@@ -599,6 +629,8 @@ def _run_detection_job(
             if img_tags is not None:
                 result["image_tags"] = img_tags
         _emit_det(len(result.get("faces", [])), len(result.get("objects", [])), external_ref)
+        if _cleanup_if_no_detections(source_id, user_id, environment_id):
+            result["discarded"] = True
         webhook.fire(user_id, environment_id, "detection.created", {
             "source_image_id": source_id, "external_ref": external_ref, "type": det_type,
         })
@@ -640,6 +672,8 @@ def _run_bulk_job(
                 base["objects"] = objs
                 if img_tags is not None:
                     base["image_tags"] = img_tags
+            if _cleanup_if_no_detections(src_id, user_id, environment_id):
+                base["discarded"] = True
             webhook.fire(user_id, environment_id, "detection.created", {
                 "source_image_id": base.get("source_image_id"),
                 "external_ref": ext_ref,

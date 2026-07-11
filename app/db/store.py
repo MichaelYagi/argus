@@ -1295,22 +1295,29 @@ def clear_detections_for_source(
 
 
 def delete_source_image(
-    source_image_id: int, user_id: int, environment_id: int | None = None
-) -> tuple[list[int], list[str]] | None:
+    source_image_id: int, user_id: int, environment_id: int | None = None,
+    *, action: str = "deleted",
+) -> tuple[list[int], list[str], str | None, str | None] | None:
     """Delete a source image and cascade-delete all its detections (faces + objects).
 
-    Returns (deleted_detection_ids, crop_filenames), or None if not found.
-    The content-hash source file itself is intentionally left on disk — it may be
-    shared with other users/rows.
+    Returns (deleted_detection_ids, crop_filenames, source_file_path_or_None, external_ref).
+    source_file_path_or_None is the file_path to delete from disk when no other
+    source_images rows still reference that content-hash file; None if still referenced.
+    external_ref is the caller's correlation id, or None.
+    Returns None (not a tuple) if the row is not found.
+    action is recorded in the change feed ("deleted" for manual, "discarded" for auto-cleanup).
     """
     with _connect() as conn:
         env_id = _resolve_env(conn, user_id, environment_id)
         row = conn.execute(
-            "SELECT id FROM source_images WHERE id = ? AND user_id = ? AND environment_id = ?",
+            "SELECT id, file_path, external_ref FROM source_images"
+            " WHERE id = ? AND user_id = ? AND environment_id = ?",
             (source_image_id, user_id, env_id),
         ).fetchone()
         if not row:
             return None
+        file_path = row["file_path"]
+        external_ref = row["external_ref"]
         dets = conn.execute(
             "SELECT id, crop_path FROM detections WHERE source_image_id = ? AND user_id = ?",
             (source_image_id, user_id),
@@ -1322,13 +1329,27 @@ def delete_source_image(
             "DELETE FROM source_images WHERE id = ? AND user_id = ?",
             (source_image_id, user_id),
         )
+        record_change(conn, user_id, env_id, "source_image", source_image_id, action, external_ref)
         for d in dets:
             record_change(conn, user_id, env_id, "detection", d["id"], "deleted")
         # Cascade removed the detections but not their references (keyed by crop_path,
         # not an FK) — reconcile so no orphaned references remain.
         _reconcile_orphan_references(conn, user_id)
         _purge_empty_identities(conn, user_id, env_id)
-        return ids, crops
+        still_ref = conn.execute(
+            "SELECT 1 FROM source_images WHERE file_path = ? LIMIT 1", (file_path,)
+        ).fetchone()
+        return ids, crops, None if still_ref else file_path, external_ref
+
+
+def count_detections_for_source(source_image_id: int, user_id: int) -> int:
+    """Return the total number of detections stored for a given source image."""
+    with _connect() as conn:
+        row = conn.execute(
+            "SELECT COUNT(*) FROM detections WHERE source_image_id = ? AND user_id = ?",
+            (source_image_id, user_id),
+        ).fetchone()
+        return row[0] if row else 0
 
 
 def get_or_create_source_image(
