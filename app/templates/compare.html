@@ -1,0 +1,370 @@
+{% extends "base.html" %}
+{% block title %}Compare — Argus{% endblock %}
+
+{% block content %}
+<h1 style="margin-bottom:6px">Compare faces</h1>
+<p class="muted" style="margin-bottom:20px;font-size:13px">
+  Check whether faces in a reference image appear in one or more target images. Read-only — nothing is stored.
+</p>
+
+{% if not face_active %}
+<div class="alert alert-error">No face model active. Download and activate one via <a href="/models">Models</a>.</div>
+{% else %}
+
+<div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px">
+
+  <!-- Reference panel -->
+  <div class="card" style="display:flex;flex-direction:column;gap:12px">
+    <h3 style="margin:0;font-size:14px;font-weight:600">Reference image</h3>
+    <div class="drop-zone" id="ref-drop">
+      <p>Drop image here or click to browse</p>
+      <p class="muted" style="font-size:12px">One image — JPEG, PNG, WEBP, HEIC and more</p>
+      <input type="file" id="ref-input" accept="image/*" hidden>
+    </div>
+    <div id="ref-url-area">
+      <label class="lbl" style="font-size:12px">Or paste image URL</label>
+      <input type="text" id="ref-url" placeholder="https://"
+             style="width:100%;box-sizing:border-box;padding:6px 10px;font-size:13px;
+                    border:1px solid var(--border);border-radius:var(--radius)">
+    </div>
+    <div id="ref-preview-wrap" hidden
+         style="position:relative;display:inline-block;max-width:100%;line-height:0">
+      <img id="ref-preview" style="max-width:100%;border-radius:4px;display:block" alt="">
+    </div>
+  </div>
+
+  <!-- Targets panel -->
+  <div class="card" style="display:flex;flex-direction:column;gap:12px">
+    <h3 style="margin:0;font-size:14px;font-weight:600">Target images</h3>
+    <div class="drop-zone" id="tgt-drop">
+      <p>Drop images here or click to browse</p>
+      <p class="muted" style="font-size:12px">Multiple files supported</p>
+      <input type="file" id="tgt-input" accept="image/*" multiple hidden>
+    </div>
+    <div id="tgt-url-area">
+      <label class="lbl" style="font-size:12px">Or paste image URLs (one per line)</label>
+      <textarea id="tgt-urls" rows="2" placeholder="https://&#10;https://"
+                style="font-size:13px;resize:vertical;width:100%;box-sizing:border-box"></textarea>
+    </div>
+    <div id="tgt-preview-strip" style="display:none;flex-wrap:wrap;gap:6px"></div>
+  </div>
+
+</div>
+
+<div style="display:flex;align-items:center;gap:12px;margin-bottom:16px">
+  <button class="btn btn-primary" id="compare-btn" disabled>Compare</button>
+  <button class="btn btn-ghost" id="clear-btn" type="button">Clear</button>
+  <span id="compare-status" class="muted" style="font-size:13px"></span>
+</div>
+
+<div id="results"></div>
+
+{% endif %}
+{% endblock %}
+
+{% block scripts %}
+{% if face_active %}
+<script>
+(function() {
+  const COLORS = [
+    '#3b82f6','#ef4444','#22c55e','#f97316',
+    '#a855f7','#14b8a6','#eab308','#ec4899',
+  ];
+  const UNMATCHED = '#6b7280';
+
+  const refDrop    = document.getElementById('ref-drop');
+  const refInput   = document.getElementById('ref-input');
+  const refUrl     = document.getElementById('ref-url');
+  const refPreview = document.getElementById('ref-preview');
+  const refWrap    = document.getElementById('ref-preview-wrap');
+  const tgtDrop    = document.getElementById('tgt-drop');
+  const tgtInput   = document.getElementById('tgt-input');
+  const tgtUrls    = document.getElementById('tgt-urls');
+  const tgtStrip   = document.getElementById('tgt-preview-strip');
+  const compareBtn = document.getElementById('compare-btn');
+  const clearBtn   = document.getElementById('clear-btn');
+  const statusEl   = document.getElementById('compare-status');
+  const resultsEl  = document.getElementById('results');
+
+  let refFile = null;    // File object
+  let refSrc  = null;    // object URL or URL string for display
+  let tgtFiles = [];
+
+  function esc(s) {
+    return String(s).replace(/[&<>"']/g, c =>
+      ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  }
+
+  function thumbStyle() {
+    return 'width:48px;height:48px;object-fit:cover;border-radius:4px;' +
+           'border:1px solid var(--border);flex-shrink:0';
+  }
+
+  function removableThumb(child, onRemove) {
+    const wrap = document.createElement('div');
+    wrap.style.cssText = 'position:relative;display:inline-block;line-height:0;flex-shrink:0';
+    wrap.appendChild(child);
+    const x = document.createElement('button');
+    x.type = 'button'; x.textContent = '×';
+    x.style.cssText = 'position:absolute;top:-6px;right:-6px;width:18px;height:18px;' +
+      'border-radius:50%;border:none;background:var(--danger);color:#fff;font-size:11px;' +
+      'line-height:18px;text-align:center;cursor:pointer;padding:0';
+    x.addEventListener('click', e => { e.stopPropagation(); onRemove(); });
+    wrap.appendChild(x);
+    return wrap;
+  }
+
+  // --- reference wiring ---
+  refDrop.addEventListener('click', () => refInput.click());
+  refDrop.addEventListener('dragover', e => { e.preventDefault(); refDrop.classList.add('over'); });
+  refDrop.addEventListener('dragleave', () => refDrop.classList.remove('over'));
+  refDrop.addEventListener('drop', e => {
+    e.preventDefault(); refDrop.classList.remove('over');
+    const files = [...e.dataTransfer.files];
+    if (files.length) setRefFile(files[0]);
+  });
+  refInput.addEventListener('change', () => {
+    if (refInput.files.length) setRefFile(refInput.files[0]);
+  });
+  refUrl.addEventListener('input', updateReady);
+
+  function setRefFile(f) {
+    refFile = f;
+    refUrl.value = '';
+    if (refSrc && refSrc.startsWith('blob:')) URL.revokeObjectURL(refSrc);
+    refSrc = URL.createObjectURL(f);
+    refPreview.src = refSrc;
+    refWrap.hidden = false;
+    updateReady();
+  }
+
+  // --- targets wiring ---
+  tgtDrop.addEventListener('click', () => tgtInput.click());
+  tgtDrop.addEventListener('dragover', e => { e.preventDefault(); tgtDrop.classList.add('over'); });
+  tgtDrop.addEventListener('dragleave', () => tgtDrop.classList.remove('over'));
+  tgtDrop.addEventListener('drop', e => {
+    e.preventDefault(); tgtDrop.classList.remove('over');
+    addTgtFiles([...e.dataTransfer.files]);
+  });
+  tgtInput.addEventListener('change', () => addTgtFiles([...tgtInput.files]));
+  tgtUrls.addEventListener('input', updateReady);
+
+  function addTgtFiles(files) {
+    tgtFiles = [...tgtFiles, ...files];
+    renderTgtStrip();
+    updateReady();
+  }
+
+  function renderTgtStrip() {
+    tgtStrip.innerHTML = '';
+    if (!tgtFiles.length) { tgtStrip.style.display = 'none'; return; }
+    tgtStrip.style.display = 'flex';
+    tgtFiles.forEach((f, i) => {
+      const img = document.createElement('img');
+      img.src   = URL.createObjectURL(f);
+      img.title = f.name;
+      img.style.cssText = thumbStyle();
+      img.onload = () => URL.revokeObjectURL(img.src);
+      tgtStrip.appendChild(removableThumb(img, () => {
+        tgtFiles.splice(i, 1); renderTgtStrip(); updateReady();
+      }));
+    });
+  }
+
+  function getRefReady() {
+    return !!(refFile || refUrl.value.trim());
+  }
+  function getTgtReady() {
+    const urls = tgtUrls.value.split('\n').map(s => s.trim()).filter(Boolean);
+    return tgtFiles.length > 0 || urls.length > 0;
+  }
+  function updateReady() {
+    compareBtn.disabled = !(getRefReady() && getTgtReady());
+  }
+
+  clearBtn.addEventListener('click', () => {
+    refFile = null;
+    if (refSrc && refSrc.startsWith('blob:')) URL.revokeObjectURL(refSrc);
+    refSrc = null;
+    refPreview.src = '';
+    refWrap.hidden = true;
+    refInput.value = '';
+    refUrl.value   = '';
+    tgtFiles = [];
+    tgtInput.value = '';
+    tgtUrls.value  = '';
+    tgtStrip.innerHTML = '';
+    tgtStrip.style.display = 'none';
+    resultsEl.innerHTML = '';
+    statusEl.textContent = '';
+    compareBtn.disabled = true;
+  });
+
+  // --- run ---
+  compareBtn.addEventListener('click', async () => {
+    compareBtn.disabled = true;
+    statusEl.textContent = 'Comparing…';
+    resultsEl.innerHTML  = '';
+
+    const fd = new FormData();
+    const urls = tgtUrls.value.split('\n').map(s => s.trim()).filter(Boolean);
+
+    if (refFile) {
+      fd.append('reference_file', refFile);
+    } else {
+      fd.append('reference_url', refUrl.value.trim());
+    }
+    tgtFiles.forEach(f => fd.append('target_file', f));
+    if (urls.length) fd.append('target_urls', JSON.stringify(urls));
+
+    try {
+      const resp = await fetch('/api/compare', { method: 'POST', body: fd });
+      const data = await resp.json();
+      if (!resp.ok) {
+        statusEl.textContent = '';
+        resultsEl.innerHTML = `<div class="alert alert-error">${esc(data.detail || 'Error')}</div>`;
+        return;
+      }
+      renderResults(data);
+    } catch (err) {
+      statusEl.textContent = '';
+      resultsEl.innerHTML = `<div class="alert alert-error">${esc(err.message)}</div>`;
+    } finally {
+      compareBtn.disabled = false;
+    }
+  });
+
+  function renderResults(data) {
+    statusEl.textContent = '';
+    const refFaces  = data.reference.faces;
+    const targets   = data.targets;
+
+    if (!refFaces.length) {
+      resultsEl.innerHTML = '<div class="alert alert-warning" style="margin:0">No faces detected in the reference image.</div>';
+      return;
+    }
+
+    // --- legend ---
+    let legendHtml = '<div style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:12px">';
+    refFaces.forEach((rf, i) => {
+      const color = COLORS[i % COLORS.length];
+      const matchText = rf.match_count === 0
+        ? 'not found'
+        : `found in ${rf.match_count} target${rf.match_count !== 1 ? 's' : ''}`;
+      legendHtml +=
+        `<span style="display:inline-flex;align-items:center;gap:5px;font-size:12px;` +
+        `padding:3px 8px;border-radius:99px;border:1px solid ${color};color:${color}">` +
+        `<span style="width:10px;height:10px;border-radius:50%;background:${color};` +
+        `flex-shrink:0"></span>Face #${i + 1} — ${matchText}</span>`;
+    });
+    legendHtml += '</div>';
+
+    // --- reference image with bboxes ---
+    const refSrcForDisplay = refFile ? URL.createObjectURL(refFile) : refUrl.value.trim();
+    let html = legendHtml +
+      `<div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;align-items:start">` +
+      `<div class="card">` +
+      `<div style="font-size:13px;font-weight:500;margin-bottom:8px">` +
+      `${esc(data.reference.filename)}</div>` +
+      `<div class="img-wrap" style="position:relative;display:inline-block;max-width:100%;line-height:0">` +
+      `<img id="ref-result-img" src="${esc(refSrcForDisplay)}" ` +
+      `style="max-width:100%;height:auto;border-radius:4px;display:block" alt=""></div></div>`;
+
+    // --- target images ---
+    html += `<div style="display:flex;flex-direction:column;gap:12px">`;
+    targets.forEach((tgt, ti) => {
+      const tgtSrcForDisplay = tgtFiles[ti]
+        ? URL.createObjectURL(tgtFiles[ti])
+        : (tgtUrls.value.split('\n').map(s => s.trim()).filter(Boolean)[ti - tgtFiles.length] || '');
+
+      if (tgt.error) {
+        html += `<div class="card"><div style="font-size:13px;font-weight:500;margin-bottom:4px">` +
+          `${esc(tgt.filename)}</div>` +
+          `<div class="alert alert-error" style="margin:0">${esc(tgt.error)}</div></div>`;
+        return;
+      }
+
+      const matchedCount = tgt.faces.filter(f => f.matched_reference_index !== null).length;
+      const desc = matchedCount
+        ? `${matchedCount} match${matchedCount !== 1 ? 'es' : ''}`
+        : 'no matches';
+
+      html += `<div class="card">` +
+        `<div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">` +
+        `<span style="font-size:13px;font-weight:500;flex:1;overflow:hidden;` +
+        `text-overflow:ellipsis;white-space:nowrap">${esc(tgt.filename)}</span>` +
+        `<span class="muted" style="font-size:12px;white-space:nowrap">${desc}</span></div>` +
+        `<div class="img-wrap" id="tgt-wrap-${ti}" ` +
+        `style="position:relative;display:inline-block;max-width:100%;line-height:0">` +
+        `<img id="tgt-img-${ti}" src="${esc(tgtSrcForDisplay)}" ` +
+        `style="max-width:100%;height:auto;border-radius:4px;display:block" alt=""></div></div>`;
+    });
+    html += `</div></div>`;
+
+    resultsEl.innerHTML = html;
+
+    // --- draw reference bboxes ---
+    const refImg = document.getElementById('ref-result-img');
+    const refImgWrap = refImg.parentElement;
+    const drawRef = () => {
+      refImgWrap.querySelectorAll('.cmp-box').forEach(e => e.remove());
+      const sx = refImg.clientWidth  / refImg.naturalWidth;
+      const sy = refImg.clientHeight / refImg.naturalHeight;
+      refFaces.forEach((rf, i) => {
+        const color = COLORS[i % COLORS.length];
+        addBox(refImgWrap, rf.bbox, sx, sy, color, `#${i + 1}`);
+      });
+    };
+    if (refImg.complete && refImg.naturalWidth) drawRef();
+    else refImg.addEventListener('load', drawRef);
+
+    // --- draw target bboxes ---
+    targets.forEach((tgt, ti) => {
+      if (tgt.error || !tgt.faces.length) return;
+      const tgtImg  = document.getElementById(`tgt-img-${ti}`);
+      const tgtWrap = document.getElementById(`tgt-wrap-${ti}`);
+      if (!tgtImg || !tgtWrap) return;
+      const drawTgt = () => {
+        tgtWrap.querySelectorAll('.cmp-box').forEach(e => e.remove());
+        const sx = tgtImg.clientWidth  / tgtImg.naturalWidth;
+        const sy = tgtImg.clientHeight / tgtImg.naturalHeight;
+        tgt.faces.forEach(face => {
+          const ri    = face.matched_reference_index;
+          const color = ri !== null ? COLORS[ri % COLORS.length] : UNMATCHED;
+          const label = ri !== null
+            ? `#${ri + 1} ${(face.similarity * 100).toFixed(0)}%`
+            : '?';
+          addBox(tgtWrap, face.bbox, sx, sy, color, label);
+        });
+      };
+      if (tgtImg.complete && tgtImg.naturalWidth) drawTgt();
+      else tgtImg.addEventListener('load', drawTgt);
+    });
+  }
+
+  function addBox(wrap, bbox, sx, sy, color, label) {
+    const d = document.createElement('div');
+    d.className = 'cmp-box';
+    d.style.cssText =
+      `position:absolute;border:2px solid ${color};border-radius:2px;box-sizing:border-box;` +
+      `pointer-events:none;` +
+      `left:${bbox.x * sx}px;top:${bbox.y * sy}px;` +
+      `width:${bbox.w * sx}px;height:${bbox.h * sy}px`;
+    const tag = document.createElement('span');
+    tag.style.cssText =
+      `position:absolute;left:-2px;top:-18px;background:${color};color:#fff;font-size:10px;` +
+      `line-height:14px;padding:0 4px;border-radius:2px;white-space:nowrap`;
+    tag.textContent = label;
+    d.appendChild(tag);
+    wrap.appendChild(d);
+  }
+
+  window.addEventListener('resize', () => {
+    // Reflow bboxes on resize — just clear and let next compare re-render.
+    // (For simplicity we don't store data; a resize after compare just removes boxes.)
+    document.querySelectorAll('.cmp-box').forEach(e => e.remove());
+  });
+})();
+</script>
+{% endif %}
+{% endblock %}

@@ -642,6 +642,196 @@ async def test_detect_batch(
 
 
 # ---------------------------------------------------------------------------
+# Compare (read-only cross-image face matching)
+# ---------------------------------------------------------------------------
+
+@router.post("/api/compare")
+async def compare_faces(
+    request: Request,
+    user_id: int = Depends(require_auth),
+):
+    """Compare faces in a reference image against one or more target images.
+
+    Detects faces in all images and finds matches using cosine similarity.
+    Read-only — stores nothing.
+
+    Multipart: reference_file (one) + target_file (one or more).
+    Also accepts reference_url/reference_base64 and target_urls/target_base64 (JSON arrays).
+    JSON body: reference_url or reference_base64, plus target_urls or target_base64 arrays.
+    """
+    import numpy as np
+
+    _require_face_engine()
+    threshold = float(settings_cache.cache.get_or("face.match_threshold", 0.5))
+
+    content_type = request.headers.get("content-type", "")
+    ref_raw: bytes
+    ref_label: str
+    target_jobs: list[tuple[bytes, str]] = []
+
+    if "multipart/form-data" in content_type:
+        form = await request.form()
+        ref_file = form.get("reference_file")
+        ref_url  = (form.get("reference_url") or "").strip()
+        ref_b64  = (form.get("reference_base64") or "").strip()
+        n_ref = sum(bool(x) for x in [ref_file, ref_url, ref_b64])
+        if n_ref == 0:
+            raise HTTPException(400, "Provide reference_file, reference_url, or reference_base64")
+        if n_ref > 1:
+            raise HTTPException(400, "Provide exactly one of reference_file, reference_url, reference_base64")
+        if ref_file:
+            ref_raw   = await ref_file.read()
+            ref_label = getattr(ref_file, "filename", "") or "reference"
+        elif ref_url:
+            ref_raw   = await fetch_url(ref_url)
+            ref_label = ref_url
+        else:
+            ref_raw   = decode_base64(ref_b64)
+            ref_label = "base64 reference"
+        for f in form.getlist("target_file"):
+            target_jobs.append((await f.read(), getattr(f, "filename", "") or "target"))
+        raw_urls = (form.get("target_urls") or "").strip()
+        if raw_urls:
+            for url in json.loads(raw_urls):
+                try:
+                    target_jobs.append((await fetch_url(url), url))
+                except HTTPException as exc:
+                    target_jobs.append((b"__error__:" + exc.detail.encode(), url))
+        raw_b64s = (form.get("target_base64") or "").strip()
+        if raw_b64s:
+            for b64 in json.loads(raw_b64s):
+                target_jobs.append((decode_base64(b64), "base64 target"))
+    elif "application/json" in content_type:
+        try:
+            body = await request.json()
+        except Exception:
+            raise HTTPException(400, "Invalid JSON body")
+        ref_url = (body.get("reference_url") or "").strip()
+        ref_b64 = (body.get("reference_base64") or "").strip()
+        if not ref_url and not ref_b64:
+            raise HTTPException(400, "Provide reference_url or reference_base64")
+        if ref_url and ref_b64:
+            raise HTTPException(400, "Provide exactly one of reference_url, reference_base64")
+        if ref_url:
+            ref_raw   = await fetch_url(ref_url)
+            ref_label = ref_url
+        else:
+            ref_raw   = decode_base64(ref_b64)
+            ref_label = "base64 reference"
+        for url in body.get("target_urls", []):
+            try:
+                target_jobs.append((await fetch_url(url), url))
+            except HTTPException as exc:
+                target_jobs.append((b"__error__:" + exc.detail.encode(), url))
+        for b64 in body.get("target_base64", []):
+            target_jobs.append((decode_base64(b64), "base64 target"))
+    else:
+        raise HTTPException(400, "Content-Type must be multipart/form-data or application/json")
+
+    if not target_jobs:
+        raise HTTPException(400, "Provide at least one target image")
+
+    def _run_compare() -> dict:
+        ref_img    = open_and_validate(ref_raw)
+        ref_faces, _ = infer_faces(to_rgb_array(ref_img))
+
+        if not ref_faces:
+            return {
+                "threshold": threshold,
+                "reference": {"filename": ref_label, "faces": []},
+                "targets": [],
+            }
+
+        ref_embs = np.stack(
+            [np.asarray(f.embedding, dtype=np.float32) for f in ref_faces]
+        )
+        ref_norms = np.linalg.norm(ref_embs, axis=1, keepdims=True)
+        ref_embs_n = ref_embs / np.maximum(ref_norms, 1e-10)
+
+        target_results = []
+        for tgt_idx, (tgt_raw, tgt_label) in enumerate(target_jobs):
+            if tgt_raw.startswith(b"__error__:"):
+                target_results.append({
+                    "index": tgt_idx, "filename": tgt_label,
+                    "error": tgt_raw[len(b"__error__:"):].decode(), "faces": [],
+                })
+                continue
+            try:
+                tgt_img = open_and_validate(tgt_raw)
+                tgt_faces, _ = infer_faces(to_rgb_array(tgt_img))
+            except HTTPException as exc:
+                target_results.append({
+                    "index": tgt_idx, "filename": tgt_label,
+                    "error": exc.detail, "faces": [],
+                })
+                continue
+            except Exception as exc:
+                target_results.append({
+                    "index": tgt_idx, "filename": tgt_label,
+                    "error": str(exc), "faces": [],
+                })
+                continue
+
+            face_rows: list[dict] = []
+            if tgt_faces:
+                tgt_embs = np.stack(
+                    [np.asarray(f.embedding, dtype=np.float32) for f in tgt_faces]
+                )
+                tgt_norms = np.linalg.norm(tgt_embs, axis=1, keepdims=True)
+                tgt_embs_n = tgt_embs / np.maximum(tgt_norms, 1e-10)
+                # sim_matrix[i, j] = similarity(ref_face i, target_face j)
+                sim_matrix = ref_embs_n @ tgt_embs_n.T
+
+                for j, tgt_face in enumerate(tgt_faces):
+                    best_i  = int(np.argmax(sim_matrix[:, j]))
+                    best_sim = float(sim_matrix[best_i, j])
+                    matched  = best_sim >= threshold
+                    face_rows.append({
+                        "index": j,
+                        "bbox": {"x": tgt_face.bbox[0], "y": tgt_face.bbox[1],
+                                 "w": tgt_face.bbox[2], "h": tgt_face.bbox[3]},
+                        "confidence": round(float(tgt_face.confidence), 4),
+                        "matched_reference_index": best_i if matched else None,
+                        "similarity": round(best_sim, 4) if matched else None,
+                    })
+
+            target_results.append({
+                "index": tgt_idx,
+                "filename": tgt_label,
+                "faces": face_rows,
+            })
+
+        ref_face_rows = [
+            {
+                "index": i,
+                "bbox": {"x": f.bbox[0], "y": f.bbox[1], "w": f.bbox[2], "h": f.bbox[3]},
+                "confidence": round(float(f.confidence), 4),
+                "match_count": sum(
+                    1 for tr in target_results
+                    for fr in tr.get("faces", [])
+                    if fr.get("matched_reference_index") == i
+                ),
+            }
+            for i, f in enumerate(ref_faces)
+        ]
+
+        return {
+            "threshold": threshold,
+            "reference": {"filename": ref_label, "faces": ref_face_rows},
+            "targets": target_results,
+        }
+
+    t0 = time.monotonic()
+    result = await asyncio.to_thread(_run_compare)
+    logger.debug(
+        "POST /api/compare: ref_faces=%d targets=%d %.0fms",
+        len(result["reference"]["faces"]), len(result["targets"]),
+        (time.monotonic() - t0) * 1000,
+    )
+    return result
+
+
+# ---------------------------------------------------------------------------
 # Async job runner
 # ---------------------------------------------------------------------------
 

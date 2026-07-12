@@ -382,7 +382,7 @@ setInterval(_updateSuggestedDot, 30000);
   });
 })();
 </script>
-{% set detect_grp  = active in ('detect', 'enroll', 'test') %}
+{% set detect_grp  = active in ('detect', 'enroll', 'test', 'compare') %}
 {% set review_grp  = active in ('review', 'clusters', 'images', 'unidentified') %}
 {% set settings_grp = active in ('settings', 'models') %}
 <nav>
@@ -481,6 +481,9 @@ setInterval(_updateSuggestedDot, 30000);
   <a href="/enroll" class="sidebar-sub {% if active == 'enroll' %}active{% endif %}">Enroll</a>
   {% endif %}
   <a href="/test" class="sidebar-sub {% if active == 'test' %}active{% endif %}">Test</a>
+  {% if face_active %}
+  <a href="/compare" class="sidebar-sub {% if active == 'compare' %}active{% endif %}">Compare</a>
+  {% endif %}
   <div class="sidebar-divider"></div>
   {% if face_active %}
   <a href="/review" class="{% if active == 'review' %}active{% endif %}">
@@ -529,6 +532,9 @@ setInterval(_updateSuggestedDot, 30000);
   <a href="/enroll" class="mobile-sub {% if active == 'enroll' %}active{% endif %}">Enroll</a>
   {% endif %}
   <a href="/test" class="mobile-sub {% if active == 'test' %}active{% endif %}">Test</a>
+  {% if face_active %}
+  <a href="/compare" class="mobile-sub {% if active == 'compare' %}active{% endif %}">Compare</a>
+  {% endif %}
   <div style="border-top:1px solid rgba(255,255,255,.12);margin:4px 0"></div>
   {% if face_active %}
   <a href="/review" class="{% if active == 'review' %}active{% endif %}">

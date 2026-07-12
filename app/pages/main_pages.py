@@ -203,6 +203,14 @@ async def test_page(request: Request):
     return _r(request, "test.html", ctx)
 
 
+@router.get("/compare")
+async def compare_page(request: Request):
+    ctx = _base(request, "compare")
+    if not ctx:
+        return RedirectResponse("/login")
+    return _r(request, "compare.html", ctx)
+
+
 @router.get("/clusters")
 async def clusters_page(request: Request):
     ctx = _base(request, "clusters")
