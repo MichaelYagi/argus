@@ -329,12 +329,14 @@
         const sx = tgtImg.clientWidth  / tgtImg.naturalWidth;
         const sy = tgtImg.clientHeight / tgtImg.naturalHeight;
         tgt.faces.forEach(face => {
-          const ri    = face.matched_reference_index;
+          const ri   = face.matched_reference_index;
+          const bi   = face.best_reference_index;
+          const sim  = face.similarity;
           const color = ri !== null ? COLORS[ri % COLORS.length] : UNMATCHED;
-          const sim   = face.similarity != null ? face.similarity : null;
+          const pct   = sim != null ? `${(sim * 100).toFixed(0)}%` : '';
           const label = ri !== null
-            ? `#${ri + 1} ${(sim * 100).toFixed(0)}%`
-            : (sim != null ? `${(sim * 100).toFixed(0)}%` : '?');
+            ? `#${ri + 1} ${pct}`
+            : (bi != null ? `#${bi + 1}? ${pct}` : (pct || '?'));
           addBox(tgtWrap, face.bbox, sx, sy, color, label);
         });
       };
