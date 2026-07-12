@@ -336,7 +336,7 @@
           const pct   = sim != null ? `${(sim * 100).toFixed(0)}%` : '';
           const label = ri !== null
             ? `#${ri + 1} ${pct}`
-            : (bi != null ? `#${bi + 1}? ${pct}` : (pct || '?'));
+            : (bi != null ? `#${bi + 1} ${pct}` : (pct || '?'));
           addBox(tgtWrap, face.bbox, sx, sy, color, label);
         });
       };
