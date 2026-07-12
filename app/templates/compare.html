@@ -331,9 +331,10 @@
         tgt.faces.forEach(face => {
           const ri    = face.matched_reference_index;
           const color = ri !== null ? COLORS[ri % COLORS.length] : UNMATCHED;
+          const sim   = face.similarity != null ? face.similarity : null;
           const label = ri !== null
-            ? `#${ri + 1} ${(face.similarity * 100).toFixed(0)}%`
-            : '?';
+            ? `#${ri + 1} ${(sim * 100).toFixed(0)}%`
+            : (sim != null ? `${(sim * 100).toFixed(0)}%` : '?');
           addBox(tgtWrap, face.bbox, sx, sy, color, label);
         });
       };

@@ -783,16 +783,20 @@ async def compare_faces(
                 sim_matrix = ref_embs_n @ tgt_embs_n.T
 
                 for j, tgt_face in enumerate(tgt_faces):
-                    best_i  = int(np.argmax(sim_matrix[:, j]))
+                    best_i   = int(np.argmax(sim_matrix[:, j]))
                     best_sim = float(sim_matrix[best_i, j])
                     matched  = best_sim >= threshold
+                    logger.info(
+                        "compare tgt=%d face=%d best_ref=%d sim=%.4f threshold=%.4f matched=%s",
+                        tgt_idx, j, best_i, best_sim, threshold, matched,
+                    )
                     face_rows.append({
                         "index": j,
                         "bbox": {"x": tgt_face.bbox[0], "y": tgt_face.bbox[1],
                                  "w": tgt_face.bbox[2], "h": tgt_face.bbox[3]},
                         "confidence": round(float(tgt_face.confidence), 4),
                         "matched_reference_index": best_i if matched else None,
-                        "similarity": round(best_sim, 4) if matched else None,
+                        "similarity": round(best_sim, 4),
                     })
 
             target_results.append({
