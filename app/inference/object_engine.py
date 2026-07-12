@@ -60,6 +60,53 @@ class ObjectEngine:
             self._model.set_classes(classes)
             self._world_classes_raw = raw
 
+    def detect_batch(self, images: list[Any]) -> list[list[ObjectDetection]]:
+        """Run detection on multiple images in one YOLO forward pass."""
+        min_conf = settings_cache.cache.get_or("object.detection_confidence", 0.5)
+        iou      = settings_cache.cache.get_or("object.iou_threshold", 0.45)
+        t0 = time.monotonic()
+
+        if self._is_world:
+            current_raw = settings_cache.cache.get_or("object.world_classes", "")
+            if current_raw != getattr(self, "_world_classes_raw", None):
+                self._apply_world_classes()
+            results = self._model.predict(
+                images, conf=min_conf, iou=iou, device=self._device, verbose=False
+            )
+        else:
+            results = self._model(
+                images, conf=min_conf, iou=iou, device=self._device, verbose=False
+            )
+
+        classes_enabled = settings_cache.cache.get_or("object.classes_enabled", "*")
+        per_image: list[list[ObjectDetection]] = []
+        for result in results:
+            names = result.names
+            dets: list[ObjectDetection] = []
+            for box in result.boxes:
+                cls_id   = int(box.cls)
+                cls_name = (names[cls_id] if isinstance(names, list)
+                            else names.get(cls_id, str(cls_id)))
+                if not self._is_world and classes_enabled != "*":
+                    enabled = {c.strip() for c in classes_enabled.split(",")}
+                    if cls_name not in enabled:
+                        continue
+                x1, y1, x2, y2 = (int(v) for v in box.xyxy[0])
+                dets.append(ObjectDetection(
+                    bbox=(x1, y1, x2 - x1, y2 - y1),
+                    confidence=float(box.conf),
+                    class_name=cls_name,
+                    class_id=cls_id,
+                ))
+            per_image.append(dets)
+
+        logger.debug(
+            "object detect_batch: %d images -> total %d dets (min_conf=%.2f iou=%.2f) in %.0fms",
+            len(images), sum(len(d) for d in per_image), min_conf, iou,
+            (time.monotonic() - t0) * 1000,
+        )
+        return per_image
+
     def detect(self, image: Any) -> list[ObjectDetection]:
         min_conf = settings_cache.cache.get_or("object.detection_confidence", 0.5)
         iou      = settings_cache.cache.get_or("object.iou_threshold", 0.45)

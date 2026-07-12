@@ -30,7 +30,7 @@ from app.core.image_input import (
 from app.core.paths import crops_dir, sources_dir
 from app.db import store
 from app.inference.registry import registry
-from app.inference.runner import _inference_url, infer_faces, infer_objects
+from app.inference.runner import _inference_url, infer_faces, infer_objects, infer_objects_batch
 
 logger = logging.getLogger(__name__)
 
@@ -268,29 +268,72 @@ async def detect_bulk(
         background_tasks.add_task(_run_bulk_job, job_id, user_id, environment_id, jobs, detect_type)
         return {"job_id": job_id, "status": "pending", "total": len(jobs)}
 
-    results = []
+    # Phase 1: decode + save source images
+    # Each entry: (base, img, infer_img, bbox_scale, src_id, src_scale)
+    phase1 = []
     for i, (label, raw, ext_ref) in enumerate(jobs):
         base: dict = {"index": i, "filename": label, "external_ref": ext_ref}
         if raw.startswith(b"__error__:"):
             base["error"] = raw[len(b"__error__:"):].decode()
-            results.append(base)
+            phase1.append((base, None, None, 1.0, None, 1.0))
             continue
         try:
             img = open_and_validate(raw)
             _, src_id, src_scale = _save_source_image(user_id, environment_id, raw, img, ext_ref)
+            infer_img, bbox_scale = _infer_resize(img)
             base["source_image_id"] = src_id
             base["source_scale"] = src_scale
+            phase1.append((base, img, infer_img, bbox_scale, src_id, src_scale))
+        except HTTPException as exc:
+            base["error"] = exc.detail
+            phase1.append((base, None, None, 1.0, None, 1.0))
+        except Exception as exc:
+            base["error"] = str(exc)
+            phase1.append((base, None, None, 1.0, None, 1.0))
+
+    # Phase 2: batch YOLO inference across all valid images in one forward pass
+    obj_by_idx: dict[int, tuple] = {}  # orig_idx -> (raw_dets, img_tags, model_row, bbox_scale)
+    if detect_type in ("objects", "all"):
+        valid_obj = [
+            (i, infer_img, bbox_scale)
+            for i, (_, img, infer_img, bbox_scale, _, _) in enumerate(phase1)
+            if img is not None
+        ]
+        if valid_obj:
+            img_arrays = [to_rgb_array(infer_img) for _, infer_img, _ in valid_obj]
+            try:
+                batch_dets, batch_tags, obj_model = infer_objects_batch(img_arrays)
+                for j, (orig_i, _, bscale) in enumerate(valid_obj):
+                    obj_by_idx[orig_i] = (batch_dets[j], batch_tags[j], obj_model, bscale)
+            except Exception as exc:
+                logger.warning("bulk batch object inference failed, retrying per-image: %s", exc)
+
+    # Phase 3: per-image face inference + full persistence
+    results = []
+    for i, (base, img, _infer_img, _bscale, src_id, src_scale) in enumerate(phase1):
+        if img is None:
+            results.append(base)
+            continue
+        try:
             if detect_type in ("faces", "all"):
                 base["faces"] = _run_faces(user_id, environment_id, img, src_id, source_scale=src_scale)
             if detect_type in ("objects", "all"):
-                objs, img_tags = _run_objects(user_id, environment_id, img, src_id, src_scale)
+                if i in obj_by_idx:
+                    raw_dets, img_tags, obj_model, bscale = obj_by_idx[i]
+                    objs, img_tags = _persist_objects(
+                        user_id, environment_id, img, src_id, src_scale,
+                        raw_dets, img_tags, obj_model, bscale,
+                    )
+                else:
+                    objs, img_tags = _run_objects(user_id, environment_id, img, src_id, src_scale)
                 base["objects"] = objs
                 if img_tags is not None:
                     base["image_tags"] = img_tags
             if _cleanup_if_no_detections(src_id, user_id, environment_id):
                 base["discarded"] = True
             _webhook.fire(user_id, environment_id, "detection.created",
-                          {"source_image_id": src_id, "external_ref": ext_ref, "type": detect_type})
+                          {"source_image_id": src_id, "external_ref": base.get("external_ref"),
+                           "type": detect_type})
         except HTTPException as exc:
             base["error"] = exc.detail
         except Exception as exc:
@@ -652,23 +695,65 @@ def _run_bulk_job(
     detect_type: str,
 ) -> None:
     from app.core import webhook
-    results = []
     store.update_job(job_id, "running")
+
+    # Phase 1: decode + save source images
+    phase1 = []
     for i, (label, raw, ext_ref) in enumerate(jobs):
         base: dict = {"index": i, "filename": label, "external_ref": ext_ref}
         if raw.startswith(b"__error__:"):
             base["error"] = raw[len(b"__error__:"):].decode()
-            results.append(base)
+            phase1.append((base, None, None, 1.0, None, 1.0))
             continue
         try:
             img = open_and_validate(raw)
             _, src_id, src_scale = _save_source_image(user_id, environment_id, raw, img, ext_ref)
+            infer_img, bbox_scale = _infer_resize(img)
             base["source_image_id"] = src_id
             base["source_scale"] = src_scale
+            phase1.append((base, img, infer_img, bbox_scale, src_id, src_scale))
+        except HTTPException as exc:
+            base["error"] = exc.detail
+            phase1.append((base, None, None, 1.0, None, 1.0))
+        except Exception as exc:
+            base["error"] = str(exc)
+            phase1.append((base, None, None, 1.0, None, 1.0))
+
+    # Phase 2: batch YOLO inference across all valid images in one forward pass
+    obj_by_idx: dict[int, tuple] = {}
+    if detect_type in ("objects", "all"):
+        valid_obj = [
+            (i, infer_img, bbox_scale)
+            for i, (_, img, infer_img, bbox_scale, _, _) in enumerate(phase1)
+            if img is not None
+        ]
+        if valid_obj:
+            img_arrays = [to_rgb_array(infer_img) for _, infer_img, _ in valid_obj]
+            try:
+                batch_dets, batch_tags, obj_model = infer_objects_batch(img_arrays)
+                for j, (orig_i, _, bscale) in enumerate(valid_obj):
+                    obj_by_idx[orig_i] = (batch_dets[j], batch_tags[j], obj_model, bscale)
+            except Exception as exc:
+                logger.warning("bulk job batch object inference failed, retrying per-image: %s", exc)
+
+    # Phase 3: per-image face inference + full persistence
+    results = []
+    for i, (base, img, _infer_img, _bscale, src_id, src_scale) in enumerate(phase1):
+        if img is None:
+            results.append(base)
+            continue
+        try:
             if detect_type in ("faces", "all"):
                 base["faces"] = _run_faces(user_id, environment_id, img, src_id, source_scale=src_scale)
             if detect_type in ("objects", "all"):
-                objs, img_tags = _run_objects(user_id, environment_id, img, src_id, src_scale)
+                if i in obj_by_idx:
+                    raw_dets, img_tags, obj_model, bscale = obj_by_idx[i]
+                    objs, img_tags = _persist_objects(
+                        user_id, environment_id, img, src_id, src_scale,
+                        raw_dets, img_tags, obj_model, bscale,
+                    )
+                else:
+                    objs, img_tags = _run_objects(user_id, environment_id, img, src_id, src_scale)
                 base["objects"] = objs
                 if img_tags is not None:
                     base["image_tags"] = img_tags
@@ -676,7 +761,7 @@ def _run_bulk_job(
                 base["discarded"] = True
             webhook.fire(user_id, environment_id, "detection.created", {
                 "source_image_id": base.get("source_image_id"),
-                "external_ref": ext_ref,
+                "external_ref": base.get("external_ref"),
                 "type": detect_type,
             })
         except HTTPException as exc:
@@ -845,22 +930,18 @@ def _run_faces(user_id: int, environment_id: int, img: Any, source_id: int,
     return results
 
 
-def _run_objects(
-    user_id: int, environment_id: int, img: Any, source_id: int, source_scale: float = 1.0,
+def _persist_objects(
+    user_id: int,
+    environment_id: int,
+    img: Any,
+    source_id: int,
+    source_scale: float,
+    raw_dets: list,
+    image_tags: list[str] | None,
+    model_row: dict,
+    bbox_scale: float = 1.0,
 ) -> tuple[list[dict], list[str] | None]:
-    """Run object/tagger detection. Returns (detections, image_tags).
-
-    image_tags is a list of keyword strings when the active engine is a tagger
-    (RAM++ + Grounding DINO); None for all other engines.
-    """
-    # Inference phase — resize for speed; crops are saved from original img at scaled-back coords
-    infer_img, bbox_scale = _infer_resize(img)
-    img_array = to_rgb_array(infer_img)
-    raw_dets, image_tags, model_row = infer_objects(img_array)
-    logger.debug("_run_objects: model=%s detected=%d image=%dx%d",
-                 model_row["name"], len(raw_dets), img.width, img.height)
-
-    # Persistence phase
+    """Persistence phase for object detection: save crops, write DB rows, return API results."""
     if image_tags is not None:
         store.set_source_image_tags(source_id, json.dumps(image_tags))
 
@@ -870,7 +951,7 @@ def _run_objects(
         bbox = _scale_bbox(det.bbox, bbox_scale)  # inference space → original image coords
         stored_bbox = _scale_bbox(bbox, 1.0 / source_scale)  # original → stored source coords
         logger.debug(
-            "_run_objects bbox: bbox_scale=%.3f source_scale=%.3f"
+            "_persist_objects bbox: bbox_scale=%.3f source_scale=%.3f"
             " inference=(%.0f,%.0f,%.0f,%.0f) stored=(%.0f,%.0f,%.0f,%.0f)",
             bbox_scale, source_scale, det.bbox[0], det.bbox[1], det.bbox[2], det.bbox[3],
             stored_bbox[0], stored_bbox[1], stored_bbox[2], stored_bbox[3],
@@ -879,7 +960,6 @@ def _run_objects(
         if _created:
             _webhook.fire(user_id, environment_id, "identity.created",
                           {"identity_id": identity_id, "label": det.class_name, "type": "object", "external_ref": None})
-        # Crop from the full-res original image at original coords — preserves quality.
         crop_filename = _save_crop(img, bbox, padding)
         detection_id = store.insert_detection(
             user_id=user_id,
@@ -897,7 +977,6 @@ def _run_objects(
         )
         results.append({
             "detection_id": detection_id,
-            # Return original-image coords to API callers — they have the original image.
             "bbox": {"x": bbox[0], "y": bbox[1], "w": bbox[2], "h": bbox[3]},
             "confidence": det.confidence,
             "class_name": det.class_name,
@@ -909,6 +988,23 @@ def _run_objects(
         })
 
     return results, image_tags
+
+
+def _run_objects(
+    user_id: int, environment_id: int, img: Any, source_id: int, source_scale: float = 1.0,
+) -> tuple[list[dict], list[str] | None]:
+    """Run object/tagger detection. Returns (detections, image_tags).
+
+    image_tags is a list of keyword strings when the active engine is a tagger
+    (RAM++ + Grounding DINO); None for all other engines.
+    """
+    infer_img, bbox_scale = _infer_resize(img)
+    img_array = to_rgb_array(infer_img)
+    raw_dets, image_tags, model_row = infer_objects(img_array)
+    logger.debug("_run_objects: model=%s detected=%d image=%dx%d",
+                 model_row["name"], len(raw_dets), img.width, img.height)
+    return _persist_objects(user_id, environment_id, img, source_id, source_scale,
+                            raw_dets, image_tags, model_row, bbox_scale)
 
 
 # ---------------------------------------------------------------------------

@@ -231,7 +231,8 @@
       "Bash(/mnt/c/Users/Michael/Documents/development/argus/.venv/bin/pytest *)",
       "Bash(/mnt/c/Users/Michael/Documents/development/argus/.venv/bin/python3 *)",
       "Bash(sed -i 's/== 25/== 24/g' /mnt/c/Users/Michael/Documents/development/argus/tests/test_schema.py /mnt/c/Users/Michael/Documents/development/argus/tests/test_settings_cache.py)",
-      "Bash(sed -i 's/== 13/== 12/g' /mnt/c/Users/Michael/Documents/development/argus/tests/test_schema.py /mnt/c/Users/Michael/Documents/development/argus/tests/test_settings_api.py)"
+      "Bash(sed -i 's/== 13/== 12/g' /mnt/c/Users/Michael/Documents/development/argus/tests/test_schema.py /mnt/c/Users/Michael/Documents/development/argus/tests/test_settings_api.py)",
+      "Bash(pytest tests/test_inference_runner.py -v -x)"
     ]
   }
 }

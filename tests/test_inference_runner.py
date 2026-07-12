@@ -101,6 +101,50 @@ def test_infer_objects_in_process_calls_engine():
     assert model_row["id"] == 2
 
 
+def test_infer_objects_batch_calls_detect_batch():
+    from app.inference.runner import infer_objects_batch
+
+    engine = MagicMock()
+    engine.has_image_tags = False
+    engine.detect_batch.return_value = [[], []]
+    imgs = [_img_array(), _img_array()]
+
+    with patch("app.db.store.get_active_model", return_value={"id": 2, "name": "yolov8n"}), \
+         patch.object(registry, "get_object_engine", return_value=engine):
+        per_dets, per_tags, model_row = infer_objects_batch(imgs)
+
+    engine.detect_batch.assert_called_once_with(imgs)
+    assert per_dets == [[], []]
+    assert per_tags == [None, None]
+    assert model_row["id"] == 2
+
+
+def test_infer_objects_batch_tagger_falls_back_per_image():
+    from app.inference.runner import infer_objects_batch
+
+    engine = MagicMock()
+    engine.has_image_tags = True
+    engine.detect_with_tags.return_value = (["person"], [])
+    imgs = [_img_array(), _img_array()]
+
+    with patch("app.db.store.get_active_model", return_value={"id": 3, "name": "ram"}), \
+         patch.object(registry, "get_object_engine", return_value=engine):
+        per_dets, per_tags, model_row = infer_objects_batch(imgs)
+
+    assert engine.detect_with_tags.call_count == 2
+    assert per_tags == [["person"], ["person"]]
+    assert model_row["id"] == 3
+
+
+def test_infer_objects_batch_empty_returns_empty():
+    from app.inference.runner import infer_objects_batch
+
+    per_dets, per_tags, model_row = infer_objects_batch([])
+    assert per_dets == []
+    assert per_tags == []
+    assert model_row is None
+
+
 def test_infer_faces_in_process_503_no_model():
     from fastapi import HTTPException
 

@@ -138,6 +138,55 @@ def infer_faces(img_array: Any) -> tuple[list[Any], Any]:
     return faces, model_row
 
 
+def infer_objects_batch(
+    img_arrays: list[Any],
+) -> tuple[list[list[Any]], list[list[str] | None], Any]:
+    """Batch object detection across multiple images in one YOLO forward pass.
+
+    Returns (per_image_dets, per_image_tags, model_row).
+    Falls back to sequential per-image calls for tagger engines and remote mode
+    (neither supports batch natively).
+    """
+    if not img_arrays:
+        return [], [], None
+
+    url = _inference_url()
+    if url:
+        per_dets: list[list[Any]] = []
+        per_tags: list[list[str] | None] = []
+        model_row = None
+        for arr in img_arrays:
+            dets, tags, mr = infer_objects(arr)
+            per_dets.append(dets)
+            per_tags.append(tags)
+            model_row = mr
+        return per_dets, per_tags, model_row
+
+    model_row = store.get_active_model("object")
+    if model_row is None:
+        raise HTTPException(503, "No active object model. Download and activate one via /api/models.")
+    engine = registry.get_object_engine()
+    if engine is None:
+        raise HTTPException(503, "Object engine not loaded. Activate a model via /api/models/{id}/activate.")
+
+    if getattr(engine, "has_image_tags", False):
+        per_dets = []
+        per_tags = []
+        for arr in img_arrays:
+            tags, dets = engine.detect_with_tags(arr)
+            per_dets.append(dets)
+            per_tags.append(tags)
+        return per_dets, per_tags, model_row
+
+    t0 = time.monotonic()
+    per_dets = engine.detect_batch(img_arrays)
+    logger.debug(
+        "infer_objects_batch: %d images -> total %d dets in %.0fms",
+        len(img_arrays), sum(len(d) for d in per_dets), (time.monotonic() - t0) * 1000,
+    )
+    return per_dets, [None] * len(img_arrays), model_row
+
+
 def infer_objects(img_array: Any) -> tuple[list[Any], list[str] | None, Any]:
     """Detect objects. Routes to the inference sidecar when INFERENCE_URL is set."""
     url = _inference_url()
