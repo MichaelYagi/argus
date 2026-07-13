@@ -2422,7 +2422,7 @@ _SETTINGS_SEED: list[tuple] = [
      "best", "string", "face",
      "Face Matching Method | How enrolled photos are used when matching a face. "
      "Best match compares against each reference photo and uses the highest score — accurate and fast. "
-     "Top-K weighted averages the top-K reference photos weighted by detection confidence — may help when a person has many varied photos. "
+     "Top-K weighted averages the top-K reference photos weighted by detection confidence. "
      "Average blends all reference photos equally."),
     ("face.match_top_k",
      "5", "int", "face",
