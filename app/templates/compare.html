@@ -336,7 +336,7 @@
           const ri   = face.matched_reference_index;
           const bi   = face.best_reference_index;
           const sim  = face.similarity;
-          const pct  = sim != null ? `${(sim * 100).toFixed(0)}%` : '';
+          const pct  = sim != null ? `${Math.max(0, sim * 100).toFixed(0)}%` : '';
           const color = ri !== null
             ? COLORS[ri % COLORS.length]
             : (sim != null && sim === bestUnmatched && sim > 0 ? NEAR_MATCH : UNMATCHED);

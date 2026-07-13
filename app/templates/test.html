@@ -274,7 +274,7 @@
         </tr></thead><tbody>`;
       r.faces.forEach((f, i) => {
         const match = f.label
-          ? `${esc(f.label)} <span class="muted">${(f.similarity * 100).toFixed(0)}%</span>`
+          ? `${esc(f.label)} <span class="muted">${Math.max(0, f.similarity * 100).toFixed(0)}%</span>`
           : '<span class="muted">—</span>';
         html += `<tr data-face-row="${i}" style="border-bottom:1px solid var(--border);cursor:default">
           <td style="padding:4px 0">#${i + 1}</td>
@@ -355,7 +355,7 @@
     const sortedFaces   = [...r.faces].sort((a, b) => (b.bbox.w * b.bbox.h) - (a.bbox.w * a.bbox.h));
     sortedObjects.forEach(o => boxEl(wrap, img, o.bbox, OBJ_COLOR, `${o.class_name} ${(o.confidence * 100).toFixed(0)}%`));
     sortedFaces.forEach((f, i) => boxEl(wrap, img, f.bbox, FACE_COLOR,
-      f.label ? `${f.label} ${(f.similarity * 100).toFixed(0)}%` : `Face #${i + 1}`, r.faces.indexOf(f)));
+      f.label ? `${f.label} ${Math.max(0, f.similarity * 100).toFixed(0)}%` : `Face #${i + 1}`, r.faces.indexOf(f)));
   }
 
   window.addEventListener('resize', () => {

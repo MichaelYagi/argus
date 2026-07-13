@@ -105,7 +105,7 @@ function renderBoxes() {
     tip.className = 't-tip';
     if (isFace) {
       tip.textContent = (det.label || 'Unknown')
-        + (det.similarity != null ? ' (' + (det.similarity * 100).toFixed(0) + '% match)' : '');
+        + (det.similarity != null ? ' (' + Math.max(0, det.similarity * 100).toFixed(0) + '% match)' : '');
       div.addEventListener('click', () => labelBox(div, tip, chip));
     } else {
       tip.textContent = (det.label || 'object')
