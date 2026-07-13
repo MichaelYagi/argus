@@ -49,7 +49,8 @@ SLIDER_RANGES = {
 # Settings rendered as a dropdown: key -> [(value, label), ...]
 SETTING_CHOICES = {
     "face.match_strategy": [
-        ("best", "Best matching photo (default)"),
+        ("topk_weighted", "Top-K weighted by confidence (default)"),
+        ("best", "Best matching photo"),
         ("average", "Average all reference photos"),
     ],
 }

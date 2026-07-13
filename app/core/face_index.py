@@ -47,73 +47,90 @@ _current_model_id: int | None  = None
 # ---------------------------------------------------------------------------
 
 def _strategy() -> str:
-    """'best' (every reference indexed, default) or 'average' (centroid per identity)."""
+    """'topk_weighted' (default), 'best', or 'average'."""
     from app.core import settings_cache
-    s = str(settings_cache.cache.get_or("face.match_strategy", "best")).strip().lower()
-    return "average" if s == "average" else "best"
+    s = str(settings_cache.cache.get_or("face.match_strategy", "topk_weighted")).strip().lower()
+    if s in ("best", "average", "topk_weighted"):
+        return s
+    return "topk_weighted"
+
+
+def _top_k() -> int:
+    from app.core import settings_cache
+    try:
+        return max(1, int(settings_cache.cache.get_or("face.match_top_k", "5")))
+    except (ValueError, TypeError):
+        return 5
 
 
 def build_for_user(model_id: int, user_id: int, environment_id: int) -> None:
     """Build or rebuild the in-memory index for one (user, environment), per strategy.
 
-    - average: one centroid (representative) vector per identity.
-    - best:    one vector per reference embedding (id_map repeats the identity).
-    Search collapses to the best score per identity either way.
+    - topk_weighted: confidence-weighted average of the top-K enrollment embeddings per identity.
+    - best:          one vector per reference embedding; search collapses to best score per identity.
+    - average:       simple centroid per identity (stored in identities.representative_embedding).
     """
     import numpy as np
+    from collections import defaultdict
 
     from app.db import store
 
     strategy = _strategy()
     key = (user_id, environment_id)
+    vectors: list[np.ndarray] = []
+    id_map:  list[int]        = []
+
+    def _norm(v: np.ndarray) -> np.ndarray:
+        n = np.linalg.norm(v)
+        return v / n if n > 0 else v
 
     if strategy == "best":
-        rows = [
-            (r["identity_id"], r["embedding"])
-            for r in store.get_reference_embeddings(model_id, user_id, environment_id)
-        ]
-    else:
-        # Always recompute centroids for this model — the NULL-check optimisation
-        # misses stale representatives (computed for a different model or before
-        # the current embeddings existed), leaving the index empty or wrong.
+        for r in store.get_reference_embeddings(model_id, user_id, environment_id):
+            if not r["embedding"]:
+                continue
+            vectors.append(_norm(np.frombuffer(bytes(r["embedding"]), dtype=np.float32).copy()))
+            id_map.append(r["identity_id"])
+
+    elif strategy == "topk_weighted":
+        k = _top_k()
+        by_identity: dict[int, list[tuple[bytes, float]]] = defaultdict(list)
+        for r in store.get_reference_embeddings_with_confidence(model_id, user_id, environment_id):
+            if r["embedding"]:
+                by_identity[r["identity_id"]].append((bytes(r["embedding"]), float(r["confidence"])))
+        for iid, embs in by_identity.items():
+            top = sorted(embs, key=lambda x: x[1], reverse=True)[:k]
+            total_w = sum(c for _, c in top) or len(top)
+            acc = np.zeros(
+                np.frombuffer(top[0][0], dtype=np.float32).shape, dtype=np.float32
+            )
+            for emb_bytes, conf in top:
+                acc += _norm(np.frombuffer(emb_bytes, dtype=np.float32).copy()) * (conf / total_w)
+            vectors.append(_norm(acc))
+            id_map.append(iid)
+
+    else:  # average
+        # Always recompute centroids — stale representatives from a different model
+        # would leave the index empty or wrong.
         identity_ids = store.list_identity_ids_for_model(model_id, user_id, environment_id)
         for iid in identity_ids:
             store.compute_and_store_representative(iid, model_id)
-        rows = [
-            (r["identity_id"], r["representative_embedding"])
-            for r in store.get_representative_embeddings(model_id, user_id, environment_id)
-        ]
+        for r in store.get_representative_embeddings(model_id, user_id, environment_id):
+            if not r["representative_embedding"]:
+                continue
+            vectors.append(_norm(np.frombuffer(bytes(r["representative_embedding"]), dtype=np.float32).copy()))
+            id_map.append(r["identity_id"])
 
     with _lock:
         global _current_model_id
         _current_model_id = model_id
-
-        if not rows:
-            _indices.pop(key, None)
-            _id_maps[key] = []
-            return
-
-        faiss = _try_import_faiss()
-        use_faiss = faiss is not None
-
-        vectors, id_map = [], []
-        for identity_id, emb in rows:
-            if not emb:
-                continue
-            vec  = np.frombuffer(bytes(emb), dtype=np.float32).copy()
-            norm = np.linalg.norm(vec)
-            if norm > 0:
-                vec /= norm
-            vectors.append(vec)
-            id_map.append(identity_id)
-
         _id_maps[key] = id_map
 
         if not vectors:
             _indices.pop(key, None)
             return
 
-        if use_faiss:
+        faiss = _try_import_faiss()
+        if faiss is not None:
             idx = faiss.IndexFlatIP(len(vectors[0]))
             idx.add(np.stack(vectors).astype(np.float32))
             _indices[key] = idx

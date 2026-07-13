@@ -1551,6 +1551,30 @@ def get_reference_embeddings(model_id: int, user_id: int, environment_id: int | 
         ).fetchall()
 
 
+def get_reference_embeddings_with_confidence(
+    model_id: int, user_id: int, environment_id: int | None = None
+) -> list[sqlite3.Row]:
+    """Reference embeddings with detection confidence for topk_weighted strategy.
+    Joins face_embeddings to detections via crop_path (= source_image_path).
+    Defaults confidence to 0.5 when no matching detection exists (direct enroll).
+    """
+    with _connect() as conn:
+        env_id = _resolve_env(conn, user_id, environment_id)
+        return conn.execute(
+            """SELECT fe.identity_id, fe.embedding,
+                      COALESCE(MAX(d.confidence), 0.5) AS confidence
+               FROM face_embeddings fe
+               JOIN identities i ON i.id = fe.identity_id
+               LEFT JOIN detections d
+                 ON d.crop_path = fe.source_image_path
+                AND d.environment_id = fe.environment_id
+                AND d.user_id = i.user_id
+               WHERE fe.model_id = ? AND i.user_id = ? AND i.environment_id = ?
+               GROUP BY fe.id""",
+            (model_id, user_id, env_id),
+        ).fetchall()
+
+
 def get_identity_reference_blobs(identity_id: int, user_id: int, environment_id: int | None = None) -> list[bytes]:
     """All reference embedding blobs for one identity (for max-over-references display)."""
     with _connect() as conn:
@@ -2385,12 +2409,15 @@ _SETTINGS_SEED: list[tuple] = [
      "0.92",  "float",  "face",
      "Auto-Enroll Threshold | Add confirmed detections to the reference set above this confidence; 0 disables"),
     ("face.match_strategy",
-     "best", "string", "face",
-     "Face Matching Method | How a face is scored against each saved person. "
-     "Best match compares against each reference photo and uses the closest — better when "
-     "someone looks different across photos (age, glasses, lighting), and keeps scores intuitive. "
-     "Average blends all of a person's reference photos into one — faster and steadier, but "
-     "individual photo scores drift as you add varied references."),
+     "topk_weighted", "string", "face",
+     "Face Matching Method | How enrolled photos are combined when matching a face. "
+     "Top-K weighted uses the highest-confidence reference photos, weighted by quality — best accuracy. "
+     "Best match uses the single closest reference photo — good when appearances vary widely. "
+     "Average blends all reference photos equally."),
+    ("face.match_top_k",
+     "5", "int", "face",
+     "Top-K Enrollments | Number of highest-confidence reference photos used per person "
+     "when Face Matching Method is set to Top-K weighted. Has no effect on other strategies."),
     ("face.detection_confidence",
      "0.6",   "float",  "face",
      "Detection Confidence | Minimum confidence for a face region to be reported at all"),
