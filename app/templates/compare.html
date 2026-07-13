@@ -341,8 +341,8 @@
             ? COLORS[ri % COLORS.length]
             : (sim != null && sim === bestUnmatched && sim > 0 ? NEAR_MATCH : UNMATCHED);
           const label = ri !== null
-            ? `#${ri + 1} ${pct}`
-            : (bi != null ? `#${bi + 1} ${pct}` : (pct || '?'));
+            ? `#${ri + 1} · ${pct}`
+            : (bi != null ? `#${bi + 1} · ${pct}` : (pct || '?'));
           addBox(tgtWrap, face.bbox, sx, sy, color, label);
         });
       };
