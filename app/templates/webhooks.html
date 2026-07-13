@@ -34,26 +34,11 @@
         </ul>
       </div>
       <div>
-        <div style="font-weight:600;font-size:13px;margin-bottom:6px">Signing <span class="muted" style="font-weight:400">(optional)</span></div>
-        <p class="muted" style="font-size:13px;margin:0 0 8px;line-height:1.6">
-          Set a secret and every request will include
-          <code style="font-size:11px">X-Argus-Signature: sha256=&lt;hmac-hex&gt;</code>.
-          Verify it on your server:
-        </p>
-        <pre style="font-size:11px;background:var(--surface-raised);border:1px solid var(--border);
-                    border-radius:var(--radius);padding:8px 10px;margin:0;line-height:1.5;
-                    overflow-x:auto;white-space:pre">import hashlib, hmac
-sig = request.headers["X-Argus-Signature"].removeprefix("sha256=")
-expected = hmac.new(secret.encode(), request.body, hashlib.sha256).hexdigest()
-if not hmac.compare_digest(sig, expected):
-    raise ValueError("signature mismatch")</pre>
-      </div>
-      <div>
         <div style="font-weight:600;font-size:13px;margin-bottom:6px">Setup</div>
         <ol class="muted" style="font-size:13px;margin:0;padding-left:18px;line-height:1.8">
           <li>Click <strong>+ Add webhook</strong> above</li>
           <li>Enter the URL Argus will POST to</li>
-          <li>Optionally add a label and a shared secret</li>
+          <li>Optionally add a label</li>
           <li>Check the events you want to receive</li>
           <li>Save, then click <strong>Test</strong> to verify connectivity</li>
         </ol>
@@ -299,13 +284,6 @@ if not hmac.compare_digest(sig, expected):
       <input id="wh-label" type="text" class="input" placeholder="e.g. Shashin"
              style="width:100%;box-sizing:border-box">
     </div>
-    <div style="margin-bottom:12px">
-      <label class="lbl">Signing secret <span class="muted" style="font-weight:400">(optional)</span></label>
-      <div id="wh-secret-status" style="display:none;font-size:13px;margin-top:6px"></div>
-      <input id="wh-secret" type="password" class="input" autocomplete="new-password"
-             placeholder="Optional" style="width:100%;box-sizing:border-box;margin-top:6px">
-      <a href="#" id="wh-secret-cancel" style="display:none;font-size:12px;margin-top:4px">Cancel</a>
-    </div>
     <div style="margin-bottom:16px">
       <label class="lbl">Events *</label>
       {% for evt in valid_events %}
@@ -336,77 +314,15 @@ if not hmac.compare_digest(sig, expected):
   });
 
   const _whs = {{ webhooks | tojson }};
-  let editId         = null;
-  let _editWh        = null;
-  let _clearSecret   = false;
-  let _secretRevealed = false;
-
-  function _refreshSecretUi() {
-    const inp = document.getElementById('wh-secret');
-    const st  = document.getElementById('wh-secret-status');
-    if (!_editWh) {
-      st.style.display = 'none';
-      inp.style.display = '';
-      inp.placeholder = 'Optional';
-      return;
-    }
-    if (_clearSecret) {
-      st.innerHTML = '<span style="color:var(--danger)">Secret will be removed on save</span>'
-        + ' &nbsp;<a href="#" id="wh-secret-undo" style="font-size:13px">Undo</a>';
-      st.style.display = '';
-      inp.style.display = 'none';
-      document.getElementById('wh-secret-undo').addEventListener('click', e => {
-        e.preventDefault(); _clearSecret = false; inp.value = ''; _refreshSecretUi();
-      });
-      return;
-    }
-    if (inp.style.display !== 'none') {
-      st.style.display = 'none';
-      return;
-    }
-    if (_editWh.has_secret) {
-      st.innerHTML = '<span class="muted">Secret set</span>'
-        + ' &nbsp;<a href="#" id="wh-secret-change" style="font-size:13px">Change</a>'
-        + ' &nbsp;<a href="#" id="wh-secret-remove" style="font-size:13px;color:var(--danger)">Remove</a>';
-    } else {
-      st.innerHTML = '<span class="muted">No secret</span>'
-        + ' &nbsp;<a href="#" id="wh-secret-add" style="font-size:13px">Add</a>';
-    }
-    st.style.display = '';
-    (document.getElementById('wh-secret-change') || document.getElementById('wh-secret-add'))
-      ?.addEventListener('click', e => {
-        e.preventDefault();
-        _secretRevealed = true;
-        inp.placeholder = _editWh.has_secret ? 'Enter new secret' : 'Enter signing secret';
-        inp.style.display = ''; inp.focus(); st.style.display = 'none';
-        document.getElementById('wh-secret-cancel').style.display = '';
-      });
-    document.getElementById('wh-secret-remove')?.addEventListener('click', e => {
-      e.preventDefault(); _clearSecret = true; _refreshSecretUi();
-    });
-  }
+  let editId = null;
 
   // ── Modal ────────────────────────────────────────────────────────────────
   function openModal(wh) {
     lockScroll();
-    _editWh         = wh || null;
-    _clearSecret    = false;
-    _secretRevealed = false;
     editId = wh ? wh.id : null;
     document.getElementById('modal-title').textContent = wh ? 'Edit webhook' : 'Add webhook';
     document.getElementById('wh-url').value   = wh ? wh.url   : '';
     document.getElementById('wh-label').value = wh ? wh.label : '';
-    document.getElementById('wh-secret').value = '';
-    document.getElementById('wh-secret').style.display = wh ? 'none' : '';
-    document.getElementById('wh-secret-cancel').style.display = 'none';
-    _refreshSecretUi();
-    document.getElementById('wh-secret-cancel').onclick = e => {
-      e.preventDefault(); _secretRevealed = false;
-      document.getElementById('wh-secret').value = '';
-      document.getElementById('wh-secret').style.display = 'none';
-      document.getElementById('wh-secret-cancel').style.display = 'none';
-      _refreshSecretUi();
-    };
     document.querySelectorAll('.wh-evt').forEach(cb => {
       cb.checked = wh ? wh.event_list.includes(cb.value) : false;
     });
@@ -430,18 +346,14 @@ if not hmac.compare_digest(sig, expected):
   document.getElementById('modal-save').addEventListener('click', async () => {
     const url    = document.getElementById('wh-url').value.trim();
     const label  = document.getElementById('wh-label').value.trim();
-    const secret = document.getElementById('wh-secret').value.trim();
     const events = [...document.querySelectorAll('.wh-evt:checked')].map(cb => cb.value);
     const errEl = document.getElementById('modal-err');
 
-    if (!url)                          { errEl.textContent = 'URL is required.';                     errEl.style.display = ''; return; }
-    if (!events.length)               { errEl.textContent = 'Select at least one event.';             errEl.style.display = ''; return; }
-    if (_secretRevealed && !secret)   { errEl.textContent = 'Enter a secret value or click Cancel.'; errEl.style.display = ''; return; }
+    if (!url)          { errEl.textContent = 'URL is required.';           errEl.style.display = ''; return; }
+    if (!events.length) { errEl.textContent = 'Select at least one event.'; errEl.style.display = ''; return; }
     errEl.style.display = 'none';
 
     const body = { url, events, label };
-    if (_clearSecret)  body.secret = '';
-    else if (secret)   body.secret = secret;
 
     let resp;
     try {
