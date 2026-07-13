@@ -329,9 +329,6 @@
         tgtWrap.querySelectorAll('.cmp-box').forEach(e => e.remove());
         const sx = tgtImg.clientWidth  / tgtImg.naturalWidth;
         const sy = tgtImg.clientHeight / tgtImg.naturalHeight;
-        const bestUnmatched = tgt.faces
-          .filter(f => f.matched_reference_index === null && f.similarity != null)
-          .reduce((m, f) => Math.max(m, f.similarity), -1);
         tgt.faces.forEach(face => {
           const ri   = face.matched_reference_index;
           const bi   = face.best_reference_index;
@@ -339,7 +336,7 @@
           const pct  = sim != null ? `${Math.max(0, sim * 100).toFixed(0)}%` : '';
           const color = ri !== null
             ? COLORS[ri % COLORS.length]
-            : (sim != null && sim === bestUnmatched && sim > 0 ? NEAR_MATCH : UNMATCHED);
+            : (sim != null && sim >= 0.35 ? NEAR_MATCH : UNMATCHED);
           const label = ri !== null
             ? `#${ri + 1} · ${pct}`
             : (bi != null ? `#${bi + 1} · ${pct}` : (pct || '?'));
