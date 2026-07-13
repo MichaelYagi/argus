@@ -45,178 +45,307 @@
       </div>
     </div>
 
-    <!-- Row 2: Events + Payload shapes side by side, stack on narrow screens -->
-    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,320px),1fr));gap:20px;align-items:start">
-      <div style="min-width:0">
-        <div style="font-weight:600;font-size:13px;margin-bottom:10px">Events</div>
-        <div style="display:grid;gap:10px">
-          <div>
-            <code style="font-size:12px;background:var(--surface-raised);padding:2px 7px;border-radius:4px">detection.created</code>
-            <p class="muted" style="font-size:12px;margin:4px 0 0;line-height:1.5">
-              Fired after each detect call (synchronous, async, reprocess, bulk upload).
-              Payload: <code style="font-size:11px">source_image_id</code>, <code style="font-size:11px">external_ref</code>,
-              <code style="font-size:11px">type</code>. The <code style="font-size:11px">type</code> value reflects
-              what was requested: <code style="font-size:11px">"face"</code>, <code style="font-size:11px">"object"</code>,
-              or <code style="font-size:11px">"all"</code>.
-            </p>
-          </div>
-          <div>
-            <code style="font-size:12px;background:var(--surface-raised);padding:2px 7px;border-radius:4px">job.done</code>
-            <p class="muted" style="font-size:12px;margin:4px 0 0;line-height:1.5">
-              Fired when an async job completes or fails. On success the full result is merged into the payload.
-              Single-image async jobs include <code style="font-size:11px">source_image_id</code>, <code style="font-size:11px">external_ref</code>,
-              and detection arrays (<code style="font-size:11px">faces</code>/<code style="font-size:11px">objects</code>).
-              Bulk upload jobs include <code style="font-size:11px">total</code>, <code style="font-size:11px">type</code>,
-              and a <code style="font-size:11px">results</code> array (one entry per image).
-              Payload always includes: <code style="font-size:11px">job_id</code>, <code style="font-size:11px">status</code>.
-            </p>
-          </div>
-          <div>
-            <code style="font-size:12px;background:var(--surface-raised);padding:2px 7px;border-radius:4px">detection.labeled</code>
-            <p class="muted" style="font-size:12px;margin:4px 0 0;line-height:1.5">
-              Fired when a detection is assigned, reassigned, rejected, or unidentified (review queue,
-              tag page, batch label, retroactive scan). Also fires when review-queue auto-confirm
-              triggers. On reject or unidentify, <code style="font-size:11px">identity_id</code> and
-              <code style="font-size:11px">label</code> are <code style="font-size:11px">null</code>.
-              Payload: <code style="font-size:11px">detection_id</code>, <code style="font-size:11px">source_image_id</code>,
-              <code style="font-size:11px">identity_id</code>, <code style="font-size:11px">label</code>,
-              <code style="font-size:11px">type</code>.
-            </p>
-          </div>
-          <div>
-            <code style="font-size:12px;background:var(--surface-raised);padding:2px 7px;border-radius:4px">identity.created</code>
-            <p class="muted" style="font-size:12px;margin:4px 0 0;line-height:1.5">
-              Fired when a new identity is created (via enroll, detect with a new label, or the
-              identities API). Not fired when an existing identity is matched.
-              Payload: <code style="font-size:11px">identity_id</code>, <code style="font-size:11px">label</code>,
-              <code style="font-size:11px">type</code>, <code style="font-size:11px">external_ref</code>.
-            </p>
-          </div>
-          <div>
-            <code style="font-size:12px;background:var(--surface-raised);padding:2px 7px;border-radius:4px">identity.updated</code>
-            <p class="muted" style="font-size:12px;margin:4px 0 0;line-height:1.5">
-              Fired when an identity is mutated: renamed, embedding added/removed, cover changed, or external_ref updated.
-              Payload: <code style="font-size:11px">identity_id</code>, <code style="font-size:11px">action</code>
-              (<code style="font-size:11px">"renamed"</code>, <code style="font-size:11px">"embedding_added"</code>,
-              <code style="font-size:11px">"embedding_removed"</code>, <code style="font-size:11px">"thumbnail_updated"</code>,
-              <code style="font-size:11px">"external_ref_updated"</code>).
-              Rename also includes <code style="font-size:11px">label</code> and <code style="font-size:11px">old_label</code>;
-              thumbnail_updated includes <code style="font-size:11px">thumbnail_url</code>;
-              embedding_added/removed include <code style="font-size:11px">detection_id</code> (null when the embedding was deleted directly rather than via a detection);
-              external_ref_updated includes <code style="font-size:11px">external_ref</code>.
-            </p>
-          </div>
-          <div>
-            <code style="font-size:12px;background:var(--surface-raised);padding:2px 7px;border-radius:4px">identity.merged</code>
-            <p class="muted" style="font-size:12px;margin:4px 0 0;line-height:1.5">
-              Fired when one identity is merged into another (source is deleted).
-              Payload: <code style="font-size:11px">identity_id</code> (deleted source),
-              <code style="font-size:11px">label</code>, <code style="font-size:11px">type</code>,
-              <code style="font-size:11px">merged_into</code> (surviving target id).
-            </p>
-          </div>
-          <div>
-            <code style="font-size:12px;background:var(--surface-raised);padding:2px 7px;border-radius:4px">identity.deleted</code>
-            <p class="muted" style="font-size:12px;margin:4px 0 0;line-height:1.5">
-              Fired when a single identity is permanently deleted. Not fired for bulk delete-all.
-              Payload: <code style="font-size:11px">identity_id</code>, <code style="font-size:11px">label</code>,
-              <code style="font-size:11px">type</code>.
-            </p>
-          </div>
-          <div>
-            <code style="font-size:12px;background:var(--surface-raised);padding:2px 7px;border-radius:4px">detection.deleted</code>
-            <p class="muted" style="font-size:12px;margin:4px 0 0;line-height:1.5">
-              Fired when detections are deleted: single deletion, bulk delete from the review queue, or source image deletion (which cascades to all its detections).
-              Payload: <code style="font-size:11px">detection_ids</code> (array of deleted ids),
-              <code style="font-size:11px">count</code>.
-            </p>
-          </div>
-          <div>
-            <code style="font-size:12px;background:var(--surface-raised);padding:2px 7px;border-radius:4px">model.activated</code>
-            <p class="muted" style="font-size:12px;margin:4px 0 0;line-height:1.5">
-              Fired when an admin activates a new model. Broadcast to all subscribers
-              across all environments — model changes affect every detection from that point on.
-              Payload: <code style="font-size:11px">model_id</code>, <code style="font-size:11px">name</code>,
-              <code style="font-size:11px">type</code> (<code style="font-size:11px">"face"</code> or
-              <code style="font-size:11px">"object"</code>).
-            </p>
-          </div>
+    <!-- Row 2: Events (full-width with inline payload disclosures) -->
+    <div>
+      <div style="font-weight:600;font-size:13px;margin-bottom:10px">Events</div>
+      <div style="display:grid;gap:12px">
+
+        <div>
+          <code style="font-size:12px;background:var(--surface-raised);padding:2px 7px;border-radius:4px">detection.created</code>
+          <p class="muted" style="font-size:12px;margin:4px 0 0;line-height:1.5">
+            Fired after each detect call (synchronous, async, reprocess, bulk upload).
+            Payload: <code style="font-size:11px">source_image_id</code>, <code style="font-size:11px">external_ref</code>,
+            <code style="font-size:11px">type</code>. The <code style="font-size:11px">type</code> value reflects
+            what was requested: <code style="font-size:11px">"face"</code>, <code style="font-size:11px">"object"</code>,
+            or <code style="font-size:11px">"all"</code>.
+          </p>
+          <details style="margin-top:5px">
+            <summary class="muted" style="font-size:11px;cursor:pointer;user-select:none;width:fit-content">Payload</summary>
+            <pre style="font-size:11px;background:var(--surface-raised);border:1px solid var(--border);border-radius:var(--radius);padding:8px 10px;margin:5px 0 0;line-height:1.5;overflow-x:auto">{
+  "event": "detection.created",
+  "timestamp": "2024-01-15T10:30:00Z",
+  "data": {
+    "source_image_id": 42,
+    "external_ref": "photo-123",
+    "type": "face"
+  }
+}</pre>
+          </details>
         </div>
-      </div>
-      <div style="min-width:0">
-        <div style="font-weight:600;font-size:13px;margin-bottom:10px">Payload shapes</div>
-        <pre style="font-size:11px;background:var(--surface-raised);border:1px solid var(--border);
-                    border-radius:var(--radius);padding:10px 12px;margin:0;line-height:1.5;
-                    overflow-x:auto;white-space:pre">// detection.created
-{ "event": "detection.created", "timestamp": "...",
-  "data": { "source_image_id": 42, "external_ref": "photo-123", "type": "face" } }
 
-// detection.labeled
-{ "event": "detection.labeled", "timestamp": "...",
-  "data": { "detection_id": 17, "source_image_id": 42,
-            "identity_id": 5, "label": "Daisuke", "type": "face" } }
+        <div>
+          <code style="font-size:12px;background:var(--surface-raised);padding:2px 7px;border-radius:4px">job.done</code>
+          <p class="muted" style="font-size:12px;margin:4px 0 0;line-height:1.5">
+            Fired when an async job completes or fails. On success the full result is merged into the payload.
+            Single-image async jobs include <code style="font-size:11px">source_image_id</code>, <code style="font-size:11px">external_ref</code>,
+            and detection arrays (<code style="font-size:11px">faces</code>/<code style="font-size:11px">objects</code>).
+            Bulk upload jobs include <code style="font-size:11px">total</code>, <code style="font-size:11px">type</code>,
+            and a <code style="font-size:11px">results</code> array (one entry per image).
+            Payload always includes: <code style="font-size:11px">job_id</code>, <code style="font-size:11px">status</code>.
+          </p>
+          <details style="margin-top:5px">
+            <summary class="muted" style="font-size:11px;cursor:pointer;user-select:none;width:fit-content">Payload</summary>
+            <pre style="font-size:11px;background:var(--surface-raised);border:1px solid var(--border);border-radius:var(--radius);padding:8px 10px;margin:5px 0 0;line-height:1.5;overflow-x:auto">// single-image async — success
+{
+  "event": "job.done",
+  "timestamp": "2024-01-15T10:30:00Z",
+  "data": {
+    "job_id": "abc-123",
+    "status": "done",
+    "source_image_id": 42,
+    "external_ref": "photo-123",
+    "faces": [],
+    "objects": []
+  }
+}
 
-// identity.created
-{ "event": "identity.created", "timestamp": "...",
-  "data": { "identity_id": 5, "label": "Daisuke", "type": "face", "external_ref": null } }
+// bulk upload async — success
+{
+  "event": "job.done",
+  "timestamp": "2024-01-15T10:30:00Z",
+  "data": {
+    "job_id": "abc-456",
+    "status": "done",
+    "total": 5,
+    "type": "face",
+    "results": []
+  }
+}
 
-// identity.updated (rename)
-{ "event": "identity.updated", "timestamp": "...",
-  "data": { "identity_id": 5, "label": "Daisuke Yamada",
-            "old_label": "Daisuke", "action": "renamed" } }
+// failure
+{
+  "event": "job.done",
+  "timestamp": "2024-01-15T10:30:00Z",
+  "data": {
+    "job_id": "abc-123",
+    "status": "failed",
+    "error": "Model failed to process image"
+  }
+}</pre>
+          </details>
+        </div>
 
-// identity.updated (enrollment)
-{ "event": "identity.updated", "timestamp": "...",
-  "data": { "identity_id": 5, "action": "embedding_added", "detection_id": 17 } }
+        <div>
+          <code style="font-size:12px;background:var(--surface-raised);padding:2px 7px;border-radius:4px">detection.labeled</code>
+          <p class="muted" style="font-size:12px;margin:4px 0 0;line-height:1.5">
+            Fired when a detection is assigned, reassigned, rejected, or unidentified (review queue,
+            tag page, batch label, retroactive scan). Also fires when review-queue auto-confirm
+            triggers. On reject or unidentify, <code style="font-size:11px">identity_id</code> and
+            <code style="font-size:11px">label</code> are <code style="font-size:11px">null</code>.
+            Payload: <code style="font-size:11px">detection_id</code>, <code style="font-size:11px">source_image_id</code>,
+            <code style="font-size:11px">identity_id</code>, <code style="font-size:11px">label</code>,
+            <code style="font-size:11px">type</code>.
+          </p>
+          <details style="margin-top:5px">
+            <summary class="muted" style="font-size:11px;cursor:pointer;user-select:none;width:fit-content">Payload</summary>
+            <pre style="font-size:11px;background:var(--surface-raised);border:1px solid var(--border);border-radius:var(--radius);padding:8px 10px;margin:5px 0 0;line-height:1.5;overflow-x:auto">{
+  "event": "detection.labeled",
+  "timestamp": "2024-01-15T10:30:00Z",
+  "data": {
+    "detection_id": 17,
+    "source_image_id": 42,
+    "identity_id": 5,
+    "label": "Daisuke",
+    "type": "face"
+  }
+}</pre>
+          </details>
+        </div>
 
-// identity.updated (unenroll)
-{ "event": "identity.updated", "timestamp": "...",
-  "data": { "identity_id": 5, "action": "embedding_removed", "detection_id": 17 } }
+        <div>
+          <code style="font-size:12px;background:var(--surface-raised);padding:2px 7px;border-radius:4px">detection.deleted</code>
+          <p class="muted" style="font-size:12px;margin:4px 0 0;line-height:1.5">
+            Fired when detections are deleted: single deletion, bulk delete from the review queue, or source image deletion (which cascades to all its detections).
+            Payload: <code style="font-size:11px">detection_ids</code> (array of deleted ids),
+            <code style="font-size:11px">count</code>.
+          </p>
+          <details style="margin-top:5px">
+            <summary class="muted" style="font-size:11px;cursor:pointer;user-select:none;width:fit-content">Payload</summary>
+            <pre style="font-size:11px;background:var(--surface-raised);border:1px solid var(--border);border-radius:var(--radius);padding:8px 10px;margin:5px 0 0;line-height:1.5;overflow-x:auto">{
+  "event": "detection.deleted",
+  "timestamp": "2024-01-15T10:30:00Z",
+  "data": {
+    "detection_ids": [14, 17, 23],
+    "count": 3
+  }
+}</pre>
+          </details>
+        </div>
 
-// identity.updated (embedding deleted directly — no associated detection)
-{ "event": "identity.updated", "timestamp": "...",
-  "data": { "identity_id": 5, "action": "embedding_removed", "detection_id": null } }
+        <div>
+          <code style="font-size:12px;background:var(--surface-raised);padding:2px 7px;border-radius:4px">identity.created</code>
+          <p class="muted" style="font-size:12px;margin:4px 0 0;line-height:1.5">
+            Fired when a new identity is created (via enroll, detect with a new label, or the
+            identities API). Not fired when an existing identity is matched.
+            Payload: <code style="font-size:11px">identity_id</code>, <code style="font-size:11px">label</code>,
+            <code style="font-size:11px">type</code>, <code style="font-size:11px">external_ref</code>.
+          </p>
+          <details style="margin-top:5px">
+            <summary class="muted" style="font-size:11px;cursor:pointer;user-select:none;width:fit-content">Payload</summary>
+            <pre style="font-size:11px;background:var(--surface-raised);border:1px solid var(--border);border-radius:var(--radius);padding:8px 10px;margin:5px 0 0;line-height:1.5;overflow-x:auto">{
+  "event": "identity.created",
+  "timestamp": "2024-01-15T10:30:00Z",
+  "data": {
+    "identity_id": 5,
+    "label": "Daisuke",
+    "type": "face",
+    "external_ref": null
+  }
+}</pre>
+          </details>
+        </div>
 
-// identity.updated (cover changed)
-{ "event": "identity.updated", "timestamp": "...",
-  "data": { "identity_id": 5, "action": "thumbnail_updated",
-            "thumbnail_url": "/media/crops/5/abc123.jpg" } }
+        <div>
+          <code style="font-size:12px;background:var(--surface-raised);padding:2px 7px;border-radius:4px">identity.updated</code>
+          <p class="muted" style="font-size:12px;margin:4px 0 0;line-height:1.5">
+            Fired when an identity is mutated: renamed, embedding added/removed, cover changed, or external_ref updated.
+            Payload: <code style="font-size:11px">identity_id</code>, <code style="font-size:11px">action</code>
+            (<code style="font-size:11px">"renamed"</code>, <code style="font-size:11px">"embedding_added"</code>,
+            <code style="font-size:11px">"embedding_removed"</code>, <code style="font-size:11px">"thumbnail_updated"</code>,
+            <code style="font-size:11px">"external_ref_updated"</code>).
+            Rename also includes <code style="font-size:11px">label</code> and <code style="font-size:11px">old_label</code>;
+            thumbnail_updated includes <code style="font-size:11px">thumbnail_url</code>;
+            embedding_added/removed include <code style="font-size:11px">detection_id</code> (null when the embedding was deleted directly rather than via a detection);
+            external_ref_updated includes <code style="font-size:11px">external_ref</code>.
+          </p>
+          <details style="margin-top:5px">
+            <summary class="muted" style="font-size:11px;cursor:pointer;user-select:none;width:fit-content">Payload</summary>
+            <pre style="font-size:11px;background:var(--surface-raised);border:1px solid var(--border);border-radius:var(--radius);padding:8px 10px;margin:5px 0 0;line-height:1.5;overflow-x:auto">// renamed
+{
+  "event": "identity.updated",
+  "timestamp": "2024-01-15T10:30:00Z",
+  "data": {
+    "identity_id": 5,
+    "action": "renamed",
+    "label": "Daisuke Yamada",
+    "old_label": "Daisuke"
+  }
+}
 
-// identity.updated (external_ref change)
-{ "event": "identity.updated", "timestamp": "...",
-  "data": { "identity_id": 5, "external_ref": "photo-abc", "action": "external_ref_updated" } }
+// embedding_added
+{
+  "event": "identity.updated",
+  "timestamp": "2024-01-15T10:30:00Z",
+  "data": {
+    "identity_id": 5,
+    "action": "embedding_added",
+    "detection_id": 17
+  }
+}
 
-// identity.merged  (source deleted, detections moved to target)
-{ "event": "identity.merged", "timestamp": "...",
-  "data": { "identity_id": 3, "label": "Daisuke (old)",
-            "type": "face", "merged_into": 5 } }
+// embedding_removed
+{
+  "event": "identity.updated",
+  "timestamp": "2024-01-15T10:30:00Z",
+  "data": {
+    "identity_id": 5,
+    "action": "embedding_removed",
+    "detection_id": 17
+  }
+}
 
-// identity.deleted
-{ "event": "identity.deleted", "timestamp": "...",
-  "data": { "identity_id": 9, "label": "Unknown person", "type": "face" } }
+// embedding_removed (deleted directly — no associated detection)
+{
+  "event": "identity.updated",
+  "timestamp": "2024-01-15T10:30:00Z",
+  "data": {
+    "identity_id": 5,
+    "action": "embedding_removed",
+    "detection_id": null
+  }
+}
 
-// detection.deleted
-{ "event": "detection.deleted", "timestamp": "...",
-  "data": { "detection_ids": [14, 17, 23], "count": 3 } }
+// thumbnail_updated
+{
+  "event": "identity.updated",
+  "timestamp": "2024-01-15T10:30:00Z",
+  "data": {
+    "identity_id": 5,
+    "action": "thumbnail_updated",
+    "thumbnail_url": "/media/crops/5/abc123.jpg"
+  }
+}
 
-// model.activated
-{ "event": "model.activated", "timestamp": "...",
-  "data": { "model_id": 2, "name": "buffalo_l", "type": "face" } }
+// external_ref_updated
+{
+  "event": "identity.updated",
+  "timestamp": "2024-01-15T10:30:00Z",
+  "data": {
+    "identity_id": 5,
+    "action": "external_ref_updated",
+    "external_ref": "photo-abc"
+  }
+}</pre>
+          </details>
+        </div>
 
-// job.done — single-image async (success)
-{ "event": "job.done", "timestamp": "...",
-  "data": { "job_id": "abc-123", "status": "done",
-            "source_image_id": 42, "external_ref": "photo-123",
-            "faces": [...], "objects": [...] } }
+        <div>
+          <code style="font-size:12px;background:var(--surface-raised);padding:2px 7px;border-radius:4px">identity.merged</code>
+          <p class="muted" style="font-size:12px;margin:4px 0 0;line-height:1.5">
+            Fired when one identity is merged into another (source is deleted).
+            Payload: <code style="font-size:11px">identity_id</code> (deleted source),
+            <code style="font-size:11px">label</code>, <code style="font-size:11px">type</code>,
+            <code style="font-size:11px">merged_into</code> (surviving target id).
+          </p>
+          <details style="margin-top:5px">
+            <summary class="muted" style="font-size:11px;cursor:pointer;user-select:none;width:fit-content">Payload</summary>
+            <pre style="font-size:11px;background:var(--surface-raised);border:1px solid var(--border);border-radius:var(--radius);padding:8px 10px;margin:5px 0 0;line-height:1.5;overflow-x:auto">{
+  "event": "identity.merged",
+  "timestamp": "2024-01-15T10:30:00Z",
+  "data": {
+    "identity_id": 3,
+    "label": "Daisuke (old)",
+    "type": "face",
+    "merged_into": 5
+  }
+}</pre>
+          </details>
+        </div>
 
-// job.done — bulk upload async (success)
-{ "event": "job.done", "timestamp": "...",
-  "data": { "job_id": "abc-456", "status": "done",
-            "total": 5, "type": "face", "results": [...] } }
+        <div>
+          <code style="font-size:12px;background:var(--surface-raised);padding:2px 7px;border-radius:4px">identity.deleted</code>
+          <p class="muted" style="font-size:12px;margin:4px 0 0;line-height:1.5">
+            Fired when a single identity is permanently deleted. Not fired for bulk delete-all.
+            Payload: <code style="font-size:11px">identity_id</code>, <code style="font-size:11px">label</code>,
+            <code style="font-size:11px">type</code>.
+          </p>
+          <details style="margin-top:5px">
+            <summary class="muted" style="font-size:11px;cursor:pointer;user-select:none;width:fit-content">Payload</summary>
+            <pre style="font-size:11px;background:var(--surface-raised);border:1px solid var(--border);border-radius:var(--radius);padding:8px 10px;margin:5px 0 0;line-height:1.5;overflow-x:auto">{
+  "event": "identity.deleted",
+  "timestamp": "2024-01-15T10:30:00Z",
+  "data": {
+    "identity_id": 9,
+    "label": "Unknown person",
+    "type": "face"
+  }
+}</pre>
+          </details>
+        </div>
 
-// job.done (failure)
-{ "event": "job.done", "timestamp": "...",
-  "data": { "job_id": "abc-123", "status": "failed", "error": "..." } }</pre>
+        <div>
+          <code style="font-size:12px;background:var(--surface-raised);padding:2px 7px;border-radius:4px">model.activated</code>
+          <p class="muted" style="font-size:12px;margin:4px 0 0;line-height:1.5">
+            Fired when an admin activates a new model. Broadcast to all subscribers
+            across all environments — model changes affect every detection from that point on.
+            Payload: <code style="font-size:11px">model_id</code>, <code style="font-size:11px">name</code>,
+            <code style="font-size:11px">type</code> (<code style="font-size:11px">"face"</code> or
+            <code style="font-size:11px">"object"</code>).
+          </p>
+          <details style="margin-top:5px">
+            <summary class="muted" style="font-size:11px;cursor:pointer;user-select:none;width:fit-content">Payload</summary>
+            <pre style="font-size:11px;background:var(--surface-raised);border:1px solid var(--border);border-radius:var(--radius);padding:8px 10px;margin:5px 0 0;line-height:1.5;overflow-x:auto">{
+  "event": "model.activated",
+  "timestamp": "2024-01-15T10:30:00Z",
+  "data": {
+    "model_id": 2,
+    "name": "buffalo_l",
+    "type": "face"
+  }
+}</pre>
+          </details>
+        </div>
+
       </div>
     </div>
 
