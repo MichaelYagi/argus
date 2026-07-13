@@ -278,6 +278,13 @@
       </div>`;
     }
 
+    const faceNames = [...new Set(r.faces.map(f => f.label || 'Unknown'))].sort();
+    if (faceNames.length >= 2) {
+      html += `<div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:6px">` +
+        faceNames.map(n => `<button class="btn btn-ghost tag-toggle active" style="font-size:11px;padding:2px 8px" data-name-chip="${esc(n)}">${esc(n)}</button>`).join('') +
+        `</div>`;
+    }
+
     if (r.faces.length) {
       html += `<table style="width:100%;font-size:12px;border-collapse:collapse;margin-top:8px">
         <thead><tr style="border-bottom:1px solid var(--border);text-align:left">
@@ -317,7 +324,17 @@
 
     const wrap = card.querySelector('.img-wrap');
     const img  = card.querySelector('.test-img');
-    const draw = () => drawOverlays(wrap, img, r);
+    wrap._hiddenNames = new Set();
+    card.querySelectorAll('[data-name-chip]').forEach(btn => {
+      btn.addEventListener('click', function() {
+        this.classList.toggle('active');
+        const name = this.dataset.nameChip;
+        if (this.classList.contains('active')) wrap._hiddenNames.delete(name);
+        else wrap._hiddenNames.add(name);
+        applyNameFilter(wrap);
+      });
+    });
+    const draw = () => { drawOverlays(wrap, img, r); applyNameFilter(wrap); };
     if (img.complete && img.naturalWidth) draw();
     else img.addEventListener('load', draw);
     img.addEventListener('error', () => {
@@ -327,12 +344,20 @@
     rendered.push({ wrap, img, data: r });
   }
 
-  function boxEl(wrap, img, b, color, label, faceIndex = null, kind = '') {
+  function applyNameFilter(wrap) {
+    const hidden = wrap._hiddenNames || new Set();
+    wrap.querySelectorAll('.test-face[data-name]').forEach(box => {
+      box.style.display = hidden.has(box.dataset.name) ? 'none' : '';
+    });
+  }
+
+  function boxEl(wrap, img, b, color, label, faceIndex = null, kind = '', dataName = '') {
     const sx = img.clientWidth / img.naturalWidth;
     const sy = img.clientHeight / img.naturalHeight;
     const interactive = faceIndex !== null;
     const d = document.createElement('div');
     d.className = 'test-overlay' + (kind ? ' test-' + kind : '');
+    if (dataName) d.dataset.name = dataName;
     d.style.cssText =
       `position:absolute;border:2px solid ${color};border-radius:2px;box-sizing:border-box;` +
       `pointer-events:${interactive ? 'auto' : 'none'};${interactive ? 'cursor:default;' : ''}` +
@@ -374,11 +399,11 @@
     const sortedFaces   = [...r.faces].sort((a, b) => (b.bbox.w * b.bbox.h) - (a.bbox.w * a.bbox.h));
     sortedObjects.forEach(o => boxEl(wrap, img, o.bbox, OBJ_COLOR, `${o.class_name} ${(o.confidence * 100).toFixed(0)}%`, null, 'obj'));
     sortedFaces.forEach((f, i) => boxEl(wrap, img, f.bbox, FACE_COLOR,
-      f.label ? `${f.label} ${Math.max(0, f.similarity * 100).toFixed(0)}%` : `Face #${i + 1}`, r.faces.indexOf(f), 'face'));
+      f.label ? `${f.label} ${Math.max(0, f.similarity * 100).toFixed(0)}%` : `Face #${i + 1}`, r.faces.indexOf(f), 'face', f.label || 'Unknown'));
   }
 
   window.addEventListener('resize', () => {
-    rendered.forEach(x => { if (x.img.naturalWidth) drawOverlays(x.wrap, x.img, x.data); });
+    rendered.forEach(x => { if (x.img.naturalWidth) { drawOverlays(x.wrap, x.img, x.data); applyNameFilter(x.wrap); } });
   });
 })();
 </script>
