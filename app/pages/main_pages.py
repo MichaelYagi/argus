@@ -285,6 +285,7 @@ async def webhooks_page(request: Request):
         d = dict(w)
         d["event_list"] = [e.strip() for e in d["events"].split(",") if e.strip()]
         d["is_active"] = bool(d.get("is_active", 1))
+        d["has_secret"] = bool(d.pop("secret", None))
         webhooks.append(d)
     ctx["webhooks"] = webhooks
     ctx["valid_events"] = sorted([

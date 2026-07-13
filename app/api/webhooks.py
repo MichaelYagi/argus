@@ -105,7 +105,7 @@ async def update_webhook(
     if body.label is not None:
         kwargs["label"] = body.label
     if body.secret is not None:
-        kwargs["secret"] = body.secret
+        kwargs["secret"] = body.secret or None  # empty string clears the secret
     if body.is_active is not None:
         kwargs["is_active"] = int(body.is_active)
     if not store.update_webhook(webhook_id, user_id, **kwargs):
