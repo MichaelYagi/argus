@@ -294,7 +294,7 @@
         const match = f.label
           ? `${esc(f.label)} <span class="muted">${Math.max(0, f.similarity * 100).toFixed(0)}%</span>`
           : '<span class="muted">—</span>';
-        html += `<tr data-face-row="${i}" style="border-bottom:1px solid var(--border);cursor:default">
+        html += `<tr data-face-row="${i}" data-name="${esc(f.label || 'Unknown')}" style="border-bottom:1px solid var(--border);cursor:default">
           <td style="padding:4px 0">#${i + 1}</td>
           <td>${match}</td>
           <td>${(f.confidence * 100).toFixed(0)}%</td>
@@ -348,6 +348,10 @@
     const hidden = wrap._hiddenNames || new Set();
     wrap.querySelectorAll('.test-face[data-name]').forEach(box => {
       box.style.display = hidden.has(box.dataset.name) ? 'none' : '';
+    });
+    const card = wrap.closest('.card');
+    if (card) card.querySelectorAll('tr[data-name]').forEach(row => {
+      row.style.display = hidden.has(row.dataset.name) ? 'none' : '';
     });
   }
 
