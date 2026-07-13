@@ -44,19 +44,21 @@ def enroll_from_detection(det: Any, user_id: int, environment_id: int | None = N
     if store.embedding_exists(det["identity_id"], det["crop_path"]):
         return False
 
+    env_id = _det_env(det, environment_id)
     store.insert_face_embedding(
         identity_id=det["identity_id"],
         model_id=model_id,
         embedding_bytes=bytes(det["embedding"]),
         source_image_path=det["crop_path"],
-        environment_id=environment_id,
+        environment_id=env_id,
+        confidence=float(det["confidence"] or 0.5),
     )
     if model_id:
         store.compute_and_store_representative(det["identity_id"], model_id)
         from app.core import face_index as _fi
-        _fi.rebuild_user(user_id, _det_env(det, environment_id))
+        _fi.update_identity(user_id, env_id, det["identity_id"])
     from app.core import webhook as _wh
-    _wh.fire(user_id, _det_env(det, environment_id), "identity.updated", {
+    _wh.fire(user_id, env_id, "identity.updated", {
         "identity_id": det["identity_id"],
         "action": "embedding_added",
         "detection_id": det["id"],
@@ -108,7 +110,7 @@ async def unenroll_detection(
     removed = store.remove_reference_by_detection(detection_id, user_id, environment_id)
     if removed:
         from app.core import face_index as _fi
-        _fi.rebuild_user(user_id, environment_id)
+        _fi.update_identity(user_id, environment_id, det["identity_id"])
         from app.core import webhook as _wh
         _wh.fire(user_id, environment_id, "identity.updated", {
             "identity_id": det["identity_id"],
@@ -130,7 +132,7 @@ async def delete_embedding(
         raise HTTPException(404, "Embedding not found")
     if _active_face_model_id():
         from app.core import face_index as _fi
-        _fi.rebuild_user(user_id, environment_id)
+        _fi.update_identity(user_id, environment_id, emb["identity_id"])
     from app.core import webhook as _wh
     _wh.fire(user_id, environment_id, "identity.updated", {
         "identity_id": emb["identity_id"],
@@ -304,11 +306,12 @@ def _persist_enrollment(
         embedding_bytes=_to_bytes(embedding),
         source_image_path=crop_path,
         environment_id=environment_id,
+        confidence=float(face_det.confidence or 0.5),
     )
     if model_id:
         store.compute_and_store_representative(identity_id, model_id)
         from app.core import face_index as _fi
-        _fi.rebuild_user(user_id, environment_id)
+        _fi.update_identity(user_id, environment_id, identity_id)
     from app.api.detect import scan_unidentified
     background_tasks.add_task(scan_unidentified, user_id, environment_id)
     return {

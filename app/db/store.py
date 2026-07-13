@@ -218,6 +218,10 @@ def _migrate(conn: sqlite3.Connection) -> None:
     if "last_environment_id" not in existing_user_cols:
         conn.execute("ALTER TABLE users ADD COLUMN last_environment_id INTEGER")
 
+    existing_fe_cols = {r[1] for r in conn.execute("PRAGMA table_info(face_embeddings)")}
+    if "confidence" not in existing_fe_cols:
+        conn.execute("ALTER TABLE face_embeddings ADD COLUMN confidence REAL NOT NULL DEFAULT 0.5")
+
     existing_identity_cols = {r[1] for r in conn.execute("PRAGMA table_info(identities)")}
     if "cover_detection_id" not in existing_identity_cols:
         conn.execute(
@@ -1106,6 +1110,7 @@ def insert_face_embedding(
     embedding_bytes: bytes,
     source_image_path: str | None = None,
     environment_id: int | None = None,
+    confidence: float = 0.5,
 ) -> int:
     with _connect() as conn:
         # Inherit the environment from the owning identity when not given explicitly,
@@ -1117,9 +1122,10 @@ def insert_face_embedding(
             ).fetchone()
             env_id = row[0] if row else 0
         conn.execute(
-            """INSERT INTO face_embeddings (identity_id, environment_id, model_id, embedding, source_image_path)
-               VALUES (?, ?, ?, ?, ?)""",
-            (identity_id, env_id, model_id, embedding_bytes, source_image_path),
+            """INSERT INTO face_embeddings
+               (identity_id, environment_id, model_id, embedding, source_image_path, confidence)
+               VALUES (?, ?, ?, ?, ?, ?)""",
+            (identity_id, env_id, model_id, embedding_bytes, source_image_path, confidence),
         )
         return conn.execute("SELECT last_insert_rowid()").fetchone()[0]
 
@@ -1554,24 +1560,28 @@ def get_reference_embeddings(model_id: int, user_id: int, environment_id: int | 
 def get_reference_embeddings_with_confidence(
     model_id: int, user_id: int, environment_id: int | None = None
 ) -> list[sqlite3.Row]:
-    """Reference embeddings with detection confidence for topk_weighted strategy.
-    Joins face_embeddings to detections via crop_path (= source_image_path).
-    Defaults confidence to 0.5 when no matching detection exists (direct enroll).
-    """
+    """Reference embeddings with stored confidence for topk_weighted strategy."""
     with _connect() as conn:
         env_id = _resolve_env(conn, user_id, environment_id)
         return conn.execute(
-            """SELECT fe.identity_id, fe.embedding,
-                      COALESCE(MAX(d.confidence), 0.5) AS confidence
+            """SELECT fe.identity_id, fe.embedding, fe.confidence
                FROM face_embeddings fe
                JOIN identities i ON i.id = fe.identity_id
-               LEFT JOIN detections d
-                 ON d.crop_path = fe.source_image_path
-                AND d.environment_id = fe.environment_id
-                AND d.user_id = i.user_id
-               WHERE fe.model_id = ? AND i.user_id = ? AND i.environment_id = ?
-               GROUP BY fe.id""",
+               WHERE fe.model_id = ? AND i.user_id = ? AND i.environment_id = ?""",
             (model_id, user_id, env_id),
+        ).fetchall()
+
+
+def get_embeddings_for_identity(
+    identity_id: int, model_id: int, environment_id: int | None = None
+) -> list[sqlite3.Row]:
+    """Embeddings + confidence for one identity — used by the incremental index update."""
+    with _connect() as conn:
+        env_id = environment_id if environment_id is not None else 0
+        return conn.execute(
+            """SELECT embedding, confidence FROM face_embeddings
+               WHERE identity_id = ? AND model_id = ? AND environment_id = ?""",
+            (identity_id, model_id, env_id),
         ).fetchall()
 
 

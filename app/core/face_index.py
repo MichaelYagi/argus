@@ -37,9 +37,10 @@ def _try_import_faiss() -> Any | None:
 
 _lock = threading.Lock()
 # Keys are (user_id, environment_id) so each environment has an isolated index.
-_indices: dict[tuple[int, int], Any]       = {}  # -> faiss.IndexFlatIP (or numpy matrix)
-_id_maps: dict[tuple[int, int], list[int]] = {}  # -> [identity_id, ...]
-_current_model_id: int | None  = None
+_indices:   dict[tuple[int, int], Any]            = {}  # -> faiss.IndexFlatIP (or numpy matrix)
+_id_maps:   dict[tuple[int, int], list[int]]      = {}  # -> [identity_id, ...]
+_centroids: dict[tuple[int, int], dict[int, Any]] = {}  # -> {identity_id: centroid_vector}
+_current_model_id: int | None = None
 
 
 # ---------------------------------------------------------------------------
@@ -63,6 +64,12 @@ def _top_k() -> int:
         return 5
 
 
+def _norm(v: Any) -> Any:
+    import numpy as np
+    n = float(v @ v)
+    return v / np.sqrt(n) if n > 0 else v
+
+
 def build_for_user(model_id: int, user_id: int, environment_id: int) -> None:
     """Build or rebuild the in-memory index for one (user, environment), per strategy.
 
@@ -80,10 +87,7 @@ def build_for_user(model_id: int, user_id: int, environment_id: int) -> None:
     key = (user_id, environment_id)
     vectors: list[np.ndarray] = []
     id_map:  list[int]        = []
-
-    def _norm(v: np.ndarray) -> np.ndarray:
-        n = np.linalg.norm(v)
-        return v / n if n > 0 else v
+    centroid_map: dict[int, np.ndarray] = {}
 
     if strategy == "best":
         for r in store.get_reference_embeddings(model_id, user_id, environment_id):
@@ -91,6 +95,7 @@ def build_for_user(model_id: int, user_id: int, environment_id: int) -> None:
                 continue
             vectors.append(_norm(np.frombuffer(bytes(r["embedding"]), dtype=np.float32).copy()))
             id_map.append(r["identity_id"])
+        # best mode stores multiple vectors per identity; centroid_map stays empty
 
     elif strategy == "topk_weighted":
         k = _top_k()
@@ -101,13 +106,13 @@ def build_for_user(model_id: int, user_id: int, environment_id: int) -> None:
         for iid, embs in by_identity.items():
             top = sorted(embs, key=lambda x: x[1], reverse=True)[:k]
             total_w = sum(c for _, c in top) or len(top)
-            acc = np.zeros(
-                np.frombuffer(top[0][0], dtype=np.float32).shape, dtype=np.float32
-            )
+            acc = np.zeros(np.frombuffer(top[0][0], dtype=np.float32).shape, dtype=np.float32)
             for emb_bytes, conf in top:
                 acc += _norm(np.frombuffer(emb_bytes, dtype=np.float32).copy()) * (conf / total_w)
-            vectors.append(_norm(acc))
-            id_map.append(iid)
+            centroid = _norm(acc)
+            centroid_map[iid] = centroid
+        id_map = list(centroid_map.keys())
+        vectors = [centroid_map[iid] for iid in id_map]
 
     else:  # average
         # Always recompute centroids — stale representatives from a different model
@@ -118,13 +123,16 @@ def build_for_user(model_id: int, user_id: int, environment_id: int) -> None:
         for r in store.get_representative_embeddings(model_id, user_id, environment_id):
             if not r["representative_embedding"]:
                 continue
-            vectors.append(_norm(np.frombuffer(bytes(r["representative_embedding"]), dtype=np.float32).copy()))
-            id_map.append(r["identity_id"])
+            centroid = _norm(np.frombuffer(bytes(r["representative_embedding"]), dtype=np.float32).copy())
+            centroid_map[r["identity_id"]] = centroid
+        id_map = list(centroid_map.keys())
+        vectors = [centroid_map[iid] for iid in id_map]
 
     with _lock:
         global _current_model_id
         _current_model_id = model_id
         _id_maps[key] = id_map
+        _centroids[key] = centroid_map
 
         if not vectors:
             _indices.pop(key, None)
@@ -166,12 +174,90 @@ def rebuild_user(user_id: int, environment_id: int) -> None:
         build_for_user(model_id, user_id, environment_id)
 
 
+def update_identity(user_id: int, environment_id: int, identity_id: int) -> None:
+    """Incrementally update one identity's centroid without rebuilding the whole index.
+
+    Only re-fetches that identity's embeddings from DB, recomputes its centroid,
+    then rebuilds the faiss/numpy index from the in-memory centroid cache (no DB for
+    other identities). Falls back to a full rebuild when the centroid cache is cold
+    or when using 'best' strategy (which stores multiple vectors per identity).
+    """
+    import numpy as np
+
+    from app.db import store
+
+    with _lock:
+        model_id = _current_model_id
+        key = (user_id, environment_id)
+        has_centroids = key in _centroids
+
+    if model_id is None:
+        return
+
+    strategy = _strategy()
+    if strategy == "best" or not has_centroids:
+        # best mode: multiple vectors per identity, can't do incremental.
+        # cold cache: full build needed before we can trust the centroid map.
+        build_for_user(model_id, user_id, environment_id)
+        return
+
+    rows = store.get_embeddings_for_identity(identity_id, model_id, environment_id)
+
+    if strategy == "topk_weighted":
+        k = _top_k()
+        embs = [(bytes(r["embedding"]), float(r["confidence"])) for r in rows if r["embedding"]]
+        if not embs:
+            new_centroid = None
+        else:
+            top = sorted(embs, key=lambda x: x[1], reverse=True)[:k]
+            total_w = sum(c for _, c in top) or len(top)
+            acc = np.zeros(np.frombuffer(top[0][0], dtype=np.float32).shape, dtype=np.float32)
+            for emb_bytes, conf in top:
+                acc += _norm(np.frombuffer(emb_bytes, dtype=np.float32).copy()) * (conf / total_w)
+            new_centroid = _norm(acc)
+    else:  # average
+        emb_list = [np.frombuffer(bytes(r["embedding"]), dtype=np.float32).copy()
+                    for r in rows if r["embedding"]]
+        if not emb_list:
+            new_centroid = None
+        else:
+            acc = np.zeros_like(emb_list[0])
+            for e in emb_list:
+                acc = acc + _norm(e)
+            new_centroid = _norm(acc)
+
+    with _lock:
+        centroid_map = _centroids.get(key, {})
+        if new_centroid is None:
+            centroid_map.pop(identity_id, None)
+        else:
+            centroid_map[identity_id] = new_centroid
+        _centroids[key] = centroid_map
+
+        id_map = list(centroid_map.keys())
+        _id_maps[key] = id_map
+
+        if not id_map:
+            _indices.pop(key, None)
+            return
+
+        vectors = [centroid_map[iid] for iid in id_map]
+        faiss = _try_import_faiss()
+        if faiss is not None:
+            idx = faiss.IndexFlatIP(len(vectors[0]))
+            idx.add(np.stack(vectors).astype(np.float32))
+            _indices[key] = idx
+        else:
+            _indices[key] = np.stack(vectors).astype(np.float32)
+
+
 def clear_environment(user_id: int, environment_id: int) -> None:
     """Drop a (user, environment) index — used when an environment is deleted."""
     key = (user_id, environment_id)
     with _lock:
         _indices.pop(key, None)
         _id_maps.pop(key, None)
+        _centroids.pop(key, None)
 
 
 # ---------------------------------------------------------------------------

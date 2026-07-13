@@ -83,6 +83,7 @@ CREATE TABLE IF NOT EXISTS face_embeddings (
     model_id          INTEGER          REFERENCES models(id),
     embedding         BLOB    NOT NULL,
     source_image_path TEXT,
+    confidence        REAL    NOT NULL DEFAULT 0.5,
     created_at        TEXT    NOT NULL DEFAULT (datetime('now'))
 );
 
