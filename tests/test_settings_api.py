@@ -42,7 +42,7 @@ def test_list_settings_grouped(client):
     assert r.status_code == 200
     data = r.json()
     assert set(data.keys()) == {"face", "object", "system"}
-    assert len(data["face"]) == 8
+    assert len(data["face"]) == 9
     assert len(data["object"]) == 4
     assert len(data["system"]) == 12
 
@@ -167,7 +167,7 @@ def test_reset_category(client):
 
     r = client.post("/api/settings/reset?category=face", headers=h)
     assert r.status_code == 200
-    assert len(r.json()) == 8
+    assert len(r.json()) == 9
     assert settings_cache.cache.get("face.match_threshold") == 0.5
     assert settings_cache.cache.get("face.min_face_size") == 40
 
@@ -188,11 +188,11 @@ def test_reset_rejects_both_key_and_category(client):
 # face.match_strategy choice
 # ---------------------------------------------------------------------------
 
-def test_match_strategy_default_is_best(client):
+def test_match_strategy_default_is_topk_weighted(client):
     h = _setup(client)
     r = client.get("/api/settings/face.match_strategy", headers=h)
     assert r.status_code == 200
-    assert r.json()["value"] == "best"
+    assert r.json()["value"] == "topk_weighted"
 
 
 def test_match_strategy_accepts_average(client):
