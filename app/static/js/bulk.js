@@ -263,9 +263,21 @@ async function _pool(items, concurrency, fn) {
         ${discarded
           ? `<div class="alert alert-warning" style="margin:0">No detections — image was not saved.</div>`
           : (thumbs ? `<div style="display:flex;gap:4px;flex-wrap:wrap;margin-bottom:8px">${thumbs}</div>` : '') +
-            (allDets.length ? `<div id="overlay-wrap-${i}" style="position:relative;display:inline-block;max-width:100%"></div>` : '')
+            (allDets.length ? `<div id="overlay-wrap-${i}" style="position:relative;display:inline-block;max-width:100%"></div>` : '') +
+            (faces.length && objects.length ? `<div style="display:flex;gap:8px;margin-top:8px">
+              <button class="btn btn-ghost tag-toggle active" data-kind="face">Faces</button>
+              <button class="btn btn-ghost tag-toggle active" data-kind="obj">Objects</button>
+            </div>` : '')
         }
       </div>`;
+
+    row.querySelectorAll('.tag-toggle[data-kind]').forEach(btn => {
+      btn.addEventListener('click', function() {
+        this.classList.toggle('active');
+        const wrap = row.querySelector(`#overlay-wrap-${i}`);
+        if (wrap) wrap.classList.toggle('hide-' + this.dataset.kind + 's', !this.classList.contains('active'));
+      });
+    });
 
     // If there's a source image, render it with bbox overlays
     if (srcId && allDets.length) {

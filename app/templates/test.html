@@ -61,6 +61,10 @@
 {% endblock %}
 
 {% block scripts %}
+<style>
+.hide-faces .test-face { display: none }
+.hide-objs  .test-obj  { display: none }
+</style>
 <script>
 (function() {
   const dropZone  = document.getElementById('drop-zone');
@@ -267,6 +271,13 @@
     html += `<div class="img-wrap" style="position:relative;display:inline-block;max-width:100%;line-height:0">
       <img class="test-img" src="${esc(displaySrc)}" style="max-width:100%;height:auto;border-radius:4px;display:block"></div>`;
 
+    if (nFaces && nObjs) {
+      html += `<div style="display:flex;gap:8px;margin-top:8px">
+        <button class="btn btn-ghost tag-toggle active" data-kind="face">Faces</button>
+        <button class="btn btn-ghost tag-toggle active" data-kind="obj">Objects</button>
+      </div>`;
+    }
+
     if (r.faces.length) {
       html += `<table style="width:100%;font-size:12px;border-collapse:collapse;margin-top:8px">
         <thead><tr style="border-bottom:1px solid var(--border);text-align:left">
@@ -288,6 +299,14 @@
 
     card.innerHTML = html;
 
+    card.querySelectorAll('.tag-toggle[data-kind]').forEach(btn => {
+      btn.addEventListener('click', function() {
+        this.classList.toggle('active');
+        const wrap = card.querySelector('.img-wrap');
+        wrap.classList.toggle('hide-' + this.dataset.kind + 's', !this.classList.contains('active'));
+      });
+    });
+
     // Row hover -> highlight the matching face box. Boxes are resolved at hover
     // time (they get rebuilt on image load / resize), so this survives redraws.
     card.querySelectorAll('tr[data-face-row]').forEach(row => {
@@ -308,12 +327,12 @@
     rendered.push({ wrap, img, data: r });
   }
 
-  function boxEl(wrap, img, b, color, label, faceIndex = null) {
+  function boxEl(wrap, img, b, color, label, faceIndex = null, kind = '') {
     const sx = img.clientWidth / img.naturalWidth;
     const sy = img.clientHeight / img.naturalHeight;
     const interactive = faceIndex !== null;
     const d = document.createElement('div');
-    d.className = 'test-overlay';
+    d.className = 'test-overlay' + (kind ? ' test-' + kind : '');
     d.style.cssText =
       `position:absolute;border:2px solid ${color};border-radius:2px;box-sizing:border-box;` +
       `pointer-events:${interactive ? 'auto' : 'none'};${interactive ? 'cursor:default;' : ''}` +
@@ -353,9 +372,9 @@
     wrap.querySelectorAll('.test-overlay').forEach(e => e.remove());
     const sortedObjects = [...r.objects].sort((a, b) => (b.bbox.w * b.bbox.h) - (a.bbox.w * a.bbox.h));
     const sortedFaces   = [...r.faces].sort((a, b) => (b.bbox.w * b.bbox.h) - (a.bbox.w * a.bbox.h));
-    sortedObjects.forEach(o => boxEl(wrap, img, o.bbox, OBJ_COLOR, `${o.class_name} ${(o.confidence * 100).toFixed(0)}%`));
+    sortedObjects.forEach(o => boxEl(wrap, img, o.bbox, OBJ_COLOR, `${o.class_name} ${(o.confidence * 100).toFixed(0)}%`, null, 'obj'));
     sortedFaces.forEach((f, i) => boxEl(wrap, img, f.bbox, FACE_COLOR,
-      f.label ? `${f.label} ${Math.max(0, f.similarity * 100).toFixed(0)}%` : `Face #${i + 1}`, r.faces.indexOf(f)));
+      f.label ? `${f.label} ${Math.max(0, f.similarity * 100).toFixed(0)}%` : `Face #${i + 1}`, r.faces.indexOf(f), 'face'));
   }
 
   window.addEventListener('resize', () => {
