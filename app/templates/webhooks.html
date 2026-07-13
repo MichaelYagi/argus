@@ -453,7 +453,7 @@
     document.getElementById('wh-url').value   = wh ? wh.url   : '';
     document.getElementById('wh-label').value = wh ? wh.label : '';
     document.querySelectorAll('.wh-evt').forEach(cb => {
-      cb.checked = wh ? wh.event_list.includes(cb.value) : false;
+      cb.checked = wh ? wh.event_list.includes(cb.value) : true;
     });
     document.getElementById('modal-err').style.display = 'none';
     document.getElementById('wh-modal').style.display = 'flex';
