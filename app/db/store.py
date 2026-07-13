@@ -53,7 +53,10 @@ def _connect():
         conn.execute("PRAGMA busy_timeout=5000")
         conn.execute("PRAGMA foreign_keys = ON")
         t2 = time.monotonic()
-        log.debug("_connect: open=%.0fms pragmas=%.0fms", (t1 - t0) * 1000, (t2 - t1) * 1000)
+        open_ms = (t1 - t0) * 1000
+        pragma_ms = (t2 - t1) * 1000
+        if open_ms > 50 or pragma_ms > 50:
+            log.warning("_connect: slow open=%.0fms pragmas=%.0fms", open_ms, pragma_ms)
         yield conn
         conn.commit()
     except Exception:
