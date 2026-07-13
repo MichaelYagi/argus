@@ -188,11 +188,11 @@ def test_reset_rejects_both_key_and_category(client):
 # face.match_strategy choice
 # ---------------------------------------------------------------------------
 
-def test_match_strategy_default_is_topk_weighted(client):
+def test_match_strategy_default_is_best(client):
     h = _setup(client)
     r = client.get("/api/settings/face.match_strategy", headers=h)
     assert r.status_code == 200
-    assert r.json()["value"] == "topk_weighted"
+    assert r.json()["value"] == "best"
 
 
 def test_match_strategy_accepts_average(client):

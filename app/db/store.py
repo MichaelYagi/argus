@@ -2419,10 +2419,10 @@ _SETTINGS_SEED: list[tuple] = [
      "0.92",  "float",  "face",
      "Auto-Enroll Threshold | Add confirmed detections to the reference set above this confidence; 0 disables"),
     ("face.match_strategy",
-     "topk_weighted", "string", "face",
-     "Face Matching Method | How enrolled photos are combined when matching a face. "
-     "Top-K weighted uses the highest-confidence reference photos, weighted by quality — best accuracy. "
-     "Best match uses the single closest reference photo — good when appearances vary widely. "
+     "best", "string", "face",
+     "Face Matching Method | How enrolled photos are used when matching a face. "
+     "Best match compares against each reference photo and uses the highest score — accurate and fast. "
+     "Top-K weighted averages the top-K reference photos weighted by detection confidence — may help when a person has many varied photos. "
      "Average blends all reference photos equally."),
     ("face.match_top_k",
      "5", "int", "face",
