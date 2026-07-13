@@ -70,8 +70,9 @@ def build_for_user(model_id: int, user_id: int, environment_id: int) -> None:
     - best:          one vector per reference embedding; search collapses to best score per identity.
     - average:       simple centroid per identity (stored in identities.representative_embedding).
     """
-    import numpy as np
     from collections import defaultdict
+
+    import numpy as np
 
     from app.db import store
 

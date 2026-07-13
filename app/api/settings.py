@@ -153,8 +153,8 @@ def _validate_value(key: str, raw: str, value_type: str) -> str:
 
     # Face matching method is a fixed choice.
     if key == "face.match_strategy":
-        if raw.lower() not in ("average", "best"):
-            raise HTTPException(400, "face.match_strategy must be 'average' or 'best'")
+        if raw.lower() not in ("average", "best", "topk_weighted"):
+            raise HTTPException(400, "face.match_strategy must be 'best', 'average', or 'topk_weighted'")
         raw = raw.lower()
 
     # Numeric range constraints.
