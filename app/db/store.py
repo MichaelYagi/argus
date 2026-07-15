@@ -1792,12 +1792,14 @@ def list_source_images(
     since: str | None = None,
     until: str | None = None,
     no_detections: bool = False,
+    no_tagged_faces: bool = False,
 ) -> list[sqlite3.Row]:
     """Processed source images, newest first, with per-image detection count.
     One row per image (deduped at ingestion by content hash). Cursor = 'uploadedAt_id'
     so ties on the second-precision uploaded_at don't drop or repeat rows across pages.
     Optional filters: identity_id (images containing that identity), detection_type,
-    since/until (ISO timestamps, inclusive), no_detections (only images with zero detections)."""
+    since/until (ISO timestamps, inclusive), no_detections (only images with zero detections),
+    no_tagged_faces (only images with no identified face detections)."""
     with _connect() as conn:
         env_id = _resolve_env(conn, user_id, environment_id)
         join = ""
@@ -1824,6 +1826,15 @@ def list_source_images(
         if until:
             sql += " AND si.uploaded_at <= ?"
             params.append(until)
+        if no_tagged_faces:
+            sql += (
+                " AND NOT EXISTS ("
+                "SELECT 1 FROM detections _tf"
+                " WHERE _tf.source_image_id = si.id"
+                " AND _tf.type = 'face'"
+                " AND _tf.identity_id IS NOT NULL"
+                " AND _tf.review_status IS NOT 'rejected')"
+            )
         if cursor:
             try:
                 c_ts, c_id = cursor.rsplit("_", 1)
