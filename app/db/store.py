@@ -1832,8 +1832,7 @@ def list_source_images(
                 "SELECT 1 FROM detections _tf"
                 " WHERE _tf.source_image_id = si.id"
                 " AND _tf.type = 'face'"
-                " AND _tf.identity_id IS NOT NULL"
-                " AND _tf.review_status IS NOT 'rejected')"
+                " AND _tf.identity_id IS NOT NULL)"
             )
         if cursor:
             try:
