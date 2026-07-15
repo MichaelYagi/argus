@@ -2048,7 +2048,7 @@ def unidentify_detection(detection_id: int, user_id: int, environment_id: int | 
         env_id = _resolve_env(conn, user_id, environment_id)
         old_id = _detach_old_reference(conn, detection_id, user_id, None)
         conn.execute(
-            """UPDATE detections SET identity_id = NULL, review_status = NULL,
+            """UPDATE detections SET identity_id = NULL, review_status = 'pending',
                reviewed_at = NULL WHERE id = ? AND user_id = ? AND environment_id = ?""",
             (detection_id, user_id, env_id),
         )
