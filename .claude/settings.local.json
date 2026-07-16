@@ -235,7 +235,8 @@
       "Bash(pytest tests/test_inference_runner.py -v -x)",
       "Bash(/home/michael/.local/bin/pytest -x -q)",
       "Bash(~/.local/bin/ruff check *)",
-      "Bash(python3.11 -m ruff check .)"
+      "Bash(python3.11 -m ruff check .)",
+      "Bash(docker exec *)"
     ]
   }
 }

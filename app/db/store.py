@@ -1101,8 +1101,13 @@ def get_unknown_detections(
             sql += " AND d.type = ?"
             params.append(detection_type)
         if cursor:
-            sql += " AND d.detected_at < ?"
-            params.append(cursor)
+            try:
+                c_ts, c_id = cursor.rsplit("_", 1)
+                id_val = int(c_id)
+            except ValueError:
+                c_ts, id_val = cursor, 0
+            sql += " AND (d.detected_at < ? OR (d.detected_at = ? AND d.id < ?))"
+            params.extend([c_ts, c_ts, id_val])
         sql += " ORDER BY d.detected_at DESC, d.id DESC LIMIT ?"
         params.append(limit + 1)
         return conn.execute(sql, params).fetchall()

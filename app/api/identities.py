@@ -539,7 +539,7 @@ async def unknown_detections(
         "detected_at": r["detected_at"],
         "source_image_id": r["source_image_id"],
         "source_image_url": f"/media/sources/{r['source_image_path']}" if r["source_image_path"] else None,
-    })
+    }, cursor_fn=lambda r: f"{r['detected_at']}_{r['id']}")
     logger.debug("GET /api/detections/unknown: %d items %.0fms",
                  len(result.get("items", [])), (_time.monotonic() - t0) * 1000)
     return result
