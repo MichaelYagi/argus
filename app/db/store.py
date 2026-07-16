@@ -1888,7 +1888,10 @@ def count_pending_review(user_id: int, environment_id: int | None = None) -> int
         return conn.execute(
             """SELECT COUNT(*) FROM detections
                WHERE user_id = ? AND environment_id = ?
-                 AND review_status IN ('pending', 'rejected') AND type = 'face' AND ignored = 0""",
+                 AND (review_status = 'rejected'
+                      OR (review_status = 'pending'
+                          AND (identity_id IS NOT NULL OR reviewed_at IS NULL)))
+                 AND type = 'face' AND ignored = 0""",
             (user_id, env_id),
         ).fetchone()[0]
 
@@ -1915,8 +1918,10 @@ def get_dashboard_stats(user_id: int, environment_id: int | None = None) -> dict
                    COUNT(*) AS detections,
                    SUM(CASE WHEN identity_id IS NULL AND review_status = 'pending'
                                 AND ignored = 0 THEN 1 ELSE 0 END) AS unidentified,
-                   SUM(CASE WHEN review_status IN ('pending', 'rejected') AND type = 'face'
-                                AND ignored = 0 THEN 1 ELSE 0 END) AS pending_review
+                   SUM(CASE WHEN (review_status = 'rejected'
+                                    OR (review_status = 'pending'
+                                        AND (identity_id IS NOT NULL OR reviewed_at IS NULL)))
+                                AND type = 'face' AND ignored = 0 THEN 1 ELSE 0 END) AS pending_review
                FROM detections WHERE user_id = ? AND environment_id = ?""",
             (user_id, env_id),
         ).fetchone()
@@ -1963,8 +1968,10 @@ def get_review_queue(
                    LEFT JOIN identities i ON d.identity_id = i.id
                    LEFT JOIN source_images si ON si.id = d.source_image_id
                    WHERE d.user_id = ? AND d.environment_id = ?
-                     AND d.review_status IN ('pending', 'rejected') AND d.type = 'face'
-                     AND d.ignored = 0"""
+                     AND (d.review_status = 'rejected'
+                          OR (d.review_status = 'pending'
+                              AND (d.identity_id IS NOT NULL OR d.reviewed_at IS NULL)))
+                     AND d.type = 'face' AND d.ignored = 0"""
         if cursor:
             try:
                 c_conf, c_id = cursor.rsplit("_", 1)
@@ -2053,7 +2060,8 @@ def unidentify_detection(detection_id: int, user_id: int, environment_id: int | 
         old_id = _detach_old_reference(conn, detection_id, user_id, None)
         conn.execute(
             """UPDATE detections SET identity_id = NULL, review_status = 'pending',
-               reviewed_at = NULL WHERE id = ? AND user_id = ? AND environment_id = ?""",
+               reviewed_at = datetime('now')
+               WHERE id = ? AND user_id = ? AND environment_id = ?""",
             (detection_id, user_id, env_id),
         )
         changed = conn.execute("SELECT changes()").fetchone()[0] > 0
