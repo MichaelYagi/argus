@@ -1956,7 +1956,7 @@ def get_review_queue(
                    )"""
         base_select = """SELECT d.id, d.source_image_id, d.model_id, d.confidence,
                           d.crop_path, d.detected_at, d.identity_id, d.embedding,
-                          d.bbox_x, d.bbox_y, d.bbox_w, d.bbox_h,
+                          d.bbox_x, d.bbox_y, d.bbox_w, d.bbox_h, d.review_status,
                           i.label AS current_label,
                           si.file_path AS source_image_path
                    FROM detections d
