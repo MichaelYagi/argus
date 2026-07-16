@@ -5,6 +5,48 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [0.1.0-alpha.13] — 2026-07-15
+
+### Added
+
+- **Compare page (`/compare`).** New read-only tool: upload a reference image and one or more target images, and Argus highlights which faces from the reference appear in each target. Nothing is stored — embeddings are computed on the fly and discarded. Accessible from the nav.
+- **Inference resize (`system.max_inference_size`).** Images are downscaled before being sent to the detection models when their longest edge exceeds `system.max_inference_size` (default 1920px). Bounding boxes are scaled back to original-image coordinates before storage, so crops and overlays remain accurate. Reduces memory pressure and speeds up inference on large photos without affecting stored results.
+- **Batch YOLO inference in bulk detect.** Object detection in `POST /api/detect/bulk` now runs all images in a single YOLO forward pass via `infer_objects_batch`, rather than one image at a time. Significantly faster for multi-image bulk jobs.
+- **`face_embeddings.confidence` column.** Each enrolled face embedding now stores the detection confidence from the source detection. Used by the `topk_weighted` matching strategy to weight reference embeddings. Existing rows default to `0.5`.
+- **Incremental face index update (`update_identity`).** Enrolling or unenrolling a face now updates only the affected identity's centroid in memory rather than rebuilding the entire index. Full rebuilds still occur on model swap, environment change, and explicit rebuild calls.
+- **Test page name filter.** Face detection results on the `/test` page can be filtered by name to focus on a specific person in a crowded result set.
+- **Images page "No tagged people" filter.** Added a filter option that shows only source images with no confirmed (non-rejected) face identities.
+
+### Changed
+
+- **Review queue: "No, not [name]" and "Dismiss" now have distinct outcomes.**
+  - **"No, not [name]"** — marks the detection `rejected`, clears its identity, and keeps it in the review queue under the "No match" section. The face stays there until explicitly dismissed.
+  - **"Dismiss"** — removes the face from the review queue entirely and moves it to the Unidentified page, where it can be re-labeled.
+  - Previously both actions called the same reject endpoint and removed the card from the queue, losing the face entirely.
+- **Rejected detections clear `identity_id`.** `reject_detection` now sets `identity_id = NULL` alongside `review_status = 'rejected'`. Previously the wrong-match identity was kept, which caused rejected detections to show as labeled on the tag page and in gallery counts.
+- **Dismissed faces excluded from `scan_unidentified` and Suggested People.** Unidentify (`reviewed_at` signal) prevents dismissed faces from being re-suggested by the background scan or re-clustered in Suggested People. Previously a dismissed face would bounce back to Suggested matches the next time any face was labeled.
+- **Default face matching strategy changed back to `best`.** The `best` strategy (one vector per reference photo, highest cosine similarity wins) is both faster and more accurate in practice than `topk_weighted` for typical enrollment sizes. `topk_weighted` remains available.
+- **Images page filter bar labels.** "Type" renamed to "Filter", "All types" renamed to "Unfiltered".
+- **`idx_detections_identity_env_thumb` index added.** Covers the `(identity_id, user_id, environment_id, detected_at, id)` columns used by identity gallery and cover queries. Noticeably faster identity page loads on larger databases.
+
+### Fixed
+
+- **`POST /api/review/{id}/unidentify` returned 500.** The `review_status NOT NULL` constraint was violated because `unidentify_detection` set `review_status = NULL`. Now sets `review_status = 'pending'`.
+- **Rejected detections showed as labeled (green) on tag page.** With `identity_id` now cleared on reject, the tag page correctly displays them as unlabeled (orange, no name chip).
+- **Dismissed faces reappeared in Suggested matches.** After being dismissed via the review queue, faces with `identity_id IS NULL` were picked up by `scan_unidentified` and re-suggested to the same person. Fixed by recording `reviewed_at` at dismiss time and excluding `reviewed_at IS NOT NULL` faces from the scan.
+- **Review queue 500 on load.** `d.review_status` was missing from the `get_review_queue` SELECT list but referenced in the auto-confirm pass.
+- **`_connect` excessive DEBUG logging.** A `DEBUG` log was emitted on every database connection open, producing thousands of lines per hour under normal load. Now only logs a `WARNING` when connection setup takes more than 50 ms.
+
+### Internal
+
+- `face_index._centroids` module-level cache stores per-identity centroids so incremental updates don't require a full DB read.
+- `store.get_reference_embeddings_with_confidence` simplified: confidence is read from `face_embeddings.confidence` directly (no JOIN needed to compute it).
+- `store.get_embeddings_for_identity` added for single-identity centroid recomputation.
+- `resize_for_inference(img, max_size)` helper in `image_input.py` returns `(img, scale)` and is used by both the detect pipeline and the compare endpoint.
+- Review queue query now includes `d.review_status` in the SELECT and the WHERE condition covers `pending+identity`, `pending+no-identity+reviewed_at IS NULL` (fresh unmatched), and `rejected` — excluding dismissed faces (`pending+no-identity+reviewed_at IS NOT NULL`).
+
+---
+
 ## [0.1.0-alpha.12] — 2026-07-10
 
 ### Added
