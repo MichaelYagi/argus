@@ -84,31 +84,35 @@ function renderBoxes() {
   all.forEach(det => {
     const div = document.createElement('div');
     const isFace = det.kind === 'face';
-    div.className = isFace ? 't-box' + (det.label ? ' labeled' : '') : 't-box object';
+    // Rejected detections keep identity_id in the DB but the human said it's wrong —
+    // treat them as unlabeled for display (orange box, no name chip).
+    const rejected = det.review_status === 'rejected';
+    const displayLabel = rejected ? '' : det.label;
+    div.className = isFace ? 't-box' + (displayLabel ? ' labeled' : '') : 't-box object';
     if (focusId && det.id === focusId) div.classList.add('focused');
     div.style.left   = Math.max(0, det.x * sx) + 'px';
     div.style.top    = Math.max(0, det.y * sy) + 'px';
     div.style.width  = (det.w * sx) + 'px';
     div.style.height = (det.h * sy) + 'px';
     div.dataset.id    = det.id;
-    div.dataset.label = det.label;
+    div.dataset.label = displayLabel;
     if (focusId && det.id === focusId) focusEl = div;
 
     // Persistent label chip shown above the box whenever the detection has a label.
     const chip = document.createElement('div');
     chip.className = 't-chip';
-    chip.textContent = det.label || '';
-    chip.style.display = det.label ? 'block' : 'none';
+    chip.textContent = displayLabel;
+    chip.style.display = displayLabel ? 'block' : 'none';
     div.appendChild(chip);
 
     const tip = document.createElement('div');
     tip.className = 't-tip';
     if (isFace) {
-      tip.textContent = (det.label || 'Unknown')
+      tip.textContent = (displayLabel || 'Unknown')
         + (det.similarity != null ? ' (' + Math.max(0, det.similarity * 100).toFixed(0) + '% match)' : '');
       div.addEventListener('click', () => labelBox(div, tip, chip));
     } else {
-      tip.textContent = (det.label || 'object')
+      tip.textContent = (displayLabel || 'object')
         + (det.confidence != null ? ' (' + (det.confidence * 100).toFixed(0) + '%)' : '');
       div.addEventListener('click', () => labelObjectBox(div, tip, chip));
     }

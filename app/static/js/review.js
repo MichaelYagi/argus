@@ -10,6 +10,7 @@
   // Suggested → Confirm; No match → Dismiss.
   const selSg = new Set();   // suggested-match detection ids
   const selNm = new Set();   // no-match detection ids
+  const itemCache = new Map(); // detection_id -> item (for moving rejected cards to no-match)
 
   function esc(s) {
     return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
@@ -70,12 +71,13 @@
     updateBars();
     checkEmpty();
     if (window.showToast) {
-      showToast(ids.length + (action === 'confirm' ? ' confirmed' : ' dismissed'), 'success');
+      const verb = action === 'confirm' ? ' confirmed' : ' dismissed';
+      showToast(ids.length + verb, 'success');
     }
   }
 
-  window.sgConfirm = () => bulkAction([...selSg], 'confirm', selSg, sgAll);
-  window.nmDismiss = () => bulkAction([...selNm], 'reject',  selNm, nmAll);
+  window.sgConfirm = () => bulkAction([...selSg], 'confirm',     selSg, sgAll);
+  window.nmDismiss = () => bulkAction([...selNm], 'unidentify',  selNm, nmAll);
 
   window.sgSelectAll = cb => toggleAll(suggestedList, selSg, cb.checked);
   window.nmSelectAll = cb => toggleAll(nomatchList, selNm, cb.checked);
@@ -127,6 +129,7 @@
   }
 
   function renderItem(item) {
+    itemCache.set(item.detection_id, item);
     const matched = item.current_identity;
     const name = matched ? esc(matched.label) : null;
     const currentId = matched ? matched.identity_id : null;
@@ -175,7 +178,7 @@
             <button class="btn btn-danger"  onclick="doReject(${item.detection_id})">No, not ${name}</button>
           </div>` : `
           <div style="margin-bottom:10px">
-            <button class="btn btn-ghost" onclick="doReject(${item.detection_id})">Dismiss</button>
+            <button class="btn btn-ghost" onclick="doDismiss(${item.detection_id})">Dismiss</button>
           </div>`}
 
           ${suggestions ? `
@@ -220,8 +223,20 @@
   window.doConfirm = async id => {
     if (await sendReview('/api/review/' + id + '/confirm', { method: 'POST' })) removeCard(id);
   };
+  // "No, not [name]" — mark rejected, keep in queue under the no-match section.
   window.doReject = async id => {
-    if (await sendReview('/api/review/' + id + '/reject', { method: 'POST' })) removeCard(id);
+    if (!await sendReview('/api/review/' + id + '/reject', { method: 'POST' })) return;
+    selSg.delete(id); selNm.delete(id);
+    document.getElementById('rc-' + id)?.remove();
+    updateBars();
+    // Re-render as a no-match card so the user can dismiss it from there.
+    const item = itemCache.get(id);
+    if (item) renderItem({ ...item, current_identity: null });
+    checkEmpty();
+  };
+  // "Dismiss" — remove from queue and send to /unidentified.
+  window.doDismiss = async id => {
+    if (await sendReview('/api/review/' + id + '/unidentify', { method: 'POST' })) removeCard(id);
   };
   window.doReassign = async (id, identityId) => {
     const ok = await sendReview('/api/review/' + id + '/reassign', {

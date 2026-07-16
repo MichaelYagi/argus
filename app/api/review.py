@@ -90,7 +90,7 @@ async def get_review_queue(
     auto_thr = settings_cache.cache.get_or("face.auto_confirm_threshold", 0.80)
     kept = []
     for r in items:
-        if auto_on and model_id and not r["identity_id"] and r["embedding"]:
+        if auto_on and model_id and not r["identity_id"] and r["embedding"] and r["review_status"] != "rejected":
             suggested = _suggested_matches(bytes(r["embedding"]), model_id, user_id, environment_id)
             if suggested and suggested[0]["similarity"] >= auto_thr:
                 store.label_detection(r["id"], user_id, suggested[0]["identity_id"], environment_id)
@@ -153,7 +153,7 @@ async def unidentify(
             "label": None,
             "type": det["type"],
         })
-    return {"detection_id": detection_id, "identity_id": None, "review_status": None}
+    return {"detection_id": detection_id, "identity_id": None, "review_status": "pending"}
 
 
 @router.post("/api/review/{detection_id}/reject", status_code=200)
@@ -293,16 +293,29 @@ async def bulk_review(
             _webhook.fire_detection_labeled(item.detection_id, user_id, environment_id, identity_id=iid)
             results.append({"detection_id": item.detection_id, "status": "reassigned",
                              "identity_id": iid})
+        elif item.action == "unidentify":
+            det = store.get_detection(item.detection_id, user_id, environment_id)
+            store.unidentify_detection(item.detection_id, user_id, environment_id)
+            if det:
+                _webhook.fire(user_id, environment_id, "detection.labeled", {
+                    "detection_id": item.detection_id,
+                    "source_image_id": det["source_image_id"],
+                    "identity_id": None,
+                    "label": None,
+                    "type": det["type"],
+                })
+            results.append({"detection_id": item.detection_id, "status": "unidentified"})
         else:
             results.append({"detection_id": item.detection_id, "status": "error",
                              "detail": f"Unknown action '{item.action}'"})
-    # Rejects (and any reference changes above) may have altered the set — refresh once.
+    # Rejects/unidentifies (and any reference changes above) may have altered the set — refresh once.
     from app.core import face_index as _fi
     _fi.rebuild_user(user_id, environment_id)
     from app.core import activity_buffer as _ab
-    n_confirmed  = sum(1 for r in results if r.get("status") == "confirmed")
-    n_rejected   = sum(1 for r in results if r.get("status") == "rejected")
-    n_reassigned = sum(1 for r in results if r.get("status") == "reassigned")
+    n_confirmed    = sum(1 for r in results if r.get("status") == "confirmed")
+    n_rejected     = sum(1 for r in results if r.get("status") == "rejected")
+    n_reassigned   = sum(1 for r in results if r.get("status") == "reassigned")
+    n_unidentified = sum(1 for r in results if r.get("status") == "unidentified")
     parts: list[str] = []
     if n_confirmed:
         parts.append(f"{n_confirmed} confirmed")
@@ -310,6 +323,8 @@ async def bulk_review(
         parts.append(f"{n_rejected} rejected")
     if n_reassigned:
         parts.append(f"{n_reassigned} reassigned")
+    if n_unidentified:
+        parts.append(f"{n_unidentified} dismissed")
     if parts:
         _ab.emit("identity", f"Bulk review: {', '.join(parts)}")
     return results
@@ -570,7 +585,8 @@ async def delete_detections(
 
 def _fmt_review_item(row: Any, model_id: int | None, user_id: int, environment_id: int) -> dict:
     suggested: list[dict] = []
-    if model_id and row["embedding"]:
+    # Rejected faces explicitly had a match denied — don't offer new suggestions.
+    if model_id and row["embedding"] and row["review_status"] != "rejected":
         suggested = _suggested_matches(bytes(row["embedding"]), model_id, user_id, environment_id)
 
     current = (

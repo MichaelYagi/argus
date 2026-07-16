@@ -1093,7 +1093,8 @@ def get_unknown_detections(
                         si.file_path AS source_image_path
                  FROM detections d
                  LEFT JOIN source_images si ON si.id = d.source_image_id
-                 WHERE d.user_id = ? AND d.environment_id = ? AND d.identity_id IS NULL
+                 WHERE d.user_id = ? AND d.environment_id = ?
+                   AND d.identity_id IS NULL AND d.review_status = 'pending'
                    AND d.ignored = 0"""
         params: list = [user_id, env_id]
         if detection_type:
@@ -1832,7 +1833,8 @@ def list_source_images(
                 "SELECT 1 FROM detections _tf"
                 " WHERE _tf.source_image_id = si.id"
                 " AND _tf.type = 'face'"
-                " AND _tf.identity_id IS NOT NULL)"
+                " AND _tf.identity_id IS NOT NULL"
+                " AND _tf.review_status IS NOT 'rejected')"
             )
         if cursor:
             try:
@@ -1874,7 +1876,8 @@ def count_unidentified(user_id: int, environment_id: int | None = None) -> int:
         return conn.execute(
             """SELECT COUNT(*) FROM detections
                WHERE user_id = ? AND environment_id = ?
-                 AND identity_id IS NULL AND ignored = 0""",
+                 AND identity_id IS NULL AND review_status = 'pending'
+                 AND ignored = 0""",
             (user_id, env_id),
         ).fetchone()[0]
 
@@ -1885,7 +1888,7 @@ def count_pending_review(user_id: int, environment_id: int | None = None) -> int
         return conn.execute(
             """SELECT COUNT(*) FROM detections
                WHERE user_id = ? AND environment_id = ?
-                 AND review_status = 'pending' AND type = 'face' AND ignored = 0""",
+                 AND review_status IN ('pending', 'rejected') AND type = 'face' AND ignored = 0""",
             (user_id, env_id),
         ).fetchone()[0]
 
@@ -1910,8 +1913,9 @@ def get_dashboard_stats(user_id: int, environment_id: int | None = None) -> dict
         det_row = conn.execute(
             """SELECT
                    COUNT(*) AS detections,
-                   SUM(CASE WHEN identity_id IS NULL AND ignored = 0 THEN 1 ELSE 0 END) AS unidentified,
-                   SUM(CASE WHEN review_status = 'pending' AND type = 'face'
+                   SUM(CASE WHEN identity_id IS NULL AND review_status = 'pending'
+                                AND ignored = 0 THEN 1 ELSE 0 END) AS unidentified,
+                   SUM(CASE WHEN review_status IN ('pending', 'rejected') AND type = 'face'
                                 AND ignored = 0 THEN 1 ELSE 0 END) AS pending_review
                FROM detections WHERE user_id = ? AND environment_id = ?""",
             (user_id, env_id),
@@ -1935,7 +1939,8 @@ def get_review_queue(
     limit: int = 20,
     environment_id: int | None = None,
 ) -> list[sqlite3.Row]:
-    """Pending face detections, lowest confidence first. Cursor = 'confidence_id'."""
+    """Pending+rejected face detections, lowest confidence first. Cursor = 'confidence_id'.
+    Pending with an identity → suggested section. Rejected (no identity) → no-match section."""
     with _connect() as conn:
         env_id = _resolve_env(conn, user_id, environment_id)
         dedup = """AND NOT EXISTS (
@@ -1958,7 +1963,7 @@ def get_review_queue(
                    LEFT JOIN identities i ON d.identity_id = i.id
                    LEFT JOIN source_images si ON si.id = d.source_image_id
                    WHERE d.user_id = ? AND d.environment_id = ?
-                     AND d.review_status = 'pending' AND d.type = 'face'
+                     AND d.review_status IN ('pending', 'rejected') AND d.type = 'face'
                      AND d.ignored = 0"""
         if cursor:
             try:
@@ -2040,9 +2045,9 @@ def confirm_detection(detection_id: int, user_id: int, environment_id: int | Non
 
 
 def unidentify_detection(detection_id: int, user_id: int, environment_id: int | None = None) -> bool:
-    """Clear a detection's identity and return it to the unidentified queue.
-    Distinct from reject: reject keeps identity_id (wrong match, stays under that person);
-    unidentify clears it so the face can be re-labeled as someone else."""
+    """Dismiss: clear identity and move to the unidentified page (re-label path).
+    Distinct from reject: reject clears identity_id but keeps the face in the review queue
+    (no-match section); unidentify removes it from the queue entirely."""
     with _connect() as conn:
         env_id = _resolve_env(conn, user_id, environment_id)
         old_id = _detach_old_reference(conn, detection_id, user_id, None)
@@ -2062,11 +2067,11 @@ def unidentify_detection(detection_id: int, user_id: int, environment_id: int | 
 def reject_detection(detection_id: int, user_id: int, environment_id: int | None = None) -> bool:
     with _connect() as conn:
         env_id = _resolve_env(conn, user_id, environment_id)
-        # Detach the face reference so it doesn't pollute matching, but keep identity_id so
-        # the detection remains findable under this person and can be restored later.
+        # Detach the face reference — the proposed match was wrong, so clear identity_id.
+        # The face stays in the review queue (no-match section) until explicitly dismissed.
         old_id = _detach_old_reference(conn, detection_id, user_id, None)
         conn.execute(
-            """UPDATE detections SET review_status = 'rejected',
+            """UPDATE detections SET review_status = 'rejected', identity_id = NULL,
                reviewed_at = datetime('now') WHERE id = ? AND user_id = ? AND environment_id = ?""",
             (detection_id, user_id, env_id),
         )
