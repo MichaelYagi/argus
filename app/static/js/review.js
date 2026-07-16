@@ -231,7 +231,7 @@
     updateBars();
     // Re-render as a no-match card so the user can dismiss it from there.
     const item = itemCache.get(id);
-    if (item) renderItem({ ...item, current_identity: null });
+    if (item) renderItem({ ...item, current_identity: null, suggested_matches: [] });
     checkEmpty();
   };
   // "Dismiss" — remove from queue and send to /unidentified.
