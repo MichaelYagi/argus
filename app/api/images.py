@@ -55,6 +55,7 @@ async def list_source_images(
     until: str | None = Query(None, description="ISO timestamp — images uploaded at or before"),
     no_detections: bool = Query(False, description="Only return images with zero detections"),
     no_tagged_faces: bool = Query(False, description="Only return images with no identified faces"),
+    no_crops: bool = Query(False, description="Only return images with no detection crops"),
     user_id: int = Depends(require_auth),
     environment_id: int = Depends(require_env_id),
 ):
@@ -69,7 +70,7 @@ async def list_source_images(
         store.list_source_images,
         user_id, cursor=cursor, limit=limit, environment_id=environment_id,
         identity_ids=identity_id or None, detection_type=type, since=since, until=until,
-        no_detections=no_detections, no_tagged_faces=no_tagged_faces,
+        no_detections=no_detections, no_tagged_faces=no_tagged_faces, no_crops=no_crops,
     )
     result = paginate(rows, limit, lambda r: {
         "source_image_id": r["id"],

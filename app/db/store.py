@@ -1799,6 +1799,7 @@ def list_source_images(
     until: str | None = None,
     no_detections: bool = False,
     no_tagged_faces: bool = False,
+    no_crops: bool = False,
 ) -> list[sqlite3.Row]:
     """Processed source images, newest first, with per-image detection count.
     One row per image (deduped at ingestion by content hash). Cursor = 'uploadedAt_id'
@@ -1806,7 +1807,8 @@ def list_source_images(
     Optional filters: identity_ids (AND — image must contain all listed identities),
     detection_type, since/until (ISO timestamps, inclusive),
     no_detections (only images with zero detections),
-    no_tagged_faces (only images with no identified face detections)."""
+    no_tagged_faces (only images with no identified face detections),
+    no_crops (only images where every detection has no saved crop file)."""
     with _connect() as conn:
         env_id = _resolve_env(conn, user_id, environment_id)
         sql = """SELECT si.id, si.file_path, si.width, si.height, si.uploaded_at,
@@ -1848,6 +1850,12 @@ def list_source_images(
                 c_ts, id_val = cursor, 0
             sql += " AND (si.uploaded_at < ? OR (si.uploaded_at = ? AND si.id < ?))"
             params.extend([c_ts, c_ts, id_val])
+        if no_crops:
+            sql += (
+                " AND NOT EXISTS (SELECT 1 FROM detections _nc"
+                " WHERE _nc.source_image_id = si.id"
+                " AND _nc.crop_path IS NOT NULL AND _nc.crop_path != '')"
+            )
         sql += " GROUP BY si.id"
         if no_detections:
             sql += " HAVING COUNT(DISTINCT d.id) = 0"

@@ -36,7 +36,8 @@
       <option value="">Unfiltered</option>
       <option value="face">Faces only</option>
       <option value="object">Objects only</option>
-      <option value="no_tagged_faces">No tagged people</option>
+      <option value="no_tagged_faces">No tagged faces</option>
+      <option value="no_crops">No crops</option>
     </select>
   </div>
   <div>
@@ -252,7 +253,8 @@
       if (cursor) params.set('cursor', cursor);
       (window.filterIdentityIds || []).forEach(f => params.append('identity_id', f.id));
       if (window.filterType === 'no_tagged_faces') params.set('no_tagged_faces', 'true');
-      else if (window.filterType)    params.set('type', window.filterType);
+      else if (window.filterType === 'no_crops')   params.set('no_crops', 'true');
+      else if (window.filterType)                  params.set('type', window.filterType);
       if (window.filterSince)        params.set('since', window.filterSince + 'T00:00:00');
       if (window.filterUntil)        params.set('until', window.filterUntil + 'T23:59:59');
       const resp = await fetch('/api/source-images?' + params);
