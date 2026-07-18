@@ -86,11 +86,12 @@
   (function() {
     const p = new URLSearchParams(location.search);
     window.filterIdentityId = p.get('identity_id') ? parseInt(p.get('identity_id')) : null;
+    window.filterIdentityQ  = p.get('identity_q') || '';
     window.filterType  = p.get('type') || '';
     window.filterSince = p.get('since') || '';
     window.filterUntil = p.get('until') || '';
     const iEl = document.getElementById('filter-identity');
-    if (iEl) iEl.value = p.get('identity_label') || '';
+    if (iEl) iEl.value = p.get('identity_label') || p.get('identity_q') || '';
     const iIdEl = document.getElementById('filter-identity-id');
     if (iIdEl) iIdEl.value = p.get('identity_id') || '';
     const tEl = document.getElementById('filter-type');
@@ -243,6 +244,7 @@
       const params = new URLSearchParams({ limit: 40 });
       if (cursor)                    params.set('cursor', cursor);
       if (window.filterIdentityId)   params.set('identity_id', window.filterIdentityId);
+      else if (window.filterIdentityQ) params.set('identity_q', window.filterIdentityQ);
       if (window.filterType === 'no_tagged_faces') params.set('no_tagged_faces', 'true');
       else if (window.filterType)    params.set('type', window.filterType);
       if (window.filterSince)        params.set('since', window.filterSince + 'T00:00:00');
@@ -256,6 +258,7 @@
 
     extraState: () => ({
       filterIdentityId:    window.filterIdentityId,
+      filterIdentityQ:     window.filterIdentityQ,
       filterIdentityLabel: document.getElementById('filter-identity')?.value || '',
       filterType:          window.filterType,
       filterSince:         window.filterSince,
@@ -265,6 +268,7 @@
 
     restoreExtra(state) {
       window.filterIdentityId = state.filterIdentityId ?? null;
+      window.filterIdentityQ  = state.filterIdentityQ  || '';
       window.filterType       = state.filterType  || '';
       window.filterSince      = state.filterSince || '';
       window.filterUntil      = state.filterUntil || '';
@@ -315,9 +319,11 @@
   }
 
   let searchTimer;
+  let lastSearchRows = [];
   identityInput.addEventListener('input', () => {
     clearTimeout(searchTimer);
     identityIdEl.value = '';
+    lastSearchRows = [];
     const q = identityInput.value.trim();
     if (!q) { identityDrop.style.display = 'none'; return; }
     searchTimer = setTimeout(async () => {
@@ -326,6 +332,7 @@
       if (!resp.ok) return;
       const data = await resp.json();
       const rows = data.items || [];
+      lastSearchRows = rows;
       identityDrop.innerHTML = '';
       if (!rows.length) { identityDrop.style.display = 'none'; return; }
       rows.forEach(i => {
@@ -362,10 +369,11 @@
   function readUrlIntoState() {
     const p = new URLSearchParams(location.search);
     window.filterIdentityId = p.get('identity_id') ? parseInt(p.get('identity_id')) : null;
+    window.filterIdentityQ  = p.get('identity_q') || '';
     window.filterType  = p.get('type') || '';
     window.filterSince = p.get('since') || '';
     window.filterUntil = p.get('until') || '';
-    identityInput.value = p.get('identity_label') || '';
+    identityInput.value = p.get('identity_label') || p.get('identity_q') || '';
     identityIdEl.value  = p.get('identity_id') || '';
     typeEl.value  = window.filterType;
     sinceEl.value = window.filterSince;
@@ -373,13 +381,19 @@
   }
 
   document.getElementById('filter-apply').addEventListener('click', () => {
+    identityDrop.style.display = 'none';
     window.filterIdentityId = identityIdEl.value ? parseInt(identityIdEl.value) : null;
+    window.filterIdentityQ  = (!window.filterIdentityId && identityInput.value.trim()) ? identityInput.value.trim() : '';
     window.filterType  = typeEl.value;
     window.filterSince = sinceEl.value;
     window.filterUntil = untilEl.value;
     const p = new URLSearchParams();
-    if (window.filterIdentityId) p.set('identity_id', window.filterIdentityId);
-    if (identityInput.value.trim()) p.set('identity_label', identityInput.value.trim());
+    if (window.filterIdentityId) {
+      p.set('identity_id', window.filterIdentityId);
+      if (identityInput.value.trim()) p.set('identity_label', identityInput.value.trim());
+    } else if (window.filterIdentityQ) {
+      p.set('identity_q', window.filterIdentityQ);
+    }
     if (window.filterType)  p.set('type', window.filterType);
     if (window.filterSince) p.set('since', window.filterSince);
     if (window.filterUntil) p.set('until', window.filterUntil);
@@ -392,6 +406,7 @@
     identityInput.value = ''; identityIdEl.value = '';
     typeEl.value = ''; sinceEl.value = ''; untilEl.value = '';
     window.filterIdentityId = null;
+    window.filterIdentityQ  = '';
     window.filterType = ''; window.filterSince = ''; window.filterUntil = '';
     history.pushState(null, '', location.pathname);
     window.resetGallery();

@@ -1794,6 +1794,7 @@ def list_source_images(
     limit: int = 40,
     environment_id: int | None = None,
     identity_id: int | None = None,
+    identity_q: str | None = None,
     detection_type: str | None = None,
     since: str | None = None,
     until: str | None = None,
@@ -1803,8 +1804,9 @@ def list_source_images(
     """Processed source images, newest first, with per-image detection count.
     One row per image (deduped at ingestion by content hash). Cursor = 'uploadedAt_id'
     so ties on the second-precision uploaded_at don't drop or repeat rows across pages.
-    Optional filters: identity_id (images containing that identity), detection_type,
-    since/until (ISO timestamps, inclusive), no_detections (only images with zero detections),
+    Optional filters: identity_id (images containing that identity), identity_q (label
+    text search, LIKE), detection_type, since/until (ISO timestamps, inclusive),
+    no_detections (only images with zero detections),
     no_tagged_faces (only images with no identified face detections)."""
     with _connect() as conn:
         env_id = _resolve_env(conn, user_id, environment_id)
@@ -1823,6 +1825,14 @@ def list_source_images(
         if identity_id is not None:
             params.append(identity_id)
         params.extend([user_id, env_id])
+        if identity_q:
+            sql += (
+                " AND EXISTS (SELECT 1 FROM detections _iq"
+                " JOIN identities _ii ON _ii.id = _iq.identity_id"
+                " WHERE _iq.source_image_id = si.id"
+                " AND LOWER(_ii.label) LIKE LOWER(?))"
+            )
+            params.append(f"%{identity_q}%")
         if detection_type:
             sql += " AND d.type = ?"
             params.append(detection_type)
