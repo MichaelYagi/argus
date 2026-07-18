@@ -51,29 +51,15 @@
            border:1px solid var(--border);border-radius:var(--radius);
            background:var(--surface);color:var(--text)">
   </div>
-  <div style="display:flex;flex-direction:column;gap:4px;align-self:flex-end">
-    <div style="display:flex;gap:4px">
-      <button id="preset-today" class="btn btn-ghost" style="padding:4px 9px;font-size:11px">Today</button>
-      <button id="preset-week"  class="btn btn-ghost" style="padding:4px 9px;font-size:11px">This week</button>
-      <button id="preset-month" class="btn btn-ghost" style="padding:4px 9px;font-size:11px">This month</button>
-    </div>
-    <div style="display:flex;gap:6px">
-      <button id="filter-apply" class="btn btn-primary" style="padding:6px 14px;font-size:13px">Apply</button>
-      <button id="filter-clear" class="btn btn-ghost" style="padding:6px 14px;font-size:13px">Clear</button>
-    </div>
+  <div style="display:flex;gap:4px;align-items:flex-end">
+    <button id="preset-today" class="btn btn-ghost" style="padding:4px 9px;font-size:11px">Today</button>
+    <button id="preset-week"  class="btn btn-ghost" style="padding:4px 9px;font-size:11px">This week</button>
+    <button id="preset-month" class="btn btn-ghost" style="padding:4px 9px;font-size:11px">This month</button>
   </div>
-</div>
-
-<div id="filter-summary" hidden
-     style="display:flex;align-items:center;gap:10px;margin-bottom:10px;
-            padding:7px 14px;background:var(--surface);
-            border-radius:var(--radius);box-shadow:var(--shadow);font-size:12px">
-  <span class="muted" id="fs-text"></span>
-  <button onclick="document.getElementById('filter-clear').click()"
-          style="margin-left:auto;border:none;background:none;cursor:pointer;
-                 font-size:12px;color:var(--muted);padding:0;white-space:nowrap">
-    Clear filters
-  </button>
+  <div style="display:flex;gap:6px;align-items:flex-end">
+    <button id="filter-apply" class="btn btn-primary" style="padding:6px 14px;font-size:13px">Apply</button>
+    <button id="filter-clear" class="btn btn-ghost" style="padding:6px 14px;font-size:13px">Clear</button>
+  </div>
 </div>
 
 <div id="batch-bar" style="display:none;align-items:center;gap:8px;flex-wrap:wrap;
@@ -291,7 +277,6 @@
       window.filterSince       = state.filterSince || '';
       window.filterUntil       = state.filterUntil || '';
       if (window.renderChips) window.renderChips();
-      if (window.updateFilterSummary) window.updateFilterSummary();
       const tEl = document.getElementById('filter-type');
       if (tEl) tEl.value = window.filterType;
       const sEl = document.getElementById('filter-since');
@@ -368,34 +353,6 @@
   }
   window.renderChips = renderChips;
 
-  function fmtDate(s) {
-    if (!s) return '';
-    const [y, m, d] = s.split('-').map(Number);
-    const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
-    const thisYear = new Date().getFullYear();
-    return months[m - 1] + ' ' + d + (y !== thisYear ? ' ' + y : '');
-  }
-
-  function updateFilterSummary() {
-    const el  = document.getElementById('filter-summary');
-    const txt = document.getElementById('fs-text');
-    if (!el || !txt) return;
-    const parts = [];
-    const ids = window.filterIdentityIds || [];
-    if (ids.length) parts.push(ids.map(f => f.label).join(' + '));
-    if (window.filterType === 'face')           parts.push('Faces only');
-    else if (window.filterType === 'object')    parts.push('Objects only');
-    else if (window.filterType === 'no_tagged_faces') parts.push('No tagged people');
-    if (window.filterSince && window.filterUntil)
-      parts.push(fmtDate(window.filterSince) + ' – ' + fmtDate(window.filterUntil));
-    else if (window.filterSince) parts.push('From ' + fmtDate(window.filterSince));
-    else if (window.filterUntil) parts.push('To '   + fmtDate(window.filterUntil));
-    if (!parts.length) { el.hidden = true; return; }
-    txt.textContent = parts.join(' · ');
-    el.hidden = false;
-  }
-  window.updateFilterSummary = updateFilterSummary;
-
   // Date presets — set from/to and apply immediately.
   (function() {
     function isoLocal(d) { return d.toLocaleDateString('en-CA'); }
@@ -430,7 +387,6 @@
 
   // Render chips for any identity_ids already set from URL on page load.
   renderChips();
-  updateFilterSummary();
 
   // Click on the wrap focuses the input.
   wrap.addEventListener('click', () => { if (identityInput.style.display !== 'none') identityInput.focus(); });
@@ -531,7 +487,6 @@
     window.filterUntil = untilEl.value;
     const qs = buildUrlParams().toString();
     history.pushState(null, '', qs ? '?' + qs : location.pathname);
-    updateFilterSummary();
     window.resetGallery();
   });
 
@@ -541,13 +496,11 @@
     renderChips();
     typeEl.value = ''; sinceEl.value = ''; untilEl.value = '';
     history.pushState(null, '', location.pathname);
-    updateFilterSummary();
     window.resetGallery();
   });
 
   window.addEventListener('popstate', () => {
     readUrlIntoState();
-    updateFilterSummary();
     window.resetGallery();
   });
 })();
