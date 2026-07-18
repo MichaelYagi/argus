@@ -40,21 +40,20 @@
     </select>
   </div>
   <div>
-    <label class="lbl" style="display:block;margin-bottom:4px;font-size:12px">From</label>
-    <input type="date" id="filter-since" style="padding:6px 10px;font-size:13px;
-           border:1px solid var(--border);border-radius:var(--radius);
-           background:var(--surface);color:var(--text)">
-  </div>
-  <div>
-    <label class="lbl" style="display:block;margin-bottom:4px;font-size:12px">To</label>
-    <input type="date" id="filter-until" style="padding:6px 10px;font-size:13px;
-           border:1px solid var(--border);border-radius:var(--radius);
-           background:var(--surface);color:var(--text)">
-  </div>
-  <div style="display:flex;gap:4px;align-items:flex-end">
-    <button id="preset-today" class="btn btn-ghost" style="padding:4px 9px;font-size:11px">Today</button>
-    <button id="preset-week"  class="btn btn-ghost" style="padding:4px 9px;font-size:11px">This week</button>
-    <button id="preset-month" class="btn btn-ghost" style="padding:4px 9px;font-size:11px">This month</button>
+    <label class="lbl" style="display:block;margin-bottom:4px;font-size:12px">Date range</label>
+    <div style="display:flex;gap:6px">
+      <input type="date" id="filter-since" style="padding:6px 10px;font-size:13px;
+             border:1px solid var(--border);border-radius:var(--radius);
+             background:var(--surface);color:var(--text)">
+      <input type="date" id="filter-until" style="padding:6px 10px;font-size:13px;
+             border:1px solid var(--border);border-radius:var(--radius);
+             background:var(--surface);color:var(--text)">
+    </div>
+    <div style="display:flex;gap:4px;margin-top:5px">
+      <button id="preset-today" class="btn btn-ghost" style="padding:3px 8px;font-size:11px">Today</button>
+      <button id="preset-week"  class="btn btn-ghost" style="padding:3px 8px;font-size:11px">This week</button>
+      <button id="preset-month" class="btn btn-ghost" style="padding:3px 8px;font-size:11px">This month</button>
+    </div>
   </div>
   <div style="display:flex;gap:6px;align-items:flex-end">
     <button id="filter-apply" class="btn btn-primary" style="padding:6px 14px;font-size:13px">Apply</button>
