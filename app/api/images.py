@@ -49,8 +49,7 @@ async def list_images_by_ref(
 async def list_source_images(
     cursor: str | None = Query(None),
     limit: int = Query(40, ge=1, le=200),
-    identity_id: int | None = Query(None),
-    identity_q: str | None = Query(None, description="Filter by identity label text (LIKE match)"),
+    identity_id: list[int] = Query(default=[]),
     type: str | None = Query(None, description="Filter by detection type: face or object"),
     since: str | None = Query(None, description="ISO timestamp — images uploaded at or after"),
     until: str | None = Query(None, description="ISO timestamp — images uploaded at or before"),
@@ -60,7 +59,7 @@ async def list_source_images(
     environment_id: int = Depends(require_env_id),
 ):
     """Paginated list of all processed source images (one row per image), newest first.
-    Optional filters: identity_id, type (face/object), since, until, no_detections, no_tagged_faces."""
+    Optional filters: identity_id (repeatable, AND semantics), type (face/object), since, until, no_detections, no_tagged_faces."""
     t0 = time.monotonic()
     if type and type not in ("face", "object"):
         raise HTTPException(400, "type must be 'face' or 'object'")
@@ -68,7 +67,7 @@ async def list_source_images(
     rows = await asyncio.to_thread(
         store.list_source_images,
         user_id, cursor=cursor, limit=limit, environment_id=environment_id,
-        identity_id=identity_id, identity_q=identity_q, detection_type=type, since=since, until=until,
+        identity_ids=identity_id or None, detection_type=type, since=since, until=until,
         no_detections=no_detections, no_tagged_faces=no_tagged_faces,
     )
     result = paginate(rows, limit, lambda r: {

@@ -1793,8 +1793,7 @@ def list_source_images(
     cursor: str | None = None,
     limit: int = 40,
     environment_id: int | None = None,
-    identity_id: int | None = None,
-    identity_q: str | None = None,
+    identity_ids: list[int] | None = None,
     detection_type: str | None = None,
     since: str | None = None,
     until: str | None = None,
@@ -1804,35 +1803,25 @@ def list_source_images(
     """Processed source images, newest first, with per-image detection count.
     One row per image (deduped at ingestion by content hash). Cursor = 'uploadedAt_id'
     so ties on the second-precision uploaded_at don't drop or repeat rows across pages.
-    Optional filters: identity_id (images containing that identity), identity_q (label
-    text search, LIKE), detection_type, since/until (ISO timestamps, inclusive),
+    Optional filters: identity_ids (AND — image must contain all listed identities),
+    detection_type, since/until (ISO timestamps, inclusive),
     no_detections (only images with zero detections),
     no_tagged_faces (only images with no identified face detections)."""
     with _connect() as conn:
         env_id = _resolve_env(conn, user_id, environment_id)
-        join = ""
-        if identity_id is not None:
-            join = """JOIN detections _id_f
-                        ON _id_f.source_image_id = si.id AND _id_f.identity_id = ?"""
-        sql = f"""SELECT si.id, si.file_path, si.width, si.height, si.uploaded_at,
-                         si.image_tags, si.external_ref,
-                         COUNT(DISTINCT d.id) AS detection_count
-                  FROM source_images si
-                  {join}
-                  LEFT JOIN detections d ON d.source_image_id = si.id
-                  WHERE si.user_id = ? AND si.environment_id = ?"""
-        params: list = []
-        if identity_id is not None:
-            params.append(identity_id)
-        params.extend([user_id, env_id])
-        if identity_q:
+        sql = """SELECT si.id, si.file_path, si.width, si.height, si.uploaded_at,
+                        si.image_tags, si.external_ref,
+                        COUNT(DISTINCT d.id) AS detection_count
+                 FROM source_images si
+                 LEFT JOIN detections d ON d.source_image_id = si.id
+                 WHERE si.user_id = ? AND si.environment_id = ?"""
+        params: list = [user_id, env_id]
+        for iid in (identity_ids or []):
             sql += (
-                " AND EXISTS (SELECT 1 FROM detections _iq"
-                " JOIN identities _ii ON _ii.id = _iq.identity_id"
-                " WHERE _iq.source_image_id = si.id"
-                " AND LOWER(_ii.label) LIKE LOWER(?))"
+                " AND EXISTS (SELECT 1 FROM detections _e"
+                " WHERE _e.source_image_id = si.id AND _e.identity_id = ?)"
             )
-            params.append(f"%{identity_q}%")
+            params.append(iid)
         if detection_type:
             sql += " AND d.type = ?"
             params.append(detection_type)

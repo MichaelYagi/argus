@@ -12,12 +12,17 @@
 <div id="filter-bar" style="display:flex;flex-wrap:wrap;gap:8px;align-items:flex-end;
      margin-bottom:16px;padding:12px 16px;background:var(--surface);
      border-radius:var(--radius);box-shadow:var(--shadow)">
-  <div style="position:relative;flex:1;min-width:160px">
+  <div style="position:relative;flex:1;min-width:200px">
     <label class="lbl" style="display:block;margin-bottom:4px;font-size:12px">Identity</label>
-    <input type="text" id="filter-identity" placeholder="Any identity…" autocomplete="off"
-           style="width:100%;box-sizing:border-box;padding:6px 10px;font-size:13px;
-                  border:1px solid var(--border);border-radius:var(--radius)">
-    <input type="hidden" id="filter-identity-id">
+    <div id="filter-identity-wrap"
+         style="display:flex;flex-wrap:wrap;align-items:center;gap:4px;
+                padding:4px 8px;min-height:34px;box-sizing:border-box;
+                border:1px solid var(--border);border-radius:var(--radius);
+                background:var(--surface);cursor:text">
+      <input type="text" id="filter-identity" placeholder="Add identity…" autocomplete="off"
+             style="flex:1;min-width:80px;border:none;outline:none;background:transparent;
+                    font-size:13px;padding:2px 0;color:var(--text)">
+    </div>
     <div id="filter-identity-drop" style="display:none;position:absolute;left:0;right:0;
          background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);
          z-index:50;max-height:180px;overflow-y:auto;
@@ -83,17 +88,15 @@
 // Gallery
 (() => {
   // Init filter state from URL params so the first gallery load uses them.
+  // Chips are rendered by the Filter bar IIFE (runs immediately after this one).
   (function() {
     const p = new URLSearchParams(location.search);
-    window.filterIdentityId = p.get('identity_id') ? parseInt(p.get('identity_id')) : null;
-    window.filterIdentityQ  = p.get('identity_q') || '';
+    const ids    = p.getAll('identity_id').map(Number).filter(Boolean);
+    const labels = p.getAll('identity_label');
+    window.filterIdentityIds = ids.map((id, i) => ({ id, label: labels[i] || String(id) }));
     window.filterType  = p.get('type') || '';
     window.filterSince = p.get('since') || '';
     window.filterUntil = p.get('until') || '';
-    const iEl = document.getElementById('filter-identity');
-    if (iEl) iEl.value = p.get('identity_label') || p.get('identity_q') || '';
-    const iIdEl = document.getElementById('filter-identity-id');
-    if (iIdEl) iIdEl.value = p.get('identity_id') || '';
     const tEl = document.getElementById('filter-type');
     if (tEl) tEl.value = window.filterType;
     const sEl = document.getElementById('filter-since');
@@ -242,9 +245,8 @@
 
     async fetchPage(cursor) {
       const params = new URLSearchParams({ limit: 40 });
-      if (cursor)                    params.set('cursor', cursor);
-      if (window.filterIdentityId)   params.set('identity_id', window.filterIdentityId);
-      else if (window.filterIdentityQ) params.set('identity_q', window.filterIdentityQ);
+      if (cursor) params.set('cursor', cursor);
+      (window.filterIdentityIds || []).forEach(f => params.append('identity_id', f.id));
       if (window.filterType === 'no_tagged_faces') params.set('no_tagged_faces', 'true');
       else if (window.filterType)    params.set('type', window.filterType);
       if (window.filterSince)        params.set('since', window.filterSince + 'T00:00:00');
@@ -257,32 +259,25 @@
     },
 
     extraState: () => ({
-      filterIdentityId:    window.filterIdentityId,
-      filterIdentityQ:     window.filterIdentityQ,
-      filterIdentityLabel: document.getElementById('filter-identity')?.value || '',
-      filterType:          window.filterType,
-      filterSince:         window.filterSince,
-      filterUntil:         window.filterUntil,
-      selectedIds:         [...selected],
+      filterIdentityIds: window.filterIdentityIds,
+      filterType:        window.filterType,
+      filterSince:       window.filterSince,
+      filterUntil:       window.filterUntil,
+      selectedIds:       [...selected],
     }),
 
     restoreExtra(state) {
-      window.filterIdentityId = state.filterIdentityId ?? null;
-      window.filterIdentityQ  = state.filterIdentityQ  || '';
-      window.filterType       = state.filterType  || '';
-      window.filterSince      = state.filterSince || '';
-      window.filterUntil      = state.filterUntil || '';
-      const els = {
-        'filter-identity':    state.filterIdentityLabel || '',
-        'filter-identity-id': state.filterIdentityId    || '',
-        'filter-type':        state.filterType          || '',
-        'filter-since':       state.filterSince         || '',
-        'filter-until':       state.filterUntil         || '',
-      };
-      for (const [id, val] of Object.entries(els)) {
-        const el = document.getElementById(id);
-        if (el) el.value = val;
-      }
+      window.filterIdentityIds = state.filterIdentityIds || [];
+      window.filterType        = state.filterType  || '';
+      window.filterSince       = state.filterSince || '';
+      window.filterUntil       = state.filterUntil || '';
+      if (window.renderChips) window.renderChips();
+      const tEl = document.getElementById('filter-type');
+      if (tEl) tEl.value = window.filterType;
+      const sEl = document.getElementById('filter-since');
+      if (sEl) sEl.value = window.filterSince;
+      const uEl = document.getElementById('filter-until');
+      if (uEl) uEl.value = window.filterUntil;
       loadedItems.length = 0;
       loadedItems.push(...(state.items || []));
       selected.clear();
@@ -307,23 +302,61 @@
 
 // Filter bar
 (function() {
+  const wrap        = document.getElementById('filter-identity-wrap');
   const identityInput = document.getElementById('filter-identity');
-  const identityIdEl  = document.getElementById('filter-identity-id');
   const identityDrop  = document.getElementById('filter-identity-drop');
   const typeEl        = document.getElementById('filter-type');
   const sinceEl       = document.getElementById('filter-since');
   const untilEl       = document.getElementById('filter-until');
+  const CHIP_MAX      = 5;
 
   function _esc(s) {
     return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
   }
 
+  function renderChips() {
+    wrap.querySelectorAll('.fi-chip').forEach(c => c.remove());
+    (window.filterIdentityIds || []).forEach(f => {
+      const chip = document.createElement('span');
+      chip.className = 'fi-chip';
+      chip.style.cssText = 'display:inline-flex;align-items:center;gap:3px;padding:2px 4px 2px 8px;' +
+        'background:rgba(59,130,246,.15);color:#3b82f6;border-radius:99px;' +
+        'font-size:12px;font-weight:500;white-space:nowrap;flex-shrink:0';
+      const lbl = document.createElement('span');
+      lbl.textContent = f.label;
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.innerHTML = '&times;';
+      btn.title = 'Remove';
+      btn.style.cssText = 'display:inline-flex;align-items:center;justify-content:center;' +
+        'width:16px;height:16px;border:none;background:none;cursor:pointer;' +
+        'color:inherit;padding:0;border-radius:50%;font-size:14px;line-height:1;opacity:.7';
+      btn.addEventListener('mouseenter', () => { btn.style.opacity = '1'; });
+      btn.addEventListener('mouseleave', () => { btn.style.opacity = '.7'; });
+      btn.addEventListener('click', e => {
+        e.stopPropagation();
+        window.filterIdentityIds = window.filterIdentityIds.filter(x => x.id !== f.id);
+        renderChips();
+      });
+      chip.appendChild(lbl);
+      chip.appendChild(btn);
+      wrap.insertBefore(chip, identityInput);
+    });
+    const atCap = (window.filterIdentityIds || []).length >= CHIP_MAX;
+    identityInput.placeholder = atCap ? '' : 'Add identity…';
+    identityInput.style.display = atCap ? 'none' : '';
+  }
+  window.renderChips = renderChips;
+
+  // Render chips for any identity_ids already set from URL on page load.
+  renderChips();
+
+  // Click on the wrap focuses the input.
+  wrap.addEventListener('click', () => { if (identityInput.style.display !== 'none') identityInput.focus(); });
+
   let searchTimer;
-  let lastSearchRows = [];
   identityInput.addEventListener('input', () => {
     clearTimeout(searchTimer);
-    identityIdEl.value = '';
-    lastSearchRows = [];
     const q = identityInput.value.trim();
     if (!q) { identityDrop.style.display = 'none'; return; }
     searchTimer = setTimeout(async () => {
@@ -331,8 +364,9 @@
       const resp = await fetch('/api/search?' + params);
       if (!resp.ok) return;
       const data = await resp.json();
-      const rows = data.items || [];
-      lastSearchRows = rows;
+      const rows = (data.items || []).filter(
+        i => !(window.filterIdentityIds || []).some(f => f.id === i.id)
+      );
       identityDrop.innerHTML = '';
       if (!rows.length) { identityDrop.style.display = 'none'; return; }
       rows.forEach(i => {
@@ -347,34 +381,63 @@
         item.innerHTML = thumb + '<span class="ns-label">' + _esc(i.label) + '</span>' + badge + cnt;
         item.addEventListener('mousedown', e => {
           e.preventDefault();
-          identityInput.value = i.label;
-          identityIdEl.value  = i.id;
+          if ((window.filterIdentityIds || []).length >= CHIP_MAX) return;
+          window.filterIdentityIds = [...(window.filterIdentityIds || []), { id: i.id, label: i.label }];
+          renderChips();
+          identityInput.value = '';
           identityDrop.style.display = 'none';
+          identityInput.focus();
         });
         identityDrop.appendChild(item);
       });
       identityDrop.style.display = 'block';
     }, 200);
   });
+
   identityInput.addEventListener('blur', () => {
     setTimeout(() => { identityDrop.style.display = 'none'; }, 200);
   });
-  identityInput.addEventListener('focus', () => {
-    if (identityInput.value.trim()) identityInput.dispatchEvent(new Event('input'));
+
+  identityInput.addEventListener('keydown', e => {
+    if (e.key === 'Enter') {
+      // If dropdown has a result, add it as a chip.
+      const first = identityDrop.querySelector('.ns-item');
+      if (first && identityDrop.style.display !== 'none') {
+        first.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }));
+      } else if (!identityInput.value.trim()) {
+        document.getElementById('filter-apply').click();
+      }
+    } else if (e.key === 'Backspace' && !identityInput.value) {
+      // Remove last chip on backspace when input is empty.
+      const ids = window.filterIdentityIds || [];
+      if (ids.length) {
+        window.filterIdentityIds = ids.slice(0, -1);
+        renderChips();
+      }
+    }
   });
-  identityInput.addEventListener('change', () => {
-    if (!identityInput.value.trim()) identityIdEl.value = '';
-  });
+
+  function buildUrlParams() {
+    const p = new URLSearchParams();
+    (window.filterIdentityIds || []).forEach(f => {
+      p.append('identity_id', f.id);
+      p.append('identity_label', f.label);
+    });
+    if (window.filterType)  p.set('type', window.filterType);
+    if (window.filterSince) p.set('since', window.filterSince);
+    if (window.filterUntil) p.set('until', window.filterUntil);
+    return p;
+  }
 
   function readUrlIntoState() {
     const p = new URLSearchParams(location.search);
-    window.filterIdentityId = p.get('identity_id') ? parseInt(p.get('identity_id')) : null;
-    window.filterIdentityQ  = p.get('identity_q') || '';
+    const ids    = p.getAll('identity_id').map(Number).filter(Boolean);
+    const labels = p.getAll('identity_label');
+    window.filterIdentityIds = ids.map((id, i) => ({ id, label: labels[i] || String(id) }));
     window.filterType  = p.get('type') || '';
     window.filterSince = p.get('since') || '';
     window.filterUntil = p.get('until') || '';
-    identityInput.value = p.get('identity_label') || p.get('identity_q') || '';
-    identityIdEl.value  = p.get('identity_id') || '';
+    renderChips();
     typeEl.value  = window.filterType;
     sinceEl.value = window.filterSince;
     untilEl.value = window.filterUntil;
@@ -382,32 +445,19 @@
 
   document.getElementById('filter-apply').addEventListener('click', () => {
     identityDrop.style.display = 'none';
-    window.filterIdentityId = identityIdEl.value ? parseInt(identityIdEl.value) : null;
-    window.filterIdentityQ  = (!window.filterIdentityId && identityInput.value.trim()) ? identityInput.value.trim() : '';
     window.filterType  = typeEl.value;
     window.filterSince = sinceEl.value;
     window.filterUntil = untilEl.value;
-    const p = new URLSearchParams();
-    if (window.filterIdentityId) {
-      p.set('identity_id', window.filterIdentityId);
-      if (identityInput.value.trim()) p.set('identity_label', identityInput.value.trim());
-    } else if (window.filterIdentityQ) {
-      p.set('identity_q', window.filterIdentityQ);
-    }
-    if (window.filterType)  p.set('type', window.filterType);
-    if (window.filterSince) p.set('since', window.filterSince);
-    if (window.filterUntil) p.set('until', window.filterUntil);
-    const qs = p.toString();
+    const qs = buildUrlParams().toString();
     history.pushState(null, '', qs ? '?' + qs : location.pathname);
     window.resetGallery();
   });
 
   document.getElementById('filter-clear').addEventListener('click', () => {
-    identityInput.value = ''; identityIdEl.value = '';
-    typeEl.value = ''; sinceEl.value = ''; untilEl.value = '';
-    window.filterIdentityId = null;
-    window.filterIdentityQ  = '';
+    window.filterIdentityIds = [];
     window.filterType = ''; window.filterSince = ''; window.filterUntil = '';
+    renderChips();
+    typeEl.value = ''; sinceEl.value = ''; untilEl.value = '';
     history.pushState(null, '', location.pathname);
     window.resetGallery();
   });
@@ -415,10 +465,6 @@
   window.addEventListener('popstate', () => {
     readUrlIntoState();
     window.resetGallery();
-  });
-
-  identityInput.addEventListener('keydown', e => {
-    if (e.key === 'Enter') document.getElementById('filter-apply').click();
   });
 })();
 </script>
