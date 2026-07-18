@@ -21,7 +21,8 @@
                 background:var(--surface);cursor:text">
       <input type="text" id="filter-identity" placeholder="Add identity…" autocomplete="off"
              style="flex:1;min-width:80px;border:none;outline:none;background:transparent;
-                    font-size:13px;padding:2px 0;color:var(--text)">
+                    font-size:13px;padding:2px 0;color:var(--text)"
+             placeholder="Search people, objects…">
     </div>
     <div id="filter-identity-drop" style="display:none;position:absolute;left:0;right:0;
          background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);
@@ -343,7 +344,7 @@
       wrap.insertBefore(chip, identityInput);
     });
     const atCap = (window.filterIdentityIds || []).length >= CHIP_MAX;
-    identityInput.placeholder = atCap ? '' : 'Add identity…';
+    identityInput.placeholder = atCap ? '' : 'Search people, objects…';
     identityInput.style.display = atCap ? 'none' : '';
   }
   window.renderChips = renderChips;
