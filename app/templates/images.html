@@ -82,10 +82,24 @@
 <script>
 // Gallery
 (() => {
-  window.filterIdentityId = null;
-  window.filterType  = '';
-  window.filterSince = '';
-  window.filterUntil = '';
+  // Init filter state from URL params so the first gallery load uses them.
+  (function() {
+    const p = new URLSearchParams(location.search);
+    window.filterIdentityId = p.get('identity_id') ? parseInt(p.get('identity_id')) : null;
+    window.filterType  = p.get('type') || '';
+    window.filterSince = p.get('since') || '';
+    window.filterUntil = p.get('until') || '';
+    const iEl = document.getElementById('filter-identity');
+    if (iEl) iEl.value = p.get('identity_label') || '';
+    const iIdEl = document.getElementById('filter-identity-id');
+    if (iIdEl) iIdEl.value = p.get('identity_id') || '';
+    const tEl = document.getElementById('filter-type');
+    if (tEl) tEl.value = window.filterType;
+    const sEl = document.getElementById('filter-since');
+    if (sEl) sEl.value = window.filterSince;
+    const uEl = document.getElementById('filter-until');
+    if (uEl) uEl.value = window.filterUntil;
+  })();
 
   const container  = document.getElementById('gallery');
   const batchBar   = document.getElementById('batch-bar');
@@ -337,11 +351,32 @@
     if (!identityInput.value.trim()) identityIdEl.value = '';
   });
 
+  function readUrlIntoState() {
+    const p = new URLSearchParams(location.search);
+    window.filterIdentityId = p.get('identity_id') ? parseInt(p.get('identity_id')) : null;
+    window.filterType  = p.get('type') || '';
+    window.filterSince = p.get('since') || '';
+    window.filterUntil = p.get('until') || '';
+    identityInput.value = p.get('identity_label') || '';
+    identityIdEl.value  = p.get('identity_id') || '';
+    typeEl.value  = window.filterType;
+    sinceEl.value = window.filterSince;
+    untilEl.value = window.filterUntil;
+  }
+
   document.getElementById('filter-apply').addEventListener('click', () => {
     window.filterIdentityId = identityIdEl.value ? parseInt(identityIdEl.value) : null;
     window.filterType  = typeEl.value;
     window.filterSince = sinceEl.value;
     window.filterUntil = untilEl.value;
+    const p = new URLSearchParams();
+    if (window.filterIdentityId) p.set('identity_id', window.filterIdentityId);
+    if (identityInput.value.trim()) p.set('identity_label', identityInput.value.trim());
+    if (window.filterType)  p.set('type', window.filterType);
+    if (window.filterSince) p.set('since', window.filterSince);
+    if (window.filterUntil) p.set('until', window.filterUntil);
+    const qs = p.toString();
+    history.pushState(null, '', qs ? '?' + qs : location.pathname);
     window.resetGallery();
   });
 
@@ -350,7 +385,17 @@
     typeEl.value = ''; sinceEl.value = ''; untilEl.value = '';
     window.filterIdentityId = null;
     window.filterType = ''; window.filterSince = ''; window.filterUntil = '';
+    history.pushState(null, '', location.pathname);
     window.resetGallery();
+  });
+
+  window.addEventListener('popstate', () => {
+    readUrlIntoState();
+    window.resetGallery();
+  });
+
+  identityInput.addEventListener('keydown', e => {
+    if (e.key === 'Enter') document.getElementById('filter-apply').click();
   });
 })();
 </script>
