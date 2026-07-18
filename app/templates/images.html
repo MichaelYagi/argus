@@ -22,11 +22,24 @@
       <input type="text" id="filter-identity" placeholder="Search people, objects…" autocomplete="off"
              style="flex:1;min-width:80px;border:none;outline:none;background:transparent;
                     font-size:13px;padding:2px 0;color:var(--text)">
+      <span id="filter-count" style="margin-left:auto;font-size:12px;color:var(--muted);
+            white-space:nowrap;padding:2px 2px 2px 6px;align-self:center"></span>
     </div>
     <div id="filter-identity-drop" style="display:none;position:absolute;left:0;right:0;
          background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);
          z-index:50;max-height:180px;overflow-y:auto;
          box-shadow:0 4px 12px rgba(0,0,0,.15)"></div>
+  </div>
+  <div style="min-width:150px">
+    <label class="lbl" style="display:block;margin-bottom:4px;font-size:12px">Sort</label>
+    <select id="filter-sort" style="padding:6px 10px;font-size:13px;
+            border:1px solid var(--border);border-radius:var(--radius);
+            background:var(--surface);color:var(--text);width:100%">
+      <option value="newest">Newest first</option>
+      <option value="oldest">Oldest first</option>
+      <option value="most_detections">Most detections</option>
+      <option value="fewest_detections">Fewest detections</option>
+    </select>
   </div>
   <div style="min-width:150px">
     <label class="lbl" style="display:block;margin-bottom:4px;font-size:12px">Filter</label>
@@ -73,6 +86,13 @@
           onclick="clearSelection()">Clear</button>
 </div>
 
+<div id="gallery-actions" style="display:flex;align-items:center;justify-content:flex-end;
+     margin-bottom:8px;min-height:26px">
+  <button id="select-all-btn" class="btn btn-ghost"
+          style="font-size:12px;padding:3px 10px"
+          onclick="selectDeselectAll()">Select all</button>
+</div>
+
 <p class="muted" id="img-empty" hidden style="margin-top:24px">
   No images processed yet. Run <a href="/detect">detection</a> on some photos first.
 </p>
@@ -102,25 +122,35 @@
     window.filterType  = p.get('type') || '';
     window.filterSince = p.get('since') || '';
     window.filterUntil = p.get('until') || '';
+    window.filterSort  = p.get('sort') || 'newest';
     const tEl = document.getElementById('filter-type');
     if (tEl) tEl.value = window.filterType;
     const sEl = document.getElementById('filter-since');
     if (sEl) sEl.value = window.filterSince;
     const uEl = document.getElementById('filter-until');
     if (uEl) uEl.value = window.filterUntil;
+    const sortEl = document.getElementById('filter-sort');
+    if (sortEl) sortEl.value = window.filterSort;
   })();
 
-  const container  = document.getElementById('gallery');
-  const batchBar   = document.getElementById('batch-bar');
-  const batchCount = document.getElementById('batch-count');
-  const selected   = new Set();    // Set<source_image_id>
-  const loadedItems = [];          // mirror of gallery items, for "no detections" query
+  const container   = document.getElementById('gallery');
+  const batchBar    = document.getElementById('batch-bar');
+  const batchCount  = document.getElementById('batch-count');
+  const selectAllBtn = document.getElementById('select-all-btn');
+  const selected    = new Set();   // Set<source_image_id>
+  const loadedItems = [];          // mirror of gallery items
+
+  function updateSelectAllBtn() {
+    if (!selectAllBtn) return;
+    selectAllBtn.textContent = selected.size > 0 ? 'Deselect all' : 'Select all';
+  }
 
   function updateBatchBar() {
     const n = selected.size;
     batchBar.style.display = n > 0 ? 'flex' : 'none';
     batchCount.textContent = n + ' selected';
     container.classList.toggle('has-selection', n > 0);
+    updateSelectAllBtn();
   }
 
   window.clearSelection = () => {
@@ -131,6 +161,36 @@
       if (cb) cb.checked = false;
     });
     updateBatchBar();
+  };
+
+  window.selectDeselectAll = async () => {
+    if (selected.size > 0) { window.clearSelection(); return; }
+    if (selectAllBtn) { selectAllBtn.disabled = true; selectAllBtn.textContent = 'Selecting…'; }
+    try {
+      const params = new URLSearchParams();
+      (window.filterIdentityIds || []).forEach(f => params.append('identity_id', f.id));
+      if (window.filterType === 'no_tagged_faces') params.set('no_tagged_faces', 'true');
+      else if (window.filterType === 'no_crops')   params.set('no_crops', 'true');
+      else if (window.filterType)                  params.set('type', window.filterType);
+      if (window.filterSince) params.set('since', window.filterSince + 'T00:00:00');
+      if (window.filterUntil) params.set('until', window.filterUntil + 'T23:59:59');
+      const resp = await fetch('/api/source-images/ids?' + params);
+      if (!resp.ok) return;
+      const data = await resp.json();
+      data.ids.forEach(id => selected.add(id));
+      container.querySelectorAll('.g-item').forEach(el => {
+        const id = parseInt(el.dataset.id, 10);
+        if (selected.has(id)) {
+          el.classList.add('selected');
+          const cb = el.querySelector('.g-check');
+          if (cb) cb.checked = true;
+        }
+      });
+      updateBatchBar();
+    } finally {
+      if (selectAllBtn) selectAllBtn.disabled = false;
+      updateSelectAllBtn();
+    }
   };
 
   window.deleteSelected = () => {
@@ -255,8 +315,9 @@
       if (window.filterType === 'no_tagged_faces') params.set('no_tagged_faces', 'true');
       else if (window.filterType === 'no_crops')   params.set('no_crops', 'true');
       else if (window.filterType)                  params.set('type', window.filterType);
-      if (window.filterSince)        params.set('since', window.filterSince + 'T00:00:00');
-      if (window.filterUntil)        params.set('until', window.filterUntil + 'T23:59:59');
+      if (window.filterSince) params.set('since', window.filterSince + 'T00:00:00');
+      if (window.filterUntil) params.set('until', window.filterUntil + 'T23:59:59');
+      if (window.filterSort && window.filterSort !== 'newest') params.set('sort', window.filterSort);
       const resp = await fetch('/api/source-images?' + params);
       if (!resp.ok) throw new Error('fetch failed');
       const d = await resp.json();
@@ -269,6 +330,7 @@
       filterType:        window.filterType,
       filterSince:       window.filterSince,
       filterUntil:       window.filterUntil,
+      filterSort:        window.filterSort,
       selectedIds:       [...selected],
     }),
 
@@ -277,6 +339,7 @@
       window.filterType        = state.filterType  || '';
       window.filterSince       = state.filterSince || '';
       window.filterUntil       = state.filterUntil || '';
+      window.filterSort        = state.filterSort  || 'newest';
       if (window.renderChips) window.renderChips();
       const tEl = document.getElementById('filter-type');
       if (tEl) tEl.value = window.filterType;
@@ -284,11 +347,14 @@
       if (sEl) sEl.value = window.filterSince;
       const uEl = document.getElementById('filter-until');
       if (uEl) uEl.value = window.filterUntil;
+      const sortEl = document.getElementById('filter-sort');
+      if (sortEl) sortEl.value = window.filterSort;
       loadedItems.length = 0;
       loadedItems.push(...(state.items || []));
       selected.clear();
       (state.selectedIds || []).forEach(id => selected.add(id));
       updateBatchBar();
+      if (window.fetchFilterCount) window.fetchFilterCount();
     },
   });
 
@@ -308,12 +374,13 @@
 
 // Filter bar
 (function() {
-  const wrap        = document.getElementById('filter-identity-wrap');
+  const wrap          = document.getElementById('filter-identity-wrap');
   const identityInput = document.getElementById('filter-identity');
   const identityDrop  = document.getElementById('filter-identity-drop');
   const typeEl        = document.getElementById('filter-type');
   const sinceEl       = document.getElementById('filter-since');
   const untilEl       = document.getElementById('filter-until');
+  const sortEl        = document.getElementById('filter-sort');
   const CHIP_MAX      = 5;
 
   function _esc(s) {
@@ -354,6 +421,27 @@
   }
   window.renderChips = renderChips;
 
+  // Async count of images matching current filters — fires fire-and-forget.
+  async function fetchFilterCount() {
+    const countEl = document.getElementById('filter-count');
+    if (!countEl) return;
+    countEl.textContent = '';
+    const params = new URLSearchParams();
+    (window.filterIdentityIds || []).forEach(f => params.append('identity_id', f.id));
+    if (window.filterType === 'no_tagged_faces') params.set('no_tagged_faces', 'true');
+    else if (window.filterType === 'no_crops')   params.set('no_crops', 'true');
+    else if (window.filterType)                  params.set('type', window.filterType);
+    if (window.filterSince) params.set('since', window.filterSince + 'T00:00:00');
+    if (window.filterUntil) params.set('until', window.filterUntil + 'T23:59:59');
+    try {
+      const resp = await fetch('/api/source-images/count?' + params);
+      if (!resp.ok) return;
+      const { count } = await resp.json();
+      countEl.textContent = count > 0 ? count.toLocaleString() : '';
+    } catch (_) {}
+  }
+  window.fetchFilterCount = fetchFilterCount;
+
   // Date presets — set from/to and apply immediately.
   (function() {
     function isoLocal(d) { return d.toLocaleDateString('en-CA'); }
@@ -386,8 +474,9 @@
     identityInput.focus();
   });
 
-  // Render chips for any identity_ids already set from URL on page load.
+  // Render chips and fire initial count for any filters already set from URL.
   renderChips();
+  fetchFilterCount();
 
   // Click on the wrap focuses the input.
   wrap.addEventListener('click', () => { if (identityInput.style.display !== 'none') identityInput.focus(); });
@@ -438,7 +527,6 @@
 
   identityInput.addEventListener('keydown', e => {
     if (e.key === 'Enter') {
-      // If dropdown has a result, add it as a chip.
       const first = identityDrop.querySelector('.ns-item');
       if (first && identityDrop.style.display !== 'none') {
         first.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }));
@@ -446,7 +534,6 @@
         document.getElementById('filter-apply').click();
       }
     } else if (e.key === 'Backspace' && !identityInput.value) {
-      // Remove last chip on backspace when input is empty.
       const ids = window.filterIdentityIds || [];
       if (ids.length) {
         window.filterIdentityIds = ids.slice(0, -1);
@@ -464,6 +551,7 @@
     if (window.filterType)  p.set('type', window.filterType);
     if (window.filterSince) p.set('since', window.filterSince);
     if (window.filterUntil) p.set('until', window.filterUntil);
+    if (window.filterSort && window.filterSort !== 'newest') p.set('sort', window.filterSort);
     return p;
   }
 
@@ -472,13 +560,15 @@
     const ids    = p.getAll('identity_id').map(Number).filter(Boolean);
     const labels = p.getAll('identity_label');
     window.filterIdentityIds = ids.map((id, i) => ({ id, label: labels[i] || String(id) }));
-    window.filterType  = p.get('type') || '';
+    window.filterType  = p.get('type')  || '';
     window.filterSince = p.get('since') || '';
     window.filterUntil = p.get('until') || '';
+    window.filterSort  = p.get('sort')  || 'newest';
     renderChips();
     typeEl.value  = window.filterType;
     sinceEl.value = window.filterSince;
     untilEl.value = window.filterUntil;
+    if (sortEl) sortEl.value = window.filterSort;
   }
 
   document.getElementById('filter-apply').addEventListener('click', () => {
@@ -486,22 +576,28 @@
     window.filterType  = typeEl.value;
     window.filterSince = sinceEl.value;
     window.filterUntil = untilEl.value;
+    window.filterSort  = sortEl ? sortEl.value : 'newest';
     const qs = buildUrlParams().toString();
     history.pushState(null, '', qs ? '?' + qs : location.pathname);
+    fetchFilterCount();
     window.resetGallery();
   });
 
   document.getElementById('filter-clear').addEventListener('click', () => {
     window.filterIdentityIds = [];
     window.filterType = ''; window.filterSince = ''; window.filterUntil = '';
+    window.filterSort = 'newest';
     renderChips();
     typeEl.value = ''; sinceEl.value = ''; untilEl.value = '';
+    if (sortEl) sortEl.value = 'newest';
     history.pushState(null, '', location.pathname);
+    fetchFilterCount();
     window.resetGallery();
   });
 
   window.addEventListener('popstate', () => {
     readUrlIntoState();
+    fetchFilterCount();
     window.resetGallery();
   });
 })();

@@ -45,6 +45,9 @@ async def list_images_by_ref(
     }
 
 
+_VALID_SORTS = frozenset({"newest", "oldest", "most_detections", "fewest_detections"})
+
+
 @router.get("/api/source-images")
 async def list_source_images(
     cursor: str | None = Query(None),
@@ -56,22 +59,31 @@ async def list_source_images(
     no_detections: bool = Query(False, description="Only return images with zero detections"),
     no_tagged_faces: bool = Query(False, description="Only return images with no identified faces"),
     no_crops: bool = Query(False, description="Only return images with no detection crops"),
+    sort: str = Query("newest", description="Sort order: newest | oldest | most_detections | fewest_detections"),
     user_id: int = Depends(require_auth),
     environment_id: int = Depends(require_env_id),
 ):
-    """Paginated list of all processed source images (one row per image), newest first.
+    """Paginated list of all processed source images (one row per image).
     Optional filters: identity_id (repeatable, AND semantics), type (face/object),
-    since, until, no_detections, no_tagged_faces."""
+    since, until, no_detections, no_tagged_faces.
+    sort: newest (default), oldest, most_detections, fewest_detections."""
     t0 = time.monotonic()
     if type and type not in ("face", "object"):
         raise HTTPException(400, "type must be 'face' or 'object'")
+    if sort not in _VALID_SORTS:
+        raise HTTPException(400, f"sort must be one of: {', '.join(sorted(_VALID_SORTS))}")
     import asyncio
     rows = await asyncio.to_thread(
         store.list_source_images,
         user_id, cursor=cursor, limit=limit, environment_id=environment_id,
         identity_ids=identity_id or None, detection_type=type, since=since, until=until,
         no_detections=no_detections, no_tagged_faces=no_tagged_faces, no_crops=no_crops,
+        sort=sort,
     )
+    if sort in ("most_detections", "fewest_detections"):
+        cursor_fn = lambda r: f"{r['detection_count']}_{r['id']}"  # noqa: E731
+    else:
+        cursor_fn = lambda r: f"{r['uploaded_at']}_{r['id']}"  # noqa: E731
     result = paginate(rows, limit, lambda r: {
         "source_image_id": r["id"],
         "external_ref": r["external_ref"],
@@ -81,10 +93,62 @@ async def list_source_images(
         "detection_count": r["detection_count"],
         "uploaded_at": r["uploaded_at"],
         "image_tags": json.loads(r["image_tags"]) if r["image_tags"] else [],
-    }, cursor_fn=lambda r: f"{r['uploaded_at']}_{r['id']}")
-    logger.debug("GET /api/source-images: %d items %.0fms",
-                 len(result.get("items", [])), (time.monotonic() - t0) * 1000)
+    }, cursor_fn=cursor_fn)
+    logger.debug("GET /api/source-images: %d items sort=%s %.0fms",
+                 len(result.get("items", [])), sort, (time.monotonic() - t0) * 1000)
     return result
+
+
+@router.get("/api/source-images/count")
+async def count_source_images(
+    identity_id: list[int] = Query(default=[]),
+    type: str | None = Query(None),
+    since: str | None = Query(None),
+    until: str | None = Query(None),
+    no_detections: bool = Query(False),
+    no_tagged_faces: bool = Query(False),
+    no_crops: bool = Query(False),
+    user_id: int = Depends(require_auth),
+    environment_id: int = Depends(require_env_id),
+):
+    """Total count of source images matching the given filters."""
+    if type and type not in ("face", "object"):
+        raise HTTPException(400, "type must be 'face' or 'object'")
+    import asyncio
+    count = await asyncio.to_thread(
+        store.count_source_images_filtered,
+        user_id, environment_id=environment_id,
+        identity_ids=identity_id or None, detection_type=type,
+        since=since, until=until,
+        no_detections=no_detections, no_tagged_faces=no_tagged_faces, no_crops=no_crops,
+    )
+    return {"count": count}
+
+
+@router.get("/api/source-images/ids")
+async def list_source_image_ids(
+    identity_id: list[int] = Query(default=[]),
+    type: str | None = Query(None),
+    since: str | None = Query(None),
+    until: str | None = Query(None),
+    no_detections: bool = Query(False),
+    no_tagged_faces: bool = Query(False),
+    no_crops: bool = Query(False),
+    user_id: int = Depends(require_auth),
+    environment_id: int = Depends(require_env_id),
+):
+    """All source image IDs matching the given filters (no pagination, for select-all)."""
+    if type and type not in ("face", "object"):
+        raise HTTPException(400, "type must be 'face' or 'object'")
+    import asyncio
+    ids = await asyncio.to_thread(
+        store.list_source_image_ids,
+        user_id, environment_id=environment_id,
+        identity_ids=identity_id or None, detection_type=type,
+        since=since, until=until,
+        no_detections=no_detections, no_tagged_faces=no_tagged_faces, no_crops=no_crops,
+    )
+    return {"ids": ids}
 
 
 def _parse_attributes(row) -> dict:

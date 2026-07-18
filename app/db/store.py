@@ -1788,6 +1788,60 @@ def get_face_embeddings_for_model(model_id: int, user_id: int, environment_id: i
         ).fetchall()
 
 
+def _source_images_inner(
+    user_id: int,
+    env_id: int,
+    identity_ids: list[int] | None,
+    detection_type: str | None,
+    since: str | None,
+    until: str | None,
+    no_tagged_faces: bool,
+    no_crops: bool,
+) -> tuple[str, list]:
+    """Returns (inner CTE SELECT sql, params) shared by list/count/ids source-image queries."""
+    conds = ["si.user_id = ?", "si.environment_id = ?"]
+    params: list = [user_id, env_id]
+    for iid in (identity_ids or []):
+        conds.append(
+            "EXISTS (SELECT 1 FROM detections _e"
+            " WHERE _e.source_image_id = si.id AND _e.identity_id = ?)"
+        )
+        params.append(iid)
+    if detection_type:
+        conds.append("d.type = ?")
+        params.append(detection_type)
+    if since:
+        conds.append("si.uploaded_at >= ?")
+        params.append(since)
+    if until:
+        conds.append("si.uploaded_at <= ?")
+        params.append(until)
+    if no_tagged_faces:
+        conds.append(
+            "NOT EXISTS (SELECT 1 FROM detections _tf"
+            " WHERE _tf.source_image_id = si.id"
+            " AND _tf.type = 'face' AND _tf.identity_id IS NOT NULL"
+            " AND _tf.review_status IS NOT 'rejected')"
+        )
+    if no_crops:
+        conds.append(
+            "NOT EXISTS (SELECT 1 FROM detections _nc"
+            " WHERE _nc.source_image_id = si.id"
+            " AND _nc.crop_path IS NOT NULL AND _nc.crop_path != '')"
+        )
+    where = " AND ".join(conds)
+    inner = (
+        f"SELECT si.id, si.file_path, si.width, si.height, si.uploaded_at,"
+        f" si.image_tags, si.external_ref,"
+        f" COUNT(DISTINCT d.id) AS detection_count"
+        f" FROM source_images si"
+        f" LEFT JOIN detections d ON d.source_image_id = si.id"
+        f" WHERE {where}"
+        f" GROUP BY si.id"
+    )
+    return inner, params
+
+
 def list_source_images(
     user_id: int,
     cursor: str | None = None,
@@ -1800,68 +1854,101 @@ def list_source_images(
     no_detections: bool = False,
     no_tagged_faces: bool = False,
     no_crops: bool = False,
+    sort: str = "newest",
 ) -> list[sqlite3.Row]:
-    """Processed source images, newest first, with per-image detection count.
-    One row per image (deduped at ingestion by content hash). Cursor = 'uploadedAt_id'
-    so ties on the second-precision uploaded_at don't drop or repeat rows across pages.
-    Optional filters: identity_ids (AND — image must contain all listed identities),
-    detection_type, since/until (ISO timestamps, inclusive),
-    no_detections (only images with zero detections),
-    no_tagged_faces (only images with no identified face detections),
-    no_crops (only images where every detection has no saved crop file)."""
+    """Processed source images with per-image detection count, using CTE for sort flexibility.
+    sort: newest | oldest | most_detections | fewest_detections."""
     with _connect() as conn:
         env_id = _resolve_env(conn, user_id, environment_id)
-        sql = """SELECT si.id, si.file_path, si.width, si.height, si.uploaded_at,
-                        si.image_tags, si.external_ref,
-                        COUNT(DISTINCT d.id) AS detection_count
-                 FROM source_images si
-                 LEFT JOIN detections d ON d.source_image_id = si.id
-                 WHERE si.user_id = ? AND si.environment_id = ?"""
-        params: list = [user_id, env_id]
-        for iid in (identity_ids or []):
-            sql += (
-                " AND EXISTS (SELECT 1 FROM detections _e"
-                " WHERE _e.source_image_id = si.id AND _e.identity_id = ?)"
-            )
-            params.append(iid)
-        if detection_type:
-            sql += " AND d.type = ?"
-            params.append(detection_type)
-        if since:
-            sql += " AND si.uploaded_at >= ?"
-            params.append(since)
-        if until:
-            sql += " AND si.uploaded_at <= ?"
-            params.append(until)
-        if no_tagged_faces:
-            sql += (
-                " AND NOT EXISTS ("
-                "SELECT 1 FROM detections _tf"
-                " WHERE _tf.source_image_id = si.id"
-                " AND _tf.type = 'face'"
-                " AND _tf.identity_id IS NOT NULL"
-                " AND _tf.review_status IS NOT 'rejected')"
-            )
-        if cursor:
-            try:
-                c_ts, c_id = cursor.rsplit("_", 1)
-                id_val = int(c_id)
-            except ValueError:
-                c_ts, id_val = cursor, 0
-            sql += " AND (si.uploaded_at < ? OR (si.uploaded_at = ? AND si.id < ?))"
-            params.extend([c_ts, c_ts, id_val])
-        if no_crops:
-            sql += (
-                " AND NOT EXISTS (SELECT 1 FROM detections _nc"
-                " WHERE _nc.source_image_id = si.id"
-                " AND _nc.crop_path IS NOT NULL AND _nc.crop_path != '')"
-            )
-        sql += " GROUP BY si.id"
+        inner, params = _source_images_inner(
+            user_id, env_id, identity_ids, detection_type,
+            since, until, no_tagged_faces, no_crops,
+        )
+        sql = f"WITH base AS ({inner}) SELECT * FROM base"
+        outer: list[str] = []
         if no_detections:
-            sql += " HAVING COUNT(DISTINCT d.id) = 0"
-        sql += " ORDER BY si.uploaded_at DESC, si.id DESC LIMIT ?"
+            outer.append("detection_count = 0")
+        if cursor:
+            if sort in ("most_detections", "fewest_detections"):
+                try:
+                    c_cnt, c_id = cursor.rsplit("_", 1)
+                    cnt_val, id_val = int(c_cnt), int(c_id)
+                except ValueError:
+                    cnt_val, id_val = 0, 0
+                if sort == "most_detections":
+                    outer.append("(detection_count < ? OR (detection_count = ? AND id < ?))")
+                else:
+                    outer.append("(detection_count > ? OR (detection_count = ? AND id > ?))")
+                params.extend([cnt_val, cnt_val, id_val])
+            else:
+                try:
+                    c_ts, c_id = cursor.rsplit("_", 1)
+                    id_val = int(c_id)
+                except ValueError:
+                    c_ts, id_val = cursor, 0
+                if sort == "oldest":
+                    outer.append("(uploaded_at > ? OR (uploaded_at = ? AND id > ?))")
+                else:
+                    outer.append("(uploaded_at < ? OR (uploaded_at = ? AND id < ?))")
+                params.extend([c_ts, c_ts, id_val])
+        if outer:
+            sql += " WHERE " + " AND ".join(outer)
+        order = {
+            "oldest":            "uploaded_at ASC, id ASC",
+            "most_detections":   "detection_count DESC, id DESC",
+            "fewest_detections": "detection_count ASC, id ASC",
+        }.get(sort, "uploaded_at DESC, id DESC")
+        sql += f" ORDER BY {order} LIMIT ?"
         params.append(limit + 1)
         return conn.execute(sql, params).fetchall()
+
+
+def count_source_images_filtered(
+    user_id: int,
+    environment_id: int | None = None,
+    identity_ids: list[int] | None = None,
+    detection_type: str | None = None,
+    since: str | None = None,
+    until: str | None = None,
+    no_detections: bool = False,
+    no_tagged_faces: bool = False,
+    no_crops: bool = False,
+) -> int:
+    """Total count of source images matching the given filters."""
+    with _connect() as conn:
+        env_id = _resolve_env(conn, user_id, environment_id)
+        inner, params = _source_images_inner(
+            user_id, env_id, identity_ids, detection_type,
+            since, until, no_tagged_faces, no_crops,
+        )
+        sql = f"WITH base AS ({inner}) SELECT COUNT(*) FROM base"
+        if no_detections:
+            sql += " WHERE detection_count = 0"
+        return conn.execute(sql, params).fetchone()[0]
+
+
+def list_source_image_ids(
+    user_id: int,
+    environment_id: int | None = None,
+    identity_ids: list[int] | None = None,
+    detection_type: str | None = None,
+    since: str | None = None,
+    until: str | None = None,
+    no_detections: bool = False,
+    no_tagged_faces: bool = False,
+    no_crops: bool = False,
+) -> list[int]:
+    """All source image IDs matching the given filters (no pagination)."""
+    with _connect() as conn:
+        env_id = _resolve_env(conn, user_id, environment_id)
+        inner, params = _source_images_inner(
+            user_id, env_id, identity_ids, detection_type,
+            since, until, no_tagged_faces, no_crops,
+        )
+        sql = f"WITH base AS ({inner}) SELECT id FROM base"
+        if no_detections:
+            sql += " WHERE detection_count = 0"
+        return [r[0] for r in conn.execute(sql, params).fetchall()]
 
 
 def count_source_images(user_id: int, environment_id: int | None = None) -> int:

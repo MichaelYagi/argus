@@ -236,7 +236,8 @@
       "Bash(/home/michael/.local/bin/pytest -x -q)",
       "Bash(~/.local/bin/ruff check *)",
       "Bash(python3.11 -m ruff check .)",
-      "Bash(docker exec *)"
+      "Bash(docker exec *)",
+      "Bash(./.venv/bin/ruff check *)"
     ]
   }
 }
