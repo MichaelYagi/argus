@@ -59,7 +59,8 @@ async def list_source_images(
     environment_id: int = Depends(require_env_id),
 ):
     """Paginated list of all processed source images (one row per image), newest first.
-    Optional filters: identity_id (repeatable, AND semantics), type (face/object), since, until, no_detections, no_tagged_faces."""
+    Optional filters: identity_id (repeatable, AND semantics), type (face/object),
+    since, until, no_detections, no_tagged_faces."""
     t0 = time.monotonic()
     if type and type not in ("face", "object"):
         raise HTTPException(400, "type must be 'face' or 'object'")
