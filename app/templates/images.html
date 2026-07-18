@@ -310,6 +310,10 @@
   const sinceEl       = document.getElementById('filter-since');
   const untilEl       = document.getElementById('filter-until');
 
+  function _esc(s) {
+    return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  }
+
   let searchTimer;
   identityInput.addEventListener('input', () => {
     clearTimeout(searchTimer);
@@ -318,18 +322,22 @@
     if (!q) { identityDrop.style.display = 'none'; return; }
     searchTimer = setTimeout(async () => {
       const params = new URLSearchParams({ q, limit: 10 });
-      const resp = await fetch('/api/identities?' + params);
+      const resp = await fetch('/api/search?' + params);
       if (!resp.ok) return;
       const data = await resp.json();
-      const rows = Array.isArray(data) ? data : (data.items || []);
+      const rows = data.items || [];
       identityDrop.innerHTML = '';
       if (!rows.length) { identityDrop.style.display = 'none'; return; }
       rows.forEach(i => {
         const item = document.createElement('div');
-        item.textContent = i.label + (i.type === 'object' ? ' (object)' : '');
-        item.style.cssText = 'padding:7px 12px;cursor:pointer;font-size:13px';
-        item.addEventListener('mouseenter', () => { item.style.background = 'var(--hover,#f0f0f0)'; });
-        item.addEventListener('mouseleave', () => { item.style.background = ''; });
+        item.className = 'ns-item';
+        item.style.cursor = 'pointer';
+        const thumb = i.cover_url
+          ? '<img src="' + _esc(i.cover_url) + '" class="ns-thumb" alt="">'
+          : '<span class="ns-thumb ns-ph">' + _esc((i.label || '?')[0]) + '</span>';
+        const badge = '<span class="ns-badge ns-badge-' + i.type + '">' + i.type + '</span>';
+        const cnt   = i.detection_count ? '<span class="ns-count">' + i.detection_count + '</span>' : '';
+        item.innerHTML = thumb + '<span class="ns-label">' + _esc(i.label) + '</span>' + badge + cnt;
         item.addEventListener('mousedown', e => {
           e.preventDefault();
           identityInput.value = i.label;
