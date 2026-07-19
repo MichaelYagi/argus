@@ -489,14 +489,14 @@
       setTimeout(() => {
         const lastId = sessionStorage.getItem('argus_last_viewed');
         sessionStorage.removeItem('argus_last_viewed');
-        if (lastId) {
-          const el = container.querySelector('[data-source-id="' + lastId + '"]');
-          if (el) {
-            const r = el.getBoundingClientRect();
-            const top = r.top + window.scrollY - Math.max(0, (window.innerHeight - r.height) / 2);
-            window.scrollTo(0, Math.max(0, top));
-            return;
-          }
+        const lastEl = lastId ? container.querySelector('[data-source-id="' + lastId + '"]') : null;
+        if (lastEl) {
+          lastEl.classList.add('last-viewed');
+          setTimeout(() => lastEl.classList.remove('last-viewed'), 2100);
+          const r = lastEl.getBoundingClientRect();
+          const top = r.top + window.scrollY - Math.max(0, (window.innerHeight - r.height) / 2);
+          window.scrollTo(0, Math.max(0, top));
+          return;
         }
         if (savedState.scrollY) window.scrollTo(0, savedState.scrollY);
       }, 0);
@@ -513,6 +513,8 @@
     sessionStorage.removeItem('argus_last_viewed');
     const el = container.querySelector('[data-source-id="' + lastId + '"]');
     if (!el) return;
+    el.classList.add('last-viewed');
+    setTimeout(() => el.classList.remove('last-viewed'), 2100);
     setTimeout(() => {
       const r = el.getBoundingClientRect();
       const top = r.top + window.scrollY - Math.max(0, (window.innerHeight - r.height) / 2);

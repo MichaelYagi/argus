@@ -448,6 +448,12 @@ a:hover { text-decoration: underline; }
 .g-item.selected .g-check { display: block; }
 .g-item.selected { box-shadow: inset 0 0 0 3px var(--accent); }
 .g-item.selected img { opacity: .7; }
+@keyframes argus-lv-fade { 0%, 60% { opacity: 1; } 100% { opacity: 0; } }
+.g-item.last-viewed::after {
+  content: ''; position: absolute; inset: 0;
+  border: 2px solid var(--accent); pointer-events: none;
+  animation: argus-lv-fade 2s ease-out forwards;
+}
 
 /* ---------- Forms ---------- */
 .form-group { margin-bottom: 16px; }

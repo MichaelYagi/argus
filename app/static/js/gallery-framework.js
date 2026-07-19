@@ -176,14 +176,16 @@ window.ArgusGallery = function ArgusGallery(opts) {
       setTimeout(() => {
         const lastId = sessionStorage.getItem('argus_last_viewed');
         sessionStorage.removeItem('argus_last_viewed');
-        if (lastId && opts.findEl && String(lastId) !== String(savedState.clickedId)) {
-          const el = opts.findEl(container, parseInt(lastId, 10));
-          if (el) {
-            const r = el.getBoundingClientRect();
-            const top = r.top + window.scrollY - Math.max(0, (window.innerHeight - r.height) / 2);
-            window.scrollTo(0, Math.max(0, top));
-            return;
-          }
+        const lastEl = (lastId && opts.findEl) ? opts.findEl(container, parseInt(lastId, 10)) : null;
+        if (lastEl) {
+          lastEl.classList.add('last-viewed');
+          setTimeout(() => lastEl.classList.remove('last-viewed'), 2100);
+        }
+        if (lastEl && String(lastId) !== String(savedState.clickedId)) {
+          const r = lastEl.getBoundingClientRect();
+          const top = r.top + window.scrollY - Math.max(0, (window.innerHeight - r.height) / 2);
+          window.scrollTo(0, Math.max(0, top));
+          return;
         }
         if (savedState.scrollY != null) {
           window.scrollTo(0, savedState.scrollY);
@@ -206,10 +208,12 @@ window.ArgusGallery = function ArgusGallery(opts) {
     const lastId = sessionStorage.getItem('argus_last_viewed');
     if (!lastId) return;
     sessionStorage.removeItem('argus_last_viewed');
-    const clickedId = history.state?.[stateKey]?.clickedId;
-    if (String(lastId) === String(clickedId)) return;
     const el = opts.findEl(container, parseInt(lastId, 10));
     if (!el) return;
+    el.classList.add('last-viewed');
+    setTimeout(() => el.classList.remove('last-viewed'), 2100);
+    const clickedId = history.state?.[stateKey]?.clickedId;
+    if (String(lastId) === String(clickedId)) return;
     setTimeout(() => {
       const r = el.getBoundingClientRect();
       const top = r.top + window.scrollY - Math.max(0, (window.innerHeight - r.height) / 2);
