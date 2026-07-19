@@ -180,7 +180,9 @@ window.ArgusGallery = function ArgusGallery(opts) {
         if (lastId && opts.findEl && String(lastId) !== String(savedState.clickedId)) {
           const el = opts.findEl(container, parseInt(lastId, 10));
           if (el) {
-            el.scrollIntoView({ behavior: 'instant', block: 'center' });
+            const r = el.getBoundingClientRect();
+            const top = r.top + window.scrollY - Math.max(0, (window.innerHeight - r.height) / 2);
+            window.scrollTo(0, Math.max(0, top));
             return;
           }
         }
@@ -208,7 +210,11 @@ window.ArgusGallery = function ArgusGallery(opts) {
     const clickedId = history.state?.[stateKey]?.clickedId;
     if (String(lastId) === String(clickedId)) return; // bfcache scroll already correct
     const el = opts.findEl(container, parseInt(lastId, 10));
-    if (el) el.scrollIntoView({ behavior: 'instant', block: 'center' });
+    if (el) {
+      const r = el.getBoundingClientRect();
+      const top = r.top + window.scrollY - Math.max(0, (window.innerHeight - r.height) / 2);
+      window.scrollTo(0, Math.max(0, top));
+    }
   });
 
   let resizeT, lastW = 0;
@@ -221,5 +227,5 @@ window.ArgusGallery = function ArgusGallery(opts) {
     resizeT = setTimeout(relayout, 150);
   });
 
-  return { reset, removeItem, removeItems };
+  return { reset, removeItem, removeItems, items: () => items };
 };
