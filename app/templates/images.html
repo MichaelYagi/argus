@@ -162,7 +162,8 @@ function localDateToUTC(dateStr, endOfDay) {
   function updateSelectAllBtn() {
     if (!selectAllBtn) return;
     selectAllBtn.textContent = 'Select all';
-    selectAllBtn.style.display = selected.size > 0 ? 'none' : '';
+    const actionsRow = document.getElementById('gallery-actions');
+    if (actionsRow) actionsRow.style.display = selected.size > 0 ? 'none' : 'flex';
   }
 
   function updateBatchBar() {
