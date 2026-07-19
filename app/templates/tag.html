@@ -4,8 +4,6 @@
 {% block content %}
 <div class="page-header" style="margin-bottom:12px">
   <a id="back-link" href="/">&larr; Back</a>
-  <a id="prev-link" href="#" style="display:none;margin-left:10px;font-size:13px">&larr; Prev</a>
-  <a id="next-link" href="#" style="display:none;margin-left:6px;font-size:13px">Next &rarr;</a>
   <span class="muted" style="font-size:13px;margin-left:8px">
     Click a box to assign or correct a label. Faces: orange = unlabeled, green = labeled. Objects: blue.
   </span>
@@ -58,7 +56,9 @@
 </div>
 
 <div id="tag-wrap">
+  <a id="prev-nav" class="tag-nav tag-nav-prev" href="#" style="display:none" aria-label="Previous image">&#8249;</a>
   <img id="tag-photo" src="{{ image_url }}" alt="" onload="renderBoxes()">
+  <a id="next-nav" class="tag-nav tag-nav-next" href="#" style="display:none" aria-label="Next image">&#8250;</a>
 </div>
 <div id="vis-toggles" style="display:none;gap:8px;margin-top:10px">
   <button id="toggle-faces" class="btn btn-ghost tag-toggle active">Faces</button>
@@ -276,6 +276,19 @@ document.addEventListener('keydown', e => {
     const focused = document.querySelector('#tag-wrap .t-box.kb-focus');
     if (focused) { e.preventDefault(); focused.click(); }
   }
+  // Left/Right navigate prev/next
+  if (e.key === 'ArrowLeft') {
+    const tag = document.activeElement?.tagName;
+    if (tag === 'INPUT' || tag === 'TEXTAREA') return;
+    const el = document.getElementById('prev-nav');
+    if (el && el.style.display !== 'none') { e.preventDefault(); location.href = el.href; }
+  }
+  if (e.key === 'ArrowRight') {
+    const tag = document.activeElement?.tagName;
+    if (tag === 'INPUT' || tag === 'TEXTAREA') return;
+    const el = document.getElementById('next-nav');
+    if (el && el.style.display !== 'none') { e.preventDefault(); location.href = el.href; }
+  }
 });
 document.getElementById('reprocess-save-btn').addEventListener('click', async () => {
   const type    = document.getElementById('reprocess-type').value;
@@ -420,14 +433,14 @@ if (FACES.length && OBJECTS.length) {
   const prevId = idx > 0 ? ids[idx - 1] : null;
   const nextId = idx < ids.length - 1 ? ids[idx + 1] : null;
   if (prevId) {
-    const el = document.getElementById('prev-link');
+    const el = document.getElementById('prev-nav');
     el.href = '/tag/' + prevId;
-    el.style.display = '';
+    el.style.display = 'flex';
   }
   if (nextId) {
-    const el = document.getElementById('next-link');
+    const el = document.getElementById('next-nav');
     el.href = '/tag/' + nextId;
-    el.style.display = '';
+    el.style.display = 'flex';
   }
 })();
 
