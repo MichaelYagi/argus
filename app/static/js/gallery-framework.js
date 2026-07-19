@@ -171,14 +171,26 @@ window.ArgusGallery = function ArgusGallery(opts) {
       if (loadingEl) loadingEl.hidden = true;
       if (!hasMore) sentinel.remove();
       observe();
-      if (savedState.scrollY != null) {
-        requestAnimationFrame(() => window.scrollTo(0, savedState.scrollY));
-      } else if (savedState.clickedId != null) {
-        requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        const lastId = sessionStorage.getItem('argus_last_viewed');
+        if (lastId && opts.findEl) {
+          const el = opts.findEl(container, parseInt(lastId, 10));
+          if (el) {
+            sessionStorage.removeItem('argus_last_viewed');
+            const r = el.getBoundingClientRect();
+            if (r.top < 0 || r.bottom > window.innerHeight) {
+              el.scrollIntoView({ behavior: 'instant', block: 'center' });
+            }
+            return;
+          }
+        }
+        if (savedState.scrollY != null) {
+          window.scrollTo(0, savedState.scrollY);
+        } else if (savedState.clickedId != null && opts.findEl) {
           const el = opts.findEl(container, savedState.clickedId);
           if (el) el.scrollIntoView({ block: 'center' });
-        });
-      }
+        }
+      });
     });
   } else {
     (async () => {
@@ -187,6 +199,19 @@ window.ArgusGallery = function ArgusGallery(opts) {
     })();
     observe();
   }
+
+  window.addEventListener('pageshow', e => {
+    if (!e.persisted || !opts.findEl) return;
+    const lastId = sessionStorage.getItem('argus_last_viewed');
+    if (!lastId) return;
+    const el = opts.findEl(container, parseInt(lastId, 10));
+    if (!el) return;
+    sessionStorage.removeItem('argus_last_viewed');
+    const r = el.getBoundingClientRect();
+    if (r.top < 0 || r.bottom > window.innerHeight) {
+      el.scrollIntoView({ behavior: 'instant', block: 'center' });
+    }
+  });
 
   let resizeT, lastW = 0;
   window.addEventListener('resize', () => {

@@ -74,6 +74,7 @@
 const NAT_W = {{ nat_w }}, NAT_H = {{ nat_h }};
 const FACES = {{ faces_json | safe }};
 const OBJECTS = {{ objects_json | safe }};
+sessionStorage.setItem('argus_last_viewed', '{{ source_image_id }}');
 
 function scrollWrapIntoView() {
   setTimeout(() => {

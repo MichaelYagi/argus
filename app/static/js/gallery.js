@@ -154,6 +154,7 @@
     const el = document.createElement('div');
     el.className = 'g-item' + (isSelected ? ' selected' : '');
     el.dataset.id = item.detection_id;
+    if (item.source_image_id) el.dataset.sourceId = item.source_image_id;
     el.style.width  = w + 'px';
     el.style.height = Math.floor(height) + 'px';
 
@@ -479,6 +480,18 @@
       if (!hasMore) sentinel.remove();
       observe();
       requestAnimationFrame(() => {
+        const lastId = sessionStorage.getItem('argus_last_viewed');
+        if (lastId) {
+          const el = container.querySelector('[data-source-id="' + lastId + '"]');
+          if (el) {
+            sessionStorage.removeItem('argus_last_viewed');
+            const r = el.getBoundingClientRect();
+            if (r.top < 0 || r.bottom > window.innerHeight) {
+              el.scrollIntoView({ behavior: 'instant', block: 'center' });
+            }
+            return;
+          }
+        }
         if (savedState.scrollY) window.scrollTo(0, savedState.scrollY);
       });
     });
@@ -487,8 +500,18 @@
     loadPage();
   }
 
-  // Bfcache restore: keep existing DOM and scroll intact.
-  window.addEventListener('pageshow', e => { if (e.persisted) { /* no-op — bfcache handles scroll */ } });
+  window.addEventListener('pageshow', e => {
+    if (!e.persisted) return;
+    const lastId = sessionStorage.getItem('argus_last_viewed');
+    if (!lastId) return;
+    const el = container.querySelector('[data-source-id="' + lastId + '"]');
+    if (!el) return;
+    sessionStorage.removeItem('argus_last_viewed');
+    const r = el.getBoundingClientRect();
+    if (r.top < 0 || r.bottom > window.innerHeight) {
+      el.scrollIntoView({ behavior: 'instant', block: 'center' });
+    }
+  });
 
   // Wire back arrow to history.back() so the dashboard restores scroll on return.
   const backLink = document.getElementById('back-link');
