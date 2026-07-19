@@ -858,6 +858,11 @@ def _run_detection_job(
         if replace:
             _clear_detections(user_id, environment_id, source_id, None if det_type == "all" else det_type)
         result: dict = {"source_image_id": source_id, "external_ref": external_ref}
+        if not replace:
+            count_type = None if det_type == "all" else det_type
+            existing = store.count_detections_for_source(source_id, user_id, count_type)
+            if existing:
+                result["existing_detections"] = existing
         if det_type in ("face", "all"):
             result["faces"] = _run_faces(
                 user_id, environment_id, img, source_id, label=label, source_scale=source_scale)
@@ -906,6 +911,10 @@ def _run_bulk_job(
             infer_img, bbox_scale = _infer_resize(img)
             base["source_image_id"] = src_id
             base["source_scale"] = src_scale
+            count_type = None if detect_type == "all" else detect_type.rstrip("s")
+            existing = store.count_detections_for_source(src_id, user_id, count_type)
+            if existing:
+                base["existing_detections"] = existing
             phase1.append((base, img, infer_img, bbox_scale, src_id, src_scale))
         except HTTPException as exc:
             base["error"] = exc.detail

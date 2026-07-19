@@ -92,6 +92,7 @@ async def tag_page(source_image_id: int, request: Request):
         "is_admin": is_admin(user_id),
         "version": __version__,
         "source_image_id": source_image_id,
+        "external_ref": src["external_ref"] or "",
         "image_url": f"/media/sources/{src['file_path']}",
         "nat_w": src["width"],
         "nat_h": src["height"],

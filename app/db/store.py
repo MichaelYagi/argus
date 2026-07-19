@@ -1357,13 +1357,21 @@ def delete_source_image(
         return ids, crops, None if still_ref else file_path, external_ref
 
 
-def count_detections_for_source(source_image_id: int, user_id: int) -> int:
-    """Return the total number of detections stored for a given source image."""
+def count_detections_for_source(
+    source_image_id: int, user_id: int, det_type: str | None = None,
+) -> int:
+    """Return the number of detections stored for a given source image, optionally filtered by type."""
     with _connect() as conn:
-        row = conn.execute(
-            "SELECT COUNT(*) FROM detections WHERE source_image_id = ? AND user_id = ?",
-            (source_image_id, user_id),
-        ).fetchone()
+        if det_type:
+            row = conn.execute(
+                "SELECT COUNT(*) FROM detections WHERE source_image_id = ? AND user_id = ? AND type = ?",
+                (source_image_id, user_id, det_type),
+            ).fetchone()
+        else:
+            row = conn.execute(
+                "SELECT COUNT(*) FROM detections WHERE source_image_id = ? AND user_id = ?",
+                (source_image_id, user_id),
+            ).fetchone()
         return row[0] if row else 0
 
 

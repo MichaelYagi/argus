@@ -4,9 +4,14 @@
 {% block content %}
 <div class="page-header" style="margin-bottom:12px">
   <a id="back-link" href="/">&larr; Back</a>
+  <a id="prev-link" href="#" style="display:none;margin-left:10px;font-size:13px">&larr; Prev</a>
+  <a id="next-link" href="#" style="display:none;margin-left:6px;font-size:13px">Next &rarr;</a>
   <span class="muted" style="font-size:13px;margin-left:8px">
     Click a box to assign or correct a label. Faces: orange = unlabeled, green = labeled. Objects: blue.
   </span>
+  {% if external_ref %}
+  <span class="muted" style="font-size:12px;margin-left:8px;font-family:monospace">{{ external_ref }}</span>
+  {% endif %}
   {% if image_tags %}
   <span style="display:flex;gap:4px;flex-wrap:wrap;margin-left:12px">
     {% for tag in image_tags %}
@@ -152,6 +157,9 @@ function labelObjectBox(div, tip, chip) {
       tip.textContent = 'object';
       chip.textContent = '';
       chip.style.display = 'none';
+      const obj = OBJECTS.find(o => o.id === parseInt(div.dataset.id, 10));
+      if (obj) { obj.label = ''; }
+      renderDetList();
       setStatus('Cleared label.');
     } else {
       setStatus('Error clearing label.');
@@ -170,6 +178,9 @@ function labelObjectBox(div, tip, chip) {
       tip.textContent = d.label;
       chip.textContent = d.label;
       chip.style.display = 'block';
+      const obj = OBJECTS.find(o => o.id === parseInt(div.dataset.id, 10));
+      if (obj) { obj.label = d.label; }
+      renderDetList();
       trackLabeled(div.dataset.id);
       setStatus('Labeled: ' + d.label);
     } else {
@@ -186,6 +197,9 @@ async function unidentifyBox(div, tip, chip) {
     chip.textContent = '';
     chip.style.display = 'none';
     div.classList.remove('labeled');
+    const face = FACES.find(f => f.id === parseInt(div.dataset.id, 10));
+    if (face) { face.label = ''; face.similarity = null; }
+    renderDetList();
     setStatus('Cleared label.');
   } else {
     setStatus('Error clearing label.');
@@ -211,6 +225,9 @@ function labelBox(div, tip, chip) {
       chip.textContent = d.label;
       chip.style.display = 'block';
       div.classList.add('labeled');
+      const face = FACES.find(f => f.id === parseInt(div.dataset.id, 10));
+      if (face) { face.label = d.label; face.similarity = null; }
+      renderDetList();
       addFaceLabel(d.label);
       trackLabeled(div.dataset.id);
       setStatus('Labeled: ' + d.label);
@@ -237,7 +254,28 @@ document.getElementById('reprocess-overlay').addEventListener('click', function(
 });
 document.addEventListener('keydown', e => {
   const overlay = document.getElementById('reprocess-overlay');
-  if (e.key === 'Escape' && overlay.style.display === 'flex') closeReprocessOverlay();
+  if (e.key === 'Escape' && overlay.style.display === 'flex') { closeReprocessOverlay(); return; }
+  // Tab cycles through bboxes; Shift+Tab reverses
+  if (e.key === 'Tab') {
+    const tag = document.activeElement?.tagName;
+    if (tag === 'INPUT' || tag === 'TEXTAREA') return;
+    e.preventDefault();
+    const boxes = [...document.querySelectorAll('#tag-wrap .t-box')];
+    if (!boxes.length) return;
+    const cur = document.querySelector('#tag-wrap .t-box.kb-focus');
+    let idx = cur ? boxes.indexOf(cur) : -1;
+    if (cur) cur.classList.remove('kb-focus');
+    idx = e.shiftKey ? (idx <= 0 ? boxes.length - 1 : idx - 1) : (idx + 1) % boxes.length;
+    boxes[idx].classList.add('kb-focus');
+    boxes[idx].scrollIntoView({ behavior: 'smooth', block: 'center' });
+    const row = document.querySelector('#det-list tr[data-id="' + boxes[idx].dataset.id + '"]');
+    if (row) row.scrollIntoView({ behavior: 'nearest', block: 'nearest' });
+  }
+  // Enter activates focused bbox
+  if (e.key === 'Enter') {
+    const focused = document.querySelector('#tag-wrap .t-box.kb-focus');
+    if (focused) { e.preventDefault(); focused.click(); }
+  }
 });
 document.getElementById('reprocess-save-btn').addEventListener('click', async () => {
   const type    = document.getElementById('reprocess-type').value;
@@ -370,6 +408,28 @@ if (FACES.length && OBJECTS.length) {
     document.querySelectorAll('#det-list tr[data-kind="object"]').forEach(r => r.style.display = on ? '' : 'none');
   });
 }
+
+// Prev / Next navigation using the gallery nav list stored in sessionStorage
+(function() {
+  const CUR = {{ source_image_id }};
+  let ids;
+  try { ids = JSON.parse(sessionStorage.getItem('argus_nav_ids') || 'null'); } catch (_) {}
+  if (!Array.isArray(ids)) return;
+  const idx = ids.indexOf(CUR);
+  if (idx === -1) return;
+  const prevId = idx > 0 ? ids[idx - 1] : null;
+  const nextId = idx < ids.length - 1 ? ids[idx + 1] : null;
+  if (prevId) {
+    const el = document.getElementById('prev-link');
+    el.href = '/tag/' + prevId;
+    el.style.display = '';
+  }
+  if (nextId) {
+    const el = document.getElementById('next-link');
+    el.href = '/tag/' + nextId;
+    el.style.display = '';
+  }
+})();
 
 // Set breadcrumb from referrer so it always reflects where the user came from
 (function() {
