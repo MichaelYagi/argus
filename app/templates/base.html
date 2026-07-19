@@ -383,7 +383,7 @@ setInterval(_updateSuggestedDot, 30000);
 })();
 </script>
 {% set detect_grp  = active in ('detect', 'enroll', 'test', 'compare') %}
-{% set review_grp  = active in ('review', 'clusters', 'images', 'unidentified') %}
+{% set review_grp  = active in ('review', 'clusters', 'unidentified') %}
 {% set settings_grp = active in ('settings', 'models') %}
 <nav>
   {% if username %}
@@ -474,7 +474,8 @@ setInterval(_updateSuggestedDot, 30000);
 {% if username %}
 <!-- Desktop sidebar — persistent left panel, toggled by the hamburger -->
 <div id="desktop-sidebar" class="desktop-sidebar">
-  <a href="/" class="{% if active == 'dashboard' %}active{% endif %}">Dashboard</a>
+  <a href="/" class="{% if active in ('dashboard', 'images') %}active{% endif %}">Dashboard</a>
+  <a href="/images" class="sidebar-sub {% if active == 'images' %}active{% endif %}">Images</a>
   <div class="sidebar-divider"></div>
   <a href="/detect" class="{% if active == 'detect' %}active{% endif %}">Detect</a>
   {% if face_active %}
@@ -499,9 +500,6 @@ setInterval(_updateSuggestedDot, 30000);
              margin-left:3px;vertical-align:middle"></span>
   </a>
   <a href="/unidentified" class="sidebar-sub {% if active == 'unidentified' %}active{% endif %}">Unidentified</a>
-  <a href="/images" class="sidebar-sub {% if active == 'images' %}active{% endif %}">Images</a>
-  {% else %}
-  <a href="/images" class="{% if active == 'images' %}active{% endif %}">Images</a>
   {% endif %}
   {% if is_admin %}
   <div class="sidebar-divider"></div>
@@ -525,7 +523,8 @@ setInterval(_updateSuggestedDot, 30000);
 
 <!-- Mobile dropdown -->
 <div id="mobile-menu" class="mobile-menu" hidden>
-  <a href="/" class="{% if active == 'dashboard' %}active{% endif %}">Dashboard</a>
+  <a href="/" class="{% if active in ('dashboard', 'images') %}active{% endif %}">Dashboard</a>
+  <a href="/images" class="mobile-sub {% if active == 'images' %}active{% endif %}">Images</a>
   <div style="border-top:1px solid rgba(255,255,255,.12);margin:4px 0"></div>
   <a href="/detect" class="{% if active == 'detect' %}active{% endif %}">Detect</a>
   {% if face_active %}
@@ -550,9 +549,6 @@ setInterval(_updateSuggestedDot, 30000);
              margin-left:3px;vertical-align:middle"></span>
   </a>
   <a href="/unidentified" class="mobile-sub {% if active == 'unidentified' %}active{% endif %}">Unidentified</a>
-  <a href="/images" class="mobile-sub {% if active == 'images' %}active{% endif %}">Images</a>
-  {% else %}
-  <a href="/images" class="{% if active == 'images' %}active{% endif %}">Images</a>
   {% endif %}
   {% if is_admin %}
   <div style="border-top:1px solid rgba(255,255,255,.12);margin:4px 0"></div>
