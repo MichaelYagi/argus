@@ -54,10 +54,9 @@ const gallery = ArgusGallery({
       tagLink.addEventListener('click', e => {
         e.stopPropagation();
         saveState(item.detection_id);
-        const ids = [...new Set(gallery.items().map(i => i.source_image_id).filter(Boolean))];
-        sessionStorage.setItem('argus_nav_ids', JSON.stringify(ids));
-        sessionStorage.setItem('argus_nav_back', location.href);
-        sessionStorage.setItem('argus_nav_depth', '0');
+        sessionStorage.removeItem('argus_nav_ids');
+        sessionStorage.removeItem('argus_nav_back');
+        sessionStorage.removeItem('argus_nav_depth');
       });
       el.appendChild(tagLink);
     }
