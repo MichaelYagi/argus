@@ -117,6 +117,14 @@ function renderBoxes() {
         + (det.confidence != null ? ' (' + (det.confidence * 100).toFixed(0) + '%)' : '');
       div.addEventListener('click', () => labelObjectBox(div, tip, chip));
     }
+    div.addEventListener('mouseenter', () => {
+      const row = document.querySelector('#det-list tr[data-id="' + det.id + '"]');
+      if (row) row.style.background = 'rgba(255,255,255,.07)';
+    });
+    div.addEventListener('mouseleave', () => {
+      const row = document.querySelector('#det-list tr[data-id="' + det.id + '"]');
+      if (row) row.style.background = '';
+    });
     div.appendChild(tip);
     wrap.appendChild(div);
   });
@@ -279,66 +287,65 @@ function renderDetList() {
   const el = document.getElementById('det-list');
   if (!el) return;
 
+  const all = [
+    ...FACES.map(f => ({ ...f, kind: 'face' })),
+    ...OBJECTS.map(o => ({ ...o, kind: 'object' })),
+  ];
+  if (!all.length) { el.innerHTML = ''; return; }
+
   const TH = 'style="padding:5px 12px 5px 0;font-weight:600;border-bottom:2px solid var(--border);white-space:nowrap;text-align:left"';
-  const TD = 'style="padding:6px 12px 6px 0;border-bottom:1px solid var(--border);vertical-align:middle"';
+  const TD = 'padding:6px 12px 6px 0;border-bottom:1px solid var(--border);vertical-align:middle';
 
-  let html = '';
+  let html = '<table style="width:100%;border-collapse:collapse;font-size:13px"><thead><tr>';
+  html += '<th ' + TH + '>#</th>';
+  html += '<th ' + TH + '>Type</th>';
+  html += '<th ' + TH + '>Identity</th>';
+  html += '<th ' + TH + '>Confidence</th>';
+  html += '<th ' + TH + '>Age</th>';
+  html += '<th ' + TH + '>Gender</th>';
+  html += '</tr></thead><tbody>';
 
-  if (FACES.length) {
-    html += '<div id="det-faces-section">';
-    html += '<table style="width:100%;border-collapse:collapse;font-size:13px">';
-    html += '<thead><tr>';
-    html += '<th ' + TH + '>Face</th>';
-    html += '<th ' + TH + '>Looks like</th>';
-    html += '<th ' + TH + '>Confidence</th>';
-    html += '<th ' + TH + '>Age</th>';
-    html += '<th ' + TH + '>Gender</th>';
-    html += '</tr></thead><tbody>';
-    FACES.forEach((f, i) => {
-      const rejected = f.review_status === 'rejected';
-      const displayLabel = rejected ? '' : f.label;
-      const looksLike = displayLabel
-        ? _esc(displayLabel) + (f.similarity != null ? ' <span class="muted">' + Math.max(0, f.similarity * 100).toFixed(0) + '%</span>' : '')
-        : '<span class="muted">Unknown</span>';
-      const conf = f.confidence != null ? (f.confidence * 100).toFixed(0) + '%' : '—';
-      const age  = f.age    != null ? f.age : '—';
-      const gen  = f.gender ? f.gender[0].toUpperCase() : '—';
-      html += '<tr style="cursor:pointer" data-id="' + f.id + '">';
-      html += '<td ' + TD + ' style="padding:6px 12px 6px 0;border-bottom:1px solid var(--border);color:var(--accent);font-weight:500">#' + (i + 1) + '</td>';
-      html += '<td ' + TD + '>' + looksLike + '</td>';
-      html += '<td ' + TD + '>' + conf + '</td>';
-      html += '<td ' + TD + '>' + age + '</td>';
-      html += '<td ' + TD + '>' + gen + '</td>';
-      html += '</tr>';
-    });
-    html += '</tbody></table></div>';
-  }
+  all.forEach((det, i) => {
+    const isFace = det.kind === 'face';
+    const rejected = det.review_status === 'rejected';
+    const displayLabel = isFace ? (rejected ? '' : det.label) : det.label;
+    const identity = isFace
+      ? (displayLabel
+          ? _esc(displayLabel) + (det.similarity != null ? ' <span class="muted">' + Math.max(0, det.similarity * 100).toFixed(0) + '%</span>' : '')
+          : '<span class="muted">Unidentified</span>')
+      : (displayLabel ? _esc(displayLabel) : '<span class="muted">—</span>');
+    const conf  = det.confidence != null ? (det.confidence * 100).toFixed(0) + '%' : '—';
+    const age   = isFace && det.age   != null ? det.age : '—';
+    const gen   = isFace && det.gender ? det.gender[0].toUpperCase() : '—';
+    const numColor = isFace ? 'color:var(--accent)' : 'color:#39f';
+    html += '<tr style="cursor:pointer" data-id="' + det.id + '" data-kind="' + det.kind + '">';
+    html += '<td style="' + TD + ';' + numColor + ';font-weight:500">' + (i + 1) + '</td>';
+    html += '<td style="' + TD + '">' + det.kind + '</td>';
+    html += '<td style="' + TD + '">' + identity + '</td>';
+    html += '<td style="' + TD + '">' + conf + '</td>';
+    html += '<td style="' + TD + '">' + age + '</td>';
+    html += '<td style="' + TD + '">' + gen + '</td>';
+    html += '</tr>';
+  });
 
-  if (OBJECTS.length) {
-    html += '<div id="det-objects-section">';
-    html += '<table style="width:100%;border-collapse:collapse;font-size:13px">';
-    html += '<thead><tr>';
-    html += '<th ' + TH + '>#</th>';
-    html += '<th ' + TH + '>Object</th>';
-    html += '<th ' + TH + '>Confidence</th>';
-    html += '</tr></thead><tbody>';
-    OBJECTS.forEach((o, i) => {
-      const conf = o.confidence != null ? (o.confidence * 100).toFixed(0) + '%' : '—';
-      html += '<tr style="cursor:pointer" data-id="' + o.id + '">';
-      html += '<td ' + TD + ' style="padding:6px 12px 6px 0;border-bottom:1px solid var(--border);color:#39f;font-weight:500">' + (i + 1) + '</td>';
-      html += '<td ' + TD + '>' + _esc(o.label || 'object') + '</td>';
-      html += '<td ' + TD + '>' + conf + '</td>';
-      html += '</tr>';
-    });
-    html += '</tbody></table></div>';
-  }
-
+  html += '</tbody></table>';
   el.innerHTML = html;
 
   el.querySelectorAll('tr[data-id]').forEach(row => {
+    const id = row.dataset.id;
     row.addEventListener('click', () => {
-      const box = document.querySelector('.t-box[data-id="' + row.dataset.id + '"]');
+      const box = document.querySelector('.t-box[data-id="' + id + '"]');
       if (box) { box.scrollIntoView({ behavior: 'smooth', block: 'center' }); box.click(); }
+    });
+    row.addEventListener('mouseenter', () => {
+      row.style.background = 'rgba(255,255,255,.07)';
+      const box = document.querySelector('.t-box[data-id="' + id + '"]');
+      if (box) { box.style.borderColor = '#fff'; box.style.zIndex = '10'; }
+    });
+    row.addEventListener('mouseleave', () => {
+      row.style.background = '';
+      const box = document.querySelector('.t-box[data-id="' + id + '"]');
+      if (box) { box.style.borderColor = ''; box.style.zIndex = ''; }
     });
   });
 }
@@ -354,15 +361,13 @@ if (FACES.length && OBJECTS.length) {
     this.classList.toggle('active');
     const on = this.classList.contains('active');
     wrap.classList.toggle('hide-faces', !on);
-    const sec = document.getElementById('det-faces-section');
-    if (sec) sec.style.display = on ? '' : 'none';
+    document.querySelectorAll('#det-list tr[data-kind="face"]').forEach(r => r.style.display = on ? '' : 'none');
   });
   document.getElementById('toggle-objects').addEventListener('click', function() {
     this.classList.toggle('active');
     const on = this.classList.contains('active');
     wrap.classList.toggle('hide-objects', !on);
-    const sec = document.getElementById('det-objects-section');
-    if (sec) sec.style.display = on ? '' : 'none';
+    document.querySelectorAll('#det-list tr[data-kind="object"]').forEach(r => r.style.display = on ? '' : 'none');
   });
 }
 
