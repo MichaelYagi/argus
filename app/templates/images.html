@@ -161,7 +161,7 @@ function localDateToUTC(dateStr, endOfDay) {
 
   function updateSelectAllBtn() {
     if (!selectAllBtn) return;
-    selectAllBtn.textContent = selected.size > 0 ? 'Deselect all' : 'Select all';
+    selectAllBtn.textContent = 'Select all';
   }
 
   function updateBatchBar() {
@@ -183,7 +183,6 @@ function localDateToUTC(dateStr, endOfDay) {
   };
 
   window.selectDeselectAll = async () => {
-    if (selected.size > 0) { window.clearSelection(); return; }
     if (selectAllBtn) { selectAllBtn.disabled = true; selectAllBtn.textContent = 'Selecting…'; }
     try {
       const params = new URLSearchParams();
