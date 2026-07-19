@@ -474,7 +474,7 @@ setInterval(_updateSuggestedDot, 30000);
 {% if username %}
 <!-- Desktop sidebar — persistent left panel, toggled by the hamburger -->
 <div id="desktop-sidebar" class="desktop-sidebar">
-  <a href="/" class="{% if active in ('dashboard', 'images') %}active{% endif %}">Dashboard</a>
+  <a href="/" class="{% if active == 'dashboard' %}active{% endif %}">Dashboard</a>
   <a href="/images" class="sidebar-sub {% if active == 'images' %}active{% endif %}">Images</a>
   <div class="sidebar-divider"></div>
   <a href="/detect" class="{% if active == 'detect' %}active{% endif %}">Detect</a>
@@ -523,7 +523,7 @@ setInterval(_updateSuggestedDot, 30000);
 
 <!-- Mobile dropdown -->
 <div id="mobile-menu" class="mobile-menu" hidden>
-  <a href="/" class="{% if active in ('dashboard', 'images') %}active{% endif %}">Dashboard</a>
+  <a href="/" class="{% if active == 'dashboard' %}active{% endif %}">Dashboard</a>
   <a href="/images" class="mobile-sub {% if active == 'images' %}active{% endif %}">Images</a>
   <div style="border-top:1px solid rgba(255,255,255,.12);margin:4px 0"></div>
   <a href="/detect" class="{% if active == 'detect' %}active{% endif %}">Detect</a>
