@@ -431,20 +431,47 @@ if (FACES.length && OBJECTS.length) {
   }
 })();
 
-// Set breadcrumb from referrer so it always reflects where the user came from
+// Set breadcrumb from referrer so it always reflects where the user came from.
+// When arriving via Prev/Next (referrer is another tag page), use the saved
+// gallery URL from sessionStorage so Back always returns to the source page.
 (function() {
-  const ref = document.referrer;
   const link = document.getElementById('back-link');
-  if (!ref || !link) return;
+  if (!link) return;
 
-  const url = new URL(ref);
-  const path = url.pathname;
+  const ref = document.referrer;
+  let refUrl = null;
+  try { if (ref) refUrl = new URL(ref); } catch (_) {}
+
+  const isTagReferrer = refUrl && refUrl.origin === location.origin
+    && refUrl.pathname.startsWith('/tag/');
+
+  if (isTagReferrer) {
+    const savedBack = sessionStorage.getItem('argus_nav_back');
+    if (savedBack) {
+      try {
+        const u = new URL(savedBack);
+        const labels = { '/': 'Dashboard', '/detect': 'Detect', '/review': 'Review',
+                         '/unidentified': 'Unidentified', '/images': 'Images' };
+        link.textContent = '← ' + (labels[u.pathname] || 'Back');
+        link.href = savedBack;
+      } catch (_) {
+        link.href = '/images';
+      }
+    } else {
+      link.textContent = '← Images';
+      link.href = '/images';
+    }
+    return;
+  }
+
+  if (!refUrl) return;
+
+  const path = refUrl.pathname;
 
   // Prefer history.back() so the previous gallery is restored from the browser's
   // bfcache — scroll position AND lazily-loaded rows intact — instead of a fresh
-  // load that resets to the top. Falls through to the href (set below) when there
-  // is no in-app history to return to (opened directly or in a new tab).
-  if (url.origin === location.origin && history.length > 1) {
+  // load that resets to the top.
+  if (refUrl.origin === location.origin && history.length > 1) {
     link.addEventListener('click', e => { e.preventDefault(); history.back(); });
   }
 
@@ -471,9 +498,8 @@ if (FACES.length && OBJECTS.length) {
     '/unidentified': 'Unidentified',
     '/images': 'Images',
   };
-  const label = labels[path] || 'Back';
-  link.textContent = '← ' + label;
-  link.href = url.pathname + url.search;
+  link.textContent = '← ' + (labels[path] || 'Back');
+  link.href = refUrl.pathname + refUrl.search;
 })();
 </script>
 {% endblock %}
