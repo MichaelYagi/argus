@@ -58,7 +58,7 @@
 <div style="display:flex;align-items:center">
   <a id="prev-nav" class="tag-nav" href="#" style="display:none" aria-label="Previous image">&#8249;</a>
   <div id="tag-wrap">
-    <img id="tag-photo" src="{{ image_url }}" alt="" onload="renderBoxes(); document.getElementById('tag-wrap').scrollIntoView({ behavior: 'smooth', block: 'nearest' })">
+    <img id="tag-photo" src="{{ image_url }}" alt="" onload="renderBoxes(); scrollWrapIntoView()">
   </div>
   <a id="next-nav" class="tag-nav" href="#" style="display:none" aria-label="Next image">&#8250;</a>
 </div>
@@ -74,6 +74,17 @@
 const NAT_W = {{ nat_w }}, NAT_H = {{ nat_h }};
 const FACES = {{ faces_json | safe }};
 const OBJECTS = {{ objects_json | safe }};
+
+function scrollWrapIntoView() {
+  requestAnimationFrame(() => {
+    const wrap = document.getElementById('tag-wrap');
+    if (!wrap) return;
+    const r = wrap.getBoundingClientRect();
+    if (r.top < 0 || r.bottom > window.innerHeight) {
+      wrap.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    }
+  });
+}
 
 function renderBoxes() {
   const img = document.getElementById('tag-photo');
