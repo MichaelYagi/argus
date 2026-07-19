@@ -58,7 +58,7 @@
 <div style="display:flex;align-items:center">
   <a id="prev-nav" class="tag-nav" href="#" style="display:none" aria-label="Previous image">&#8249;</a>
   <div id="tag-wrap">
-    <img id="tag-photo" src="{{ image_url }}" alt="" onload="renderBoxes()">
+    <img id="tag-photo" src="{{ image_url }}" alt="" onload="renderBoxes(); document.getElementById('tag-wrap').scrollIntoView({ behavior: 'smooth', block: 'nearest' })">
   </div>
   <a id="next-nav" class="tag-nav" href="#" style="display:none" aria-label="Next image">&#8250;</a>
 </div>
