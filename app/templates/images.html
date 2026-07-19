@@ -110,6 +110,25 @@
 
 {% block scripts %}
 <script>
+// Convert a date-picker value ("YYYY-MM-DD") to a UTC ISO datetime string that
+// represents midnight (endOfDay=false) or 23:59:59 (endOfDay=true) in USER_TZ.
+function localDateToUTC(dateStr, endOfDay) {
+  const tz = window.USER_TZ || 'UTC';
+  const timeStr = endOfDay ? 'T23:59:59' : 'T00:00:00';
+  // Treat the naive local time as UTC to get a reference Date object.
+  const naive = new Date(dateStr + timeStr + 'Z');
+  // Find what local time that UTC instant maps to in the user's tz.
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone: tz, year: 'numeric', month: '2-digit', day: '2-digit',
+    hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false,
+  }).formatToParts(naive);
+  const p = {};
+  for (const { type, value } of parts) if (type !== 'literal') p[type] = +value;
+  // Offset = naive - (local parts treated as UTC) → add it back to get true UTC.
+  const localAsUTC = Date.UTC(p.year, p.month - 1, p.day, p.hour, p.minute, p.second);
+  return new Date(naive.getTime() + (naive.getTime() - localAsUTC)).toISOString().slice(0, 19);
+}
+
 // Gallery
 (() => {
   // Init filter state from URL params so the first gallery load uses them.
@@ -172,8 +191,8 @@
       if (window.filterType === 'no_tagged_faces') params.set('no_tagged_faces', 'true');
       else if (window.filterType === 'no_crops')   params.set('no_crops', 'true');
       else if (window.filterType)                  params.set('type', window.filterType);
-      if (window.filterSince) params.set('since', window.filterSince + 'T00:00:00');
-      if (window.filterUntil) params.set('until', window.filterUntil + 'T23:59:59');
+      if (window.filterSince) params.set('since', localDateToUTC(window.filterSince, false));
+      if (window.filterUntil) params.set('until', localDateToUTC(window.filterUntil, true));
       const resp = await fetch('/api/source-images/ids?' + params);
       if (!resp.ok) return;
       const data = await resp.json();
@@ -315,8 +334,8 @@
       if (window.filterType === 'no_tagged_faces') params.set('no_tagged_faces', 'true');
       else if (window.filterType === 'no_crops')   params.set('no_crops', 'true');
       else if (window.filterType)                  params.set('type', window.filterType);
-      if (window.filterSince) params.set('since', window.filterSince + 'T00:00:00');
-      if (window.filterUntil) params.set('until', window.filterUntil + 'T23:59:59');
+      if (window.filterSince) params.set('since', localDateToUTC(window.filterSince, false));
+      if (window.filterUntil) params.set('until', localDateToUTC(window.filterUntil, true));
       if (window.filterSort && window.filterSort !== 'newest') params.set('sort', window.filterSort);
       const resp = await fetch('/api/source-images?' + params);
       if (!resp.ok) throw new Error('fetch failed');
@@ -431,8 +450,8 @@
     if (window.filterType === 'no_tagged_faces') params.set('no_tagged_faces', 'true');
     else if (window.filterType === 'no_crops')   params.set('no_crops', 'true');
     else if (window.filterType)                  params.set('type', window.filterType);
-    if (window.filterSince) params.set('since', window.filterSince + 'T00:00:00');
-    if (window.filterUntil) params.set('until', window.filterUntil + 'T23:59:59');
+    if (window.filterSince) params.set('since', localDateToUTC(window.filterSince, false));
+    if (window.filterUntil) params.set('until', localDateToUTC(window.filterUntil, true));
     try {
       const resp = await fetch('/api/source-images/count?' + params);
       if (!resp.ok) return;
