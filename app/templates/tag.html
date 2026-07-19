@@ -59,6 +59,7 @@
   <button id="toggle-faces" class="btn btn-ghost tag-toggle active">Faces</button>
   <button id="toggle-objects" class="btn btn-ghost tag-toggle active">Objects</button>
 </div>
+<div id="det-list" style="margin-top:14px"></div>
 {% endblock %}
 
 {% block scripts %}
@@ -269,6 +270,81 @@ document.getElementById('delete-image-btn').addEventListener('click', () => {
   );
 });
 
+// Detection list
+function _esc(s) {
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+function renderDetList() {
+  const el = document.getElementById('det-list');
+  if (!el) return;
+
+  const TH = 'style="padding:5px 12px 5px 0;font-weight:600;border-bottom:2px solid var(--border);white-space:nowrap"';
+  const TD = 'style="padding:6px 12px 6px 0;border-bottom:1px solid var(--border);vertical-align:middle"';
+
+  let html = '';
+
+  if (FACES.length) {
+    html += '<div id="det-faces-section">';
+    html += '<table style="width:100%;border-collapse:collapse;font-size:13px">';
+    html += '<thead><tr>';
+    html += '<th ' + TH + '>Face</th>';
+    html += '<th ' + TH + '>Looks like</th>';
+    html += '<th ' + TH + '>Confidence</th>';
+    html += '<th ' + TH + '>Age</th>';
+    html += '<th ' + TH + '>Gender</th>';
+    html += '</tr></thead><tbody>';
+    FACES.forEach((f, i) => {
+      const rejected = f.review_status === 'rejected';
+      const displayLabel = rejected ? '' : f.label;
+      const looksLike = displayLabel
+        ? _esc(displayLabel) + (f.similarity != null ? ' <span class="muted">' + Math.max(0, f.similarity * 100).toFixed(0) + '%</span>' : '')
+        : '<span class="muted">Unknown</span>';
+      const conf = f.confidence != null ? (f.confidence * 100).toFixed(0) + '%' : '—';
+      const age  = f.age    != null ? f.age : '—';
+      const gen  = f.gender ? f.gender[0].toUpperCase() : '—';
+      html += '<tr style="cursor:pointer" data-id="' + f.id + '">';
+      html += '<td ' + TD + ' style="padding:6px 12px 6px 0;border-bottom:1px solid var(--border);color:var(--accent);font-weight:500">#' + (i + 1) + '</td>';
+      html += '<td ' + TD + '>' + looksLike + '</td>';
+      html += '<td ' + TD + '>' + conf + '</td>';
+      html += '<td ' + TD + '>' + age + '</td>';
+      html += '<td ' + TD + '>' + gen + '</td>';
+      html += '</tr>';
+    });
+    html += '</tbody></table></div>';
+  }
+
+  if (OBJECTS.length) {
+    html += '<div id="det-objects-section"' + (FACES.length ? ' style="display:none"' : '') + '>';
+    html += '<table style="width:100%;border-collapse:collapse;font-size:13px">';
+    html += '<thead><tr>';
+    html += '<th ' + TH + '>#</th>';
+    html += '<th ' + TH + '>Object</th>';
+    html += '<th ' + TH + '>Confidence</th>';
+    html += '</tr></thead><tbody>';
+    OBJECTS.forEach((o, i) => {
+      const conf = o.confidence != null ? (o.confidence * 100).toFixed(0) + '%' : '—';
+      html += '<tr style="cursor:pointer" data-id="' + o.id + '">';
+      html += '<td ' + TD + ' style="padding:6px 12px 6px 0;border-bottom:1px solid var(--border);color:#39f;font-weight:500">' + (i + 1) + '</td>';
+      html += '<td ' + TD + '>' + _esc(o.label || 'object') + '</td>';
+      html += '<td ' + TD + '>' + conf + '</td>';
+      html += '</tr>';
+    });
+    html += '</tbody></table></div>';
+  }
+
+  el.innerHTML = html;
+
+  el.querySelectorAll('tr[data-id]').forEach(row => {
+    row.addEventListener('click', () => {
+      const box = document.querySelector('.t-box[data-id="' + row.dataset.id + '"]');
+      if (box) { box.scrollIntoView({ behavior: 'smooth', block: 'center' }); box.click(); }
+    });
+  });
+}
+
+renderDetList();
+
 // Visibility toggles — only shown when both faces and objects are present
 if (FACES.length && OBJECTS.length) {
   const vis = document.getElementById('vis-toggles');
@@ -276,11 +352,31 @@ if (FACES.length && OBJECTS.length) {
   const wrap = document.getElementById('tag-wrap');
   document.getElementById('toggle-faces').addEventListener('click', function() {
     this.classList.toggle('active');
-    wrap.classList.toggle('hide-faces', !this.classList.contains('active'));
+    const on = this.classList.contains('active');
+    wrap.classList.toggle('hide-faces', !on);
+    const sec = document.getElementById('det-faces-section');
+    if (sec) sec.style.display = on ? '' : 'none';
+    // When switching to faces, hide objects section
+    if (on) {
+      const os = document.getElementById('det-objects-section');
+      if (os) os.style.display = 'none';
+      document.getElementById('toggle-objects').classList.remove('active');
+      wrap.classList.add('hide-objects');
+    }
   });
   document.getElementById('toggle-objects').addEventListener('click', function() {
     this.classList.toggle('active');
-    wrap.classList.toggle('hide-objects', !this.classList.contains('active'));
+    const on = this.classList.contains('active');
+    wrap.classList.toggle('hide-objects', !on);
+    const sec = document.getElementById('det-objects-section');
+    if (sec) sec.style.display = on ? '' : 'none';
+    // When switching to objects, hide faces section
+    if (on) {
+      const fs = document.getElementById('det-faces-section');
+      if (fs) fs.style.display = 'none';
+      document.getElementById('toggle-faces').classList.remove('active');
+      wrap.classList.add('hide-faces');
+    }
   });
 }
 

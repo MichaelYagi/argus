@@ -65,6 +65,8 @@ async def tag_page(source_image_id: int, request: Request):
             "x": r["bbox_x"], "y": r["bbox_y"],
             "w": r["bbox_w"], "h": r["bbox_h"],
             "label": r["identity_label"] or "",
+            "confidence": r["confidence"],
+            "review_status": r["review_status"],
             "similarity": _similarity(r),
             "age": age, "gender": gender, "pose": pose,
         })

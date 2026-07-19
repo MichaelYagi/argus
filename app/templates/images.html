@@ -267,14 +267,22 @@ function localDateToUTC(dateStr, endOfDay) {
       img.alt = '';
       a.appendChild(img);
 
-      if (item.detection_count) {
-        const badge = document.createElement('span');
-        badge.textContent = item.detection_count;
-        badge.title = item.detection_count + ' detection' + (item.detection_count !== 1 ? 's' : '');
-        badge.style.cssText = 'position:absolute;bottom:6px;right:6px;z-index:2;' +
-          'background:rgba(0,0,0,.6);color:#fff;border-radius:99px;padding:1px 7px;' +
-          'font-size:11px;font-weight:600;line-height:16px';
-        a.appendChild(badge);
+      if (item.face_count || item.object_count) {
+        const wrap = document.createElement('div');
+        wrap.style.cssText = 'position:absolute;bottom:6px;right:6px;z-index:2;display:flex;gap:3px;flex-wrap:wrap;justify-content:flex-end';
+        if (item.face_count) {
+          const b = document.createElement('span');
+          b.textContent = item.face_count + (item.face_count === 1 ? ' face' : ' faces');
+          b.style.cssText = 'background:#f93;color:#000;border-radius:99px;padding:1px 7px;font-size:11px;font-weight:600;line-height:16px;white-space:nowrap';
+          wrap.appendChild(b);
+        }
+        if (item.object_count) {
+          const b = document.createElement('span');
+          b.textContent = item.object_count + (item.object_count === 1 ? ' object' : ' objects');
+          b.style.cssText = 'background:#39f;color:#fff;border-radius:99px;padding:1px 7px;font-size:11px;font-weight:600;line-height:16px;white-space:nowrap';
+          wrap.appendChild(b);
+        }
+        a.appendChild(wrap);
       }
 
       const delBtn = document.createElement('button');

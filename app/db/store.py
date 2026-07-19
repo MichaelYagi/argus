@@ -1833,6 +1833,8 @@ def _source_images_inner(
     inner = (
         f"SELECT si.id, si.file_path, si.width, si.height, si.uploaded_at,"
         f" si.image_tags, si.external_ref,"
+        f" COUNT(DISTINCT CASE WHEN d.type = 'face'   THEN d.id END) AS face_count,"
+        f" COUNT(DISTINCT CASE WHEN d.type = 'object' THEN d.id END) AS object_count,"
         f" COUNT(DISTINCT d.id) AS detection_count"
         f" FROM source_images si"
         f" LEFT JOIN detections d ON d.source_image_id = si.id"

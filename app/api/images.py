@@ -90,6 +90,8 @@ async def list_source_images(
         "source_image_url": f"/media/sources/{r['file_path']}?h=300",
         "width": r["width"],
         "height": r["height"],
+        "face_count": r["face_count"],
+        "object_count": r["object_count"],
         "detection_count": r["detection_count"],
         "uploaded_at": r["uploaded_at"],
         "image_tags": json.loads(r["image_tags"]) if r["image_tags"] else [],
