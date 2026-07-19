@@ -173,14 +173,14 @@ window.ArgusGallery = function ArgusGallery(opts) {
       observe();
       requestAnimationFrame(() => {
         const lastId = sessionStorage.getItem('argus_last_viewed');
-        if (lastId && opts.findEl) {
+        sessionStorage.removeItem('argus_last_viewed');
+        // If the user navigated via Prev/Next on the tag page, last viewed differs
+        // from the originally-clicked item — scroll to that element instead of
+        // restoring scrollY (which points to the original item's position).
+        if (lastId && opts.findEl && String(lastId) !== String(savedState.clickedId)) {
           const el = opts.findEl(container, parseInt(lastId, 10));
           if (el) {
-            sessionStorage.removeItem('argus_last_viewed');
-            const r = el.getBoundingClientRect();
-            if (r.top < 0 || r.bottom > window.innerHeight) {
-              el.scrollIntoView({ behavior: 'instant', block: 'center' });
-            }
+            el.scrollIntoView({ behavior: 'instant', block: 'center' });
             return;
           }
         }
@@ -204,13 +204,11 @@ window.ArgusGallery = function ArgusGallery(opts) {
     if (!e.persisted || !opts.findEl) return;
     const lastId = sessionStorage.getItem('argus_last_viewed');
     if (!lastId) return;
-    const el = opts.findEl(container, parseInt(lastId, 10));
-    if (!el) return;
     sessionStorage.removeItem('argus_last_viewed');
-    const r = el.getBoundingClientRect();
-    if (r.top < 0 || r.bottom > window.innerHeight) {
-      el.scrollIntoView({ behavior: 'instant', block: 'center' });
-    }
+    const clickedId = history.state?.[stateKey]?.clickedId;
+    if (String(lastId) === String(clickedId)) return; // bfcache scroll already correct
+    const el = opts.findEl(container, parseInt(lastId, 10));
+    if (el) el.scrollIntoView({ behavior: 'instant', block: 'center' });
   });
 
   let resizeT, lastW = 0;

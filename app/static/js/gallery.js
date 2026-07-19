@@ -481,14 +481,11 @@
       observe();
       requestAnimationFrame(() => {
         const lastId = sessionStorage.getItem('argus_last_viewed');
+        sessionStorage.removeItem('argus_last_viewed');
         if (lastId) {
           const el = container.querySelector('[data-source-id="' + lastId + '"]');
           if (el) {
-            sessionStorage.removeItem('argus_last_viewed');
-            const r = el.getBoundingClientRect();
-            if (r.top < 0 || r.bottom > window.innerHeight) {
-              el.scrollIntoView({ behavior: 'instant', block: 'center' });
-            }
+            el.scrollIntoView({ behavior: 'instant', block: 'center' });
             return;
           }
         }
@@ -504,13 +501,9 @@
     if (!e.persisted) return;
     const lastId = sessionStorage.getItem('argus_last_viewed');
     if (!lastId) return;
-    const el = container.querySelector('[data-source-id="' + lastId + '"]');
-    if (!el) return;
     sessionStorage.removeItem('argus_last_viewed');
-    const r = el.getBoundingClientRect();
-    if (r.top < 0 || r.bottom > window.innerHeight) {
-      el.scrollIntoView({ behavior: 'instant', block: 'center' });
-    }
+    const el = container.querySelector('[data-source-id="' + lastId + '"]');
+    if (el) el.scrollIntoView({ behavior: 'instant', block: 'center' });
   });
 
   // Wire back arrow to history.back() so the dashboard restores scroll on return.
