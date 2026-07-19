@@ -173,12 +173,14 @@
           </div>
 
           ${matched ? `
-          <div style="display:flex;gap:6px;margin-bottom:10px">
+          <div style="display:flex;gap:6px;margin-bottom:10px;align-items:center">
             <button class="btn btn-success" onclick="doConfirm(${item.detection_id})">Yes, this is ${name}</button>
             <button class="btn btn-danger"  onclick="doReject(${item.detection_id})">No, not ${name}</button>
+            <a class="rc-tag-link" href="/tag/${item.source_image_id}?focus=${item.detection_id}" style="font-size:12px;margin-left:4px;white-space:nowrap">View in image</a>
           </div>` : `
-          <div style="margin-bottom:10px">
+          <div style="margin-bottom:10px;display:flex;align-items:center;gap:8px">
             <button class="btn btn-ghost" onclick="doDismiss(${item.detection_id})">Dismiss</button>
+            <a class="rc-tag-link" href="/tag/${item.source_image_id}?focus=${item.detection_id}" style="font-size:12px;white-space:nowrap">View in image</a>
           </div>`}
 
           ${suggestions ? `
@@ -205,6 +207,11 @@
       const id = item.detection_id;
       if (e.target.checked) sel.add(id); else sel.delete(id);
       updateBars();
+    });
+    card.querySelector('.rc-tag-link').addEventListener('click', () => {
+      sessionStorage.removeItem('argus_nav_ids');
+      sessionStorage.setItem('argus_nav_back', location.href);
+      sessionStorage.setItem('argus_nav_depth', '0');
     });
 
     const raInput = card.querySelector('#ra-' + item.detection_id);
