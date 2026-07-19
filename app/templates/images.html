@@ -263,6 +263,7 @@ function localDateToUTC(dateStr, endOfDay) {
         saveState(item.source_image_id);
         sessionStorage.setItem('argus_nav_ids', JSON.stringify(loadedItems.map(i => i.source_image_id)));
         sessionStorage.setItem('argus_nav_back', location.href);
+        sessionStorage.setItem('argus_nav_depth', '0');
       });
 
       const img = document.createElement('img');

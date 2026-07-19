@@ -432,8 +432,8 @@ if (FACES.length && OBJECTS.length) {
 })();
 
 // Set breadcrumb from referrer so it always reflects where the user came from.
-// When arriving via Prev/Next (referrer is another tag page), use the saved
-// gallery URL from sessionStorage so Back always returns to the source page.
+// When navigating via Prev/Next we track how many tag pages deep we are so
+// history.go(-depth) returns to the original gallery with bfcache intact.
 (function() {
   const link = document.getElementById('back-link');
   if (!link) return;
@@ -442,36 +442,40 @@ if (FACES.length && OBJECTS.length) {
   let refUrl = null;
   try { if (ref) refUrl = new URL(ref); } catch (_) {}
 
-  const isTagReferrer = refUrl && refUrl.origin === location.origin
-    && refUrl.pathname.startsWith('/tag/');
+  const isSameOrigin = refUrl && refUrl.origin === location.origin;
+  const refIsImages  = isSameOrigin && refUrl.pathname === '/images';
+  const refIsTag     = isSameOrigin && refUrl.pathname.startsWith('/tag/');
+  const savedBack    = sessionStorage.getItem('argus_nav_back');
 
-  if (isTagReferrer) {
-    const savedBack = sessionStorage.getItem('argus_nav_back');
-    if (savedBack) {
-      try {
-        const u = new URL(savedBack);
-        const labels = { '/': 'Dashboard', '/detect': 'Detect', '/review': 'Review',
-                         '/unidentified': 'Unidentified', '/images': 'Images' };
-        link.textContent = '← ' + (labels[u.pathname] || 'Back');
-        link.href = savedBack;
-      } catch (_) {
-        link.href = '/images';
-      }
-    } else {
+  if (savedBack && (refIsImages || refIsTag)) {
+    // Each tag page load increments the depth counter so history.go(-depth)
+    // steps back exactly far enough to hit the gallery (bfcache restores scroll).
+    const depth = parseInt(sessionStorage.getItem('argus_nav_depth') || '0', 10) + 1;
+    sessionStorage.setItem('argus_nav_depth', String(depth));
+
+    const PAGE_LABELS = { '/': 'Dashboard', '/detect': 'Detect', '/review': 'Review',
+                          '/unidentified': 'Unidentified', '/images': 'Images' };
+    try {
+      const u = new URL(savedBack);
+      link.textContent = '← ' + (PAGE_LABELS[u.pathname] || 'Back');
+    } catch (_) {
       link.textContent = '← Images';
-      link.href = '/images';
     }
+    link.href = savedBack;
+    link.addEventListener('click', e => { e.preventDefault(); history.go(-depth); });
     return;
   }
 
-  if (!refUrl) return;
+  // Not in a gallery-nav session — clear any stale nav state.
+  sessionStorage.removeItem('argus_nav_back');
+  sessionStorage.removeItem('argus_nav_depth');
+  sessionStorage.removeItem('argus_nav_ids');
 
+  if (!refUrl) return;
   const path = refUrl.pathname;
 
-  // Prefer history.back() so the previous gallery is restored from the browser's
-  // bfcache — scroll position AND lazily-loaded rows intact — instead of a fresh
-  // load that resets to the top.
-  if (refUrl.origin === location.origin && history.length > 1) {
+  // Prefer history.back() so the previous page is restored from bfcache.
+  if (isSameOrigin && history.length > 1) {
     link.addEventListener('click', e => { e.preventDefault(); history.back(); });
   }
 
@@ -490,15 +494,9 @@ if (FACES.length && OBJECTS.length) {
     return;
   }
 
-  // Any other page — use its title or a sensible label
-  const labels = {
-    '/': 'Dashboard',
-    '/detect': 'Detect',
-    '/review': 'Review',
-    '/unidentified': 'Unidentified',
-    '/images': 'Images',
-  };
-  link.textContent = '← ' + (labels[path] || 'Back');
+  const PAGE_LABELS = { '/': 'Dashboard', '/detect': 'Detect', '/review': 'Review',
+                        '/unidentified': 'Unidentified', '/images': 'Images' };
+  link.textContent = '← ' + (PAGE_LABELS[path] || 'Back');
   link.href = refUrl.pathname + refUrl.search;
 })();
 </script>
