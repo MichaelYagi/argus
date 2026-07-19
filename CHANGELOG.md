@@ -5,6 +5,24 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [0.1.0-alpha.15] — 2026-07-19
+
+### Added
+
+- **Gallery — last-viewed thumbnail indicator.** When returning to any gallery (Images, identity gallery, Unidentified) from a tag page, the thumbnail of the last tag page visited is highlighted with a 2-second fading accent-color border ring. Applied via a `.last-viewed` CSS class and `::after` pseudo-element so it does not interfere with the existing `.selected` box-shadow.
+- **Tag page — adjacent image preloading.** When Prev/Next arrows are visible, the adjacent source images are fetched and preloaded with `new Image()` in the background immediately after the arrows render. Backed by a new `GET /api/images/{source_image_id}/url` endpoint. Navigation to the next or previous image feels instant because the image data is already in the browser cache.
+- **Review queue — "View in image" link.** Each review card (both Suggested matches and No match sections) now includes a "View in image" link that opens the full tag page for that source image with the detection bbox focused and highlighted. The Back button on the tag page returns directly to `/review`. Previously the only way to see context beyond the crop thumbnail was the source-image zoom modal.
+- **`GET /api/images/{source_image_id}/url`.** Returns `{"image_url": "..."}` for the given source image. Scoped to the caller's user and environment. Used by the tag-page preload; available to API clients as a lightweight alternative to `GET /api/images/{id}/faces` when only the image URL is needed.
+
+### Fixed
+
+- **Tag page Prev/Next dead-end from identity gallery and Unidentified page.** The breadcrumb IIFE checked `referrer === /images` to decide whether to enter gallery-nav mode. Referrers from `/identities/{id}` and `/unidentified` did not match, so the IIFE fell into the else branch and immediately cleared `argus_nav_ids` — one tag visit showed arrows, the next had none. The check now matches any same-origin referrer whose path equals the saved `argus_nav_back` URL's path, covering all gallery types generically.
+- **Identity gallery Prev/Next looping on the same image.** The nav-ids list was built from `allItems.map(i => i.source_image_id)`, where `allItems` is a detection list — multiple crops from one source image produced duplicate IDs. `indexOf(CUR)` found position 0, next was position 1 (same ID), and clicking Next navigated back to the same tag page. The list is now deduplicated with `[...new Set(...)]`.
+- **Gallery scroll restoration unreliable on back-navigation.** `history.scrollRestoration` defaults to `'auto'`, causing the browser's own scroll restoration to fire asynchronously and overwrite the `window.scrollTo` calls in the gallery's rAF/setTimeout restore path. Set `history.scrollRestoration = 'manual'` in `gallery-framework.js` and `gallery.js` so the galleries own scroll timing entirely. The inner nested `requestAnimationFrame` was replaced with `setTimeout(0)` (fires in the same task after layout is committed, after any browser-triggered scroll restoration completes).
+- **Unidentified page — stale nav state shown as Prev/Next on tag page.** Clicking "Tag" on the Unidentified page previously set `argus_nav_ids`, causing Prev/Next arrows to appear on the resulting tag page. The click handler now explicitly removes all three nav keys (`argus_nav_ids`, `argus_nav_back`, `argus_nav_depth`), clearing any stale state from a prior gallery visit.
+
+---
+
 ## [0.1.0-alpha.14] — 2026-07-18
 
 ### Added
@@ -518,6 +536,9 @@ Initial alpha release.
 
 ---
 
+[0.1.0-alpha.15]: https://github.com/MichaelYagi/argus/compare/v0.1.0-alpha.14...v0.1.0-alpha.15
+[0.1.0-alpha.14]: https://github.com/MichaelYagi/argus/compare/v0.1.0-alpha.13...v0.1.0-alpha.14
+[0.1.0-alpha.13]: https://github.com/MichaelYagi/argus/compare/v0.1.0-alpha.12...v0.1.0-alpha.13
 [0.1.0-alpha.12]: https://github.com/MichaelYagi/argus/compare/v0.1.0-alpha.11...v0.1.0-alpha.12
 [0.1.0-alpha.11]: https://github.com/MichaelYagi/argus/compare/v0.1.0-alpha.10...v0.1.0-alpha.11
 [0.1.0-alpha.10]: https://github.com/MichaelYagi/argus/compare/v0.1.0-alpha.9...v0.1.0-alpha.10

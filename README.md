@@ -11,7 +11,7 @@ Self-hosted face and object recognition you can both **use and build on** — a 
 - Review queue with ranked match suggestions, configurable auto-confirm threshold, and auto-enroll on confirm
 - Suggested people — clusters unlabeled faces into proposed identities; name a cluster to enroll everyone in it at once
 - Justified infinite-scroll galleries per identity with cover photo selection and bulk operations
-- Tag page — full source image with clickable face and object bbox overlays for labelling
+- Tag page — full source image with clickable face and object bbox overlays for labelling; Prev/Next navigation across a gallery sequence with adjacent-image preloading; last-viewed thumbnail highlighted on return
 - Test page — check whether an image contains people or objects, and who each face looks like, without storing or enrolling anything (read-only)
 - Integration helpers — opaque `external_ref` correlation ids, a change feed for delta sync, webhooks, a capabilities manifest with hardware reporting, and batch label/read endpoints
 - Bulk detection with optional async mode — submit many images in one call; fire-and-forget with a job id and webhook notification on completion
@@ -163,6 +163,7 @@ Detections below the match threshold go into a review queue (`/review`). Each it
 - The current match (if any) and its similarity score
 - Ranked suggestions from enrolled faces
 - Actions: confirm, reject, reassign, or dismiss
+- **View in image** link — opens the full tag page for the source photo with the detection bbox highlighted; the Back button returns to the review queue
 
 Key thresholds (all configurable in **Settings**):
 - `face.match_threshold` (default 0.5) — minimum similarity to assign a match at all. Below this, the face is stored but left unidentified.
