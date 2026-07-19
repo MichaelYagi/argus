@@ -456,6 +456,13 @@ if (FACES.length && OBJECTS.length) {
     el.href = '/tag/' + nextId;
     el.style.display = 'flex';
   }
+  [prevId, nextId].forEach(id => {
+    if (!id) return;
+    fetch('/api/images/' + id + '/url')
+      .then(r => r.ok ? r.json() : null)
+      .then(d => { if (d) new Image().src = d.image_url; })
+      .catch(() => {});
+  });
 })();
 
 // Set breadcrumb from referrer so it always reflects where the user came from.

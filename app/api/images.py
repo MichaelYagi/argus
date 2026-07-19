@@ -203,6 +203,18 @@ async def image_faces(
     }
 
 
+@router.get("/api/images/{source_image_id}/url")
+async def get_source_image_url(
+    source_image_id: int,
+    user_id: int = Depends(require_auth),
+    environment_id: int = Depends(require_env_id),
+):
+    src = store.get_source_image(source_image_id, user_id, environment_id)
+    if not src:
+        raise HTTPException(404, "Source image not found")
+    return {"image_url": f"/media/sources/{src['file_path']}"}
+
+
 @router.delete("/api/images/{source_image_id}", status_code=200)
 async def delete_source_image(
     source_image_id: int,
