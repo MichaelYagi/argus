@@ -315,7 +315,7 @@ function renderDetList() {
   }
 
   if (OBJECTS.length) {
-    html += '<div id="det-objects-section"' + (FACES.length ? ' style="display:none"' : '') + '>';
+    html += '<div id="det-objects-section">';
     html += '<table style="width:100%;border-collapse:collapse;font-size:13px">';
     html += '<thead><tr>';
     html += '<th ' + TH + '>#</th>';
@@ -356,13 +356,6 @@ if (FACES.length && OBJECTS.length) {
     wrap.classList.toggle('hide-faces', !on);
     const sec = document.getElementById('det-faces-section');
     if (sec) sec.style.display = on ? '' : 'none';
-    // When switching to faces, hide objects section
-    if (on) {
-      const os = document.getElementById('det-objects-section');
-      if (os) os.style.display = 'none';
-      document.getElementById('toggle-objects').classList.remove('active');
-      wrap.classList.add('hide-objects');
-    }
   });
   document.getElementById('toggle-objects').addEventListener('click', function() {
     this.classList.toggle('active');
@@ -370,13 +363,6 @@ if (FACES.length && OBJECTS.length) {
     wrap.classList.toggle('hide-objects', !on);
     const sec = document.getElementById('det-objects-section');
     if (sec) sec.style.display = on ? '' : 'none';
-    // When switching to objects, hide faces section
-    if (on) {
-      const fs = document.getElementById('det-faces-section');
-      if (fs) fs.style.display = 'none';
-      document.getElementById('toggle-faces').classList.remove('active');
-      wrap.classList.add('hide-faces');
-    }
   });
 }
 
