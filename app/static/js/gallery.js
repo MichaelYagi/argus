@@ -47,6 +47,7 @@
   const allItems = [];
   const selected = new Set();
   const STATE_KEY = '_argus_gallery_' + identityId;
+  history.scrollRestoration = 'manual';
 
   function saveState() {
     try {
@@ -196,7 +197,7 @@
     tagLink.addEventListener('click', e => {
       e.stopPropagation();
       saveState();
-      sessionStorage.setItem('argus_nav_ids', JSON.stringify(allItems.map(i => i.source_image_id)));
+      sessionStorage.setItem('argus_nav_ids', JSON.stringify([...new Set(allItems.map(i => i.source_image_id))]));
       sessionStorage.setItem('argus_nav_back', location.href);
       sessionStorage.setItem('argus_nav_depth', '0');
     });
@@ -485,7 +486,7 @@
       if (loadingEl) loadingEl.hidden = true;
       if (!hasMore) sentinel.remove();
       observe();
-      requestAnimationFrame(() => {
+      setTimeout(() => {
         const lastId = sessionStorage.getItem('argus_last_viewed');
         sessionStorage.removeItem('argus_last_viewed');
         if (lastId) {
@@ -498,7 +499,7 @@
           }
         }
         if (savedState.scrollY) window.scrollTo(0, savedState.scrollY);
-      });
+      }, 0);
     });
   } else {
     observe();
@@ -511,11 +512,12 @@
     if (!lastId) return;
     sessionStorage.removeItem('argus_last_viewed');
     const el = container.querySelector('[data-source-id="' + lastId + '"]');
-    if (el) {
+    if (!el) return;
+    setTimeout(() => {
       const r = el.getBoundingClientRect();
       const top = r.top + window.scrollY - Math.max(0, (window.innerHeight - r.height) / 2);
       window.scrollTo(0, Math.max(0, top));
-    }
+    }, 0);
   });
 
   // Wire back arrow to history.back() so the dashboard restores scroll on return.

@@ -157,6 +157,8 @@ window.ArgusGallery = function ArgusGallery(opts) {
     }, { rootMargin: '300px' }).observe(sentinel);
   }
 
+  history.scrollRestoration = 'manual';
+
   const navType    = performance.getEntriesByType('navigation')[0]?.type;
   const savedState = navType === 'back_forward' ? (history.state?.[stateKey] ?? null) : null;
 
@@ -171,12 +173,9 @@ window.ArgusGallery = function ArgusGallery(opts) {
       if (loadingEl) loadingEl.hidden = true;
       if (!hasMore) sentinel.remove();
       observe();
-      requestAnimationFrame(() => {
+      setTimeout(() => {
         const lastId = sessionStorage.getItem('argus_last_viewed');
         sessionStorage.removeItem('argus_last_viewed');
-        // If the user navigated via Prev/Next on the tag page, last viewed differs
-        // from the originally-clicked item — scroll to that element instead of
-        // restoring scrollY (which points to the original item's position).
         if (lastId && opts.findEl && String(lastId) !== String(savedState.clickedId)) {
           const el = opts.findEl(container, parseInt(lastId, 10));
           if (el) {
@@ -192,7 +191,7 @@ window.ArgusGallery = function ArgusGallery(opts) {
           const el = opts.findEl(container, savedState.clickedId);
           if (el) el.scrollIntoView({ block: 'center' });
         }
-      });
+      }, 0);
     });
   } else {
     (async () => {
@@ -208,13 +207,14 @@ window.ArgusGallery = function ArgusGallery(opts) {
     if (!lastId) return;
     sessionStorage.removeItem('argus_last_viewed');
     const clickedId = history.state?.[stateKey]?.clickedId;
-    if (String(lastId) === String(clickedId)) return; // bfcache scroll already correct
+    if (String(lastId) === String(clickedId)) return;
     const el = opts.findEl(container, parseInt(lastId, 10));
-    if (el) {
+    if (!el) return;
+    setTimeout(() => {
       const r = el.getBoundingClientRect();
       const top = r.top + window.scrollY - Math.max(0, (window.innerHeight - r.height) / 2);
       window.scrollTo(0, Math.max(0, top));
-    }
+    }, 0);
   });
 
   let resizeT, lastW = 0;

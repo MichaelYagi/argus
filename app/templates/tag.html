@@ -470,11 +470,14 @@ if (FACES.length && OBJECTS.length) {
   try { if (ref) refUrl = new URL(ref); } catch (_) {}
 
   const isSameOrigin = refUrl && refUrl.origin === location.origin;
-  const refIsImages  = isSameOrigin && refUrl.pathname === '/images';
-  const refIsTag     = isSameOrigin && refUrl.pathname.startsWith('/tag/');
-  const savedBack    = sessionStorage.getItem('argus_nav_back');
+  const refIsTag  = isSameOrigin && refUrl && refUrl.pathname.startsWith('/tag/');
+  const savedBack = sessionStorage.getItem('argus_nav_back');
+  let refMatchesSavedBack = false;
+  if (savedBack && isSameOrigin && refUrl) {
+    try { refMatchesSavedBack = new URL(savedBack).pathname === refUrl.pathname; } catch (_) {}
+  }
 
-  if (savedBack && (refIsImages || refIsTag)) {
+  if (savedBack && (refMatchesSavedBack || refIsTag)) {
     // Each tag page load increments the depth counter so history.go(-depth)
     // steps back exactly far enough to hit the gallery (bfcache restores scroll).
     const depth = parseInt(sessionStorage.getItem('argus_nav_depth') || '0', 10) + 1;
