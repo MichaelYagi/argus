@@ -76,14 +76,14 @@ const FACES = {{ faces_json | safe }};
 const OBJECTS = {{ objects_json | safe }};
 
 function scrollWrapIntoView() {
-  requestAnimationFrame(() => {
+  setTimeout(() => {
     const wrap = document.getElementById('tag-wrap');
     if (!wrap) return;
     const r = wrap.getBoundingClientRect();
     if (r.top < 0 || r.bottom > window.innerHeight) {
-      wrap.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+      window.scrollTo({ top: Math.max(0, window.scrollY + r.top - 8), behavior: 'smooth' });
     }
-  });
+  }, 0);
 }
 
 function renderBoxes() {
