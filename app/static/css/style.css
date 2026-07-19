@@ -567,7 +567,7 @@ input[type=range] { width: 150px; cursor: pointer; }
   width: 36px; align-self: stretch; flex-shrink: 0;
   color: var(--muted); font-size: 40px; line-height: 1; text-decoration: none;
   user-select: none; border-radius: var(--radius); transition: background .15s, color .15s; }
-.tag-nav:hover { background: var(--hover); color: var(--text); }
+.tag-nav:hover { background: var(--hover); color: var(--text); text-decoration: none; }
 .tag-toggle { font-size: 12px; padding: 3px 10px; opacity: 0.4; }
 .tag-toggle.active { opacity: 1; }
 
