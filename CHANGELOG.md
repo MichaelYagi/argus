@@ -5,6 +5,33 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [0.1.0-alpha.14] — 2026-07-18
+
+### Added
+
+- **Images page — sort.** Sort dropdown with four options: Newest first (default), Oldest first, Most detections, Fewest detections. Sort is reflected in the URL and bookmarkable.
+- **Images page — multi-identity filter.** The identity filter now supports multiple people simultaneously (AND semantics — images must contain all selected identities). Up to five identity chips can be added.
+- **Images page — "No crops" filter.** New filter option showing only source images that have no detection crops on disk.
+- **Images page — result count.** Live count of images matching the current filters, shown inside the identity filter field. Updates on Apply, Clear, and popstate.
+- **Images page — Select all.** Button above the gallery selects all images matching the current filters (including pages not yet loaded), using a new `/api/source-images/ids` endpoint. Button hides after selecting; reappears after clearing selection via the batch bar.
+- **Images page — date range timezone conversion.** The since/until date picker now converts the picked local date to UTC using the user's configured timezone (`Date & Time → Timezone` in Account settings) before sending to the API. Previously the filter treated picked dates as UTC, which caused off-by-one-day errors for users outside UTC.
+- **`GET /api/storage`.** New endpoint returning the size of the Argus data directory (`DATA_PATH`) in bytes and human-readable form. Backed by the same 5-minute cached scan as the storage stat on the identities page.
+- **`GET /api/source-images/count`.** Returns the total count of source images matching a given filter set (same parameters as `GET /api/source-images`). Used by the Images page result counter.
+- **`GET /api/source-images/ids`.** Returns all source image IDs matching a given filter set with no pagination. Used by the Images page select-all to select across unloaded pages.
+
+### Changed
+
+- **Storage stat scans full data directory.** `_compute_storage()` previously summed only the `crops/` and `sources/` subdirectories. It now scans the entire `DATA_PATH` directory, so models, the database, and any other Argus-managed files are included in the storage figure.
+- **Images page moved under Dashboard in navigation.** Previously a sub-item under Review; now a sub-item under Dashboard in both desktop sidebar and mobile menu. The page is a general browse/search/bulk-delete tool, not a review workflow tool.
+- **`GET /api/source-images` `identity_id` now repeatable.** The parameter was a single integer; it now accepts multiple values (`?identity_id=1&identity_id=2`) with AND semantics. Single-value callers are unaffected.
+
+### Internal
+
+- `_source_images_inner()` CTE builder extracted from `list_source_images` and shared by the new `count_source_images_filtered` and `list_source_image_ids` store functions to eliminate query duplication.
+- `get_dashboard_stats` returns combined all-environment totals (`all_people`, `all_objects`, `all_images`, `all_detections`, `all_unidentified`, `all_pending_review`) alongside current-environment counts. Not yet surfaced in the dashboard UI.
+
+---
+
 ## [0.1.0-alpha.13] — 2026-07-15
 
 ### Added
