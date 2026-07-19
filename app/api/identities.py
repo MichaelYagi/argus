@@ -15,7 +15,7 @@ from app.api._utils import delete_crops, delete_sources, dir_size, fmt_bytes, gc
 from app.core import settings_cache
 from app.core import webhook as _webhook
 from app.core.auth import require_auth, require_env_id
-from app.core.paths import crops_dir, sources_dir
+from app.core.paths import data_dir
 from app.db import store
 
 logger = logging.getLogger(__name__)
@@ -40,9 +40,9 @@ _storage_lock = asyncio.Lock()
 
 def _compute_storage() -> tuple[str, str | None, int, int | None]:
     t0 = _time.monotonic()
-    used = dir_size(crops_dir()) + dir_size(sources_dir())
+    used = dir_size(data_dir())
     try:
-        free = shutil.disk_usage(crops_dir()).free
+        free = shutil.disk_usage(data_dir()).free
         free_str = fmt_bytes(free)
     except OSError:
         free = None

@@ -9,7 +9,9 @@
   <a href="/detect" class="btn btn-ghost" style="margin-left:8px">Detect</a>
 </div>
 
-<div class="stat-grid" id="stats">
+<div style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.06em;
+     color:var(--muted);margin-bottom:6px">This environment</div>
+<div class="stat-grid" id="stats" style="margin-bottom:16px">
   <div class="stat stat-link" onclick="switchTab('face')" title="View people">
     <div class="num" id="s-faces">—</div><div class="lbl">People</div></div>
   <div class="stat stat-link" onclick="switchTab('object')" title="View objects">
@@ -26,6 +28,23 @@
     <div class="num" id="s-storage">—</div><div class="lbl">Storage used</div></div>
   <div class="stat" id="s-free-wrap" style="display:none">
     <div class="num" id="s-storage-free">—</div><div class="lbl">Storage free</div></div>
+</div>
+
+<div style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.06em;
+     color:var(--muted);margin-bottom:6px">All environments</div>
+<div class="stat-grid" style="margin-bottom:24px">
+  <div class="stat">
+    <div class="num" id="s-all-faces">—</div><div class="lbl">People</div></div>
+  <div class="stat">
+    <div class="num" id="s-all-objects">—</div><div class="lbl">Objects</div></div>
+  <div class="stat">
+    <div class="num" id="s-all-images">—</div><div class="lbl">Images processed</div></div>
+  <div class="stat">
+    <div class="num" id="s-all-review">—</div><div class="lbl">Pending review</div></div>
+  <div class="stat">
+    <div class="num" id="s-all-unidentified">—</div><div class="lbl">Unidentified</div></div>
+  <div class="stat">
+    <div class="num" id="s-all-detections">—</div><div class="lbl">Total detections</div></div>
 </div>
 
 <div class="tab-bar">
@@ -336,6 +355,12 @@ async function refreshStats() {
     document.getElementById('s-storage-free').textContent = d.storage_free;
     document.getElementById('s-free-wrap').style.display = '';
   }
+  document.getElementById('s-all-faces').textContent        = d.all_people         ?? 0;
+  document.getElementById('s-all-objects').textContent      = d.all_objects        ?? 0;
+  document.getElementById('s-all-images').textContent       = d.all_images         ?? 0;
+  document.getElementById('s-all-detections').textContent   = d.all_detections     ?? 0;
+  document.getElementById('s-all-review').textContent       = d.all_pending_review ?? 0;
+  document.getElementById('s-all-unidentified').textContent = d.all_unidentified   ?? 0;
   setTabBadge('face',   d.people  ?? 0);
   setTabBadge('object', d.objects ?? 0);
 }

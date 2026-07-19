@@ -1996,44 +1996,63 @@ def count_pending_review(user_id: int, environment_id: int | None = None) -> int
 
 
 def get_dashboard_stats(user_id: int, environment_id: int | None = None) -> dict:
-    """All dashboard counts in a single DB connection — identities, images, detections."""
+    """All dashboard counts in a single DB connection — identities, images, detections.
+    Returns counts for the current environment and combined totals across all environments."""
     tc = time.monotonic()
     with _connect() as conn:
         tq = time.monotonic()
         env_id = _resolve_env(conn, user_id, environment_id)
-        id_row = conn.execute(
-            """SELECT
-                   SUM(CASE WHEN type = 'face'   THEN 1 ELSE 0 END) AS people,
-                   SUM(CASE WHEN type = 'object' THEN 1 ELSE 0 END) AS objects
-               FROM identities WHERE user_id = ? AND environment_id = ?""",
-            (user_id, env_id),
-        ).fetchone()
-        images = conn.execute(
+
+        def _id_row(extra: str, params: list):
+            return conn.execute(
+                f"""SELECT SUM(CASE WHEN type = 'face' THEN 1 ELSE 0 END) AS people,
+                           SUM(CASE WHEN type = 'object' THEN 1 ELSE 0 END) AS objects
+                    FROM identities WHERE user_id = ?{extra}""",
+                params,
+            ).fetchone()
+
+        def _det_row(extra: str, params: list):
+            return conn.execute(
+                f"""SELECT COUNT(*) AS detections,
+                           SUM(CASE WHEN identity_id IS NULL AND review_status = 'pending'
+                                        AND ignored = 0 THEN 1 ELSE 0 END) AS unidentified,
+                           SUM(CASE WHEN (review_status = 'rejected'
+                                           OR (review_status = 'pending'
+                                               AND (identity_id IS NOT NULL OR reviewed_at IS NULL)))
+                                        AND type = 'face' AND ignored = 0 THEN 1 ELSE 0 END) AS pending_review
+                    FROM detections WHERE user_id = ?{extra}""",
+                params,
+            ).fetchone()
+
+        env_ids   = _id_row(" AND environment_id = ?", [user_id, env_id])
+        env_imgs  = conn.execute(
             "SELECT COUNT(*) FROM source_images WHERE user_id = ? AND environment_id = ?",
             (user_id, env_id),
         ).fetchone()[0]
-        det_row = conn.execute(
-            """SELECT
-                   COUNT(*) AS detections,
-                   SUM(CASE WHEN identity_id IS NULL AND review_status = 'pending'
-                                AND ignored = 0 THEN 1 ELSE 0 END) AS unidentified,
-                   SUM(CASE WHEN (review_status = 'rejected'
-                                    OR (review_status = 'pending'
-                                        AND (identity_id IS NOT NULL OR reviewed_at IS NULL)))
-                                AND type = 'face' AND ignored = 0 THEN 1 ELSE 0 END) AS pending_review
-               FROM detections WHERE user_id = ? AND environment_id = ?""",
-            (user_id, env_id),
-        ).fetchone()
+        env_dets  = _det_row(" AND environment_id = ?", [user_id, env_id])
+
+        all_ids   = _id_row("", [user_id])
+        all_imgs  = conn.execute(
+            "SELECT COUNT(*) FROM source_images WHERE user_id = ?", (user_id,),
+        ).fetchone()[0]
+        all_dets  = _det_row("", [user_id])
+
         tk = time.monotonic()
         log.debug("get_dashboard_stats: connect=%.0fms queries=%.0fms",
                   (tq - tc) * 1000, (tk - tq) * 1000)
         return {
-            "people":         id_row["people"]         or 0,
-            "objects":        id_row["objects"]        or 0,
-            "images":         images                   or 0,
-            "detections":     det_row["detections"]    or 0,
-            "unidentified":   det_row["unidentified"]  or 0,
-            "pending_review": det_row["pending_review"] or 0,
+            "people":             env_ids["people"]          or 0,
+            "objects":            env_ids["objects"]         or 0,
+            "images":             env_imgs                   or 0,
+            "detections":         env_dets["detections"]     or 0,
+            "unidentified":       env_dets["unidentified"]   or 0,
+            "pending_review":     env_dets["pending_review"] or 0,
+            "all_people":         all_ids["people"]          or 0,
+            "all_objects":        all_ids["objects"]         or 0,
+            "all_images":         all_imgs                   or 0,
+            "all_detections":     all_dets["detections"]     or 0,
+            "all_unidentified":   all_dets["unidentified"]   or 0,
+            "all_pending_review": all_dets["pending_review"] or 0,
         }
 
 

@@ -106,6 +106,15 @@ async def health():
     }
 
 
+@router.get("/api/storage")
+async def storage():
+    """Size of the Argus data directory in bytes."""
+    from app.api.identities import _cached_storage
+    from app.core.paths import data_dir
+    used_str, _, used_bytes, _ = await _cached_storage()
+    return {"data_path": str(data_dir()), "storage_bytes": used_bytes, "storage": used_str}
+
+
 # Formats Argus can decode (Pillow-detected on input; never trusts extension).
 _SUPPORTED_FORMATS = ["JPEG", "PNG", "WEBP", "BMP", "GIF", "TIFF", "HEIC", "HEIF", "AVIF", "MPO"]
 
