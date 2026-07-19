@@ -55,10 +55,12 @@
   </div>
 </div>
 
-<div id="tag-wrap">
-  <a id="prev-nav" class="tag-nav tag-nav-prev" href="#" style="display:none" aria-label="Previous image">&#8249;</a>
-  <img id="tag-photo" src="{{ image_url }}" alt="" onload="renderBoxes()">
-  <a id="next-nav" class="tag-nav tag-nav-next" href="#" style="display:none" aria-label="Next image">&#8250;</a>
+<div style="display:flex;align-items:center">
+  <a id="prev-nav" class="tag-nav" href="#" style="display:none" aria-label="Previous image">&#8249;</a>
+  <div id="tag-wrap">
+    <img id="tag-photo" src="{{ image_url }}" alt="" onload="renderBoxes()">
+  </div>
+  <a id="next-nav" class="tag-nav" href="#" style="display:none" aria-label="Next image">&#8250;</a>
 </div>
 <div id="vis-toggles" style="display:none;gap:8px;margin-top:10px">
   <button id="toggle-faces" class="btn btn-ghost tag-toggle active">Faces</button>

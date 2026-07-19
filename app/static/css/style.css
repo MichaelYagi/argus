@@ -563,14 +563,11 @@ input[type=range] { width: 150px; cursor: pointer; }
 .t-box:hover .t-tip { display: block; }
 #tag-wrap.hide-faces .t-box:not(.object) { display: none; }
 #tag-wrap.hide-objects .t-box.object { display: none; }
-.tag-nav { position: absolute; top: 0; bottom: 0; width: 52px; z-index: 20;
-  align-items: center; justify-content: center;
-  color: #fff; font-size: 44px; line-height: 1; text-decoration: none;
-  user-select: none; transition: background .15s; }
-.tag-nav-prev { left: 0; background: linear-gradient(to right, rgba(0,0,0,.35), transparent); }
-.tag-nav-next { right: 0; background: linear-gradient(to left,  rgba(0,0,0,.35), transparent); }
-.tag-nav-prev:hover { background: linear-gradient(to right, rgba(0,0,0,.6), transparent); }
-.tag-nav-next:hover { background: linear-gradient(to left,  rgba(0,0,0,.6), transparent); }
+.tag-nav { display: flex; align-items: center; justify-content: center;
+  width: 36px; align-self: stretch; flex-shrink: 0;
+  color: var(--muted); font-size: 40px; line-height: 1; text-decoration: none;
+  user-select: none; border-radius: var(--radius); transition: background .15s, color .15s; }
+.tag-nav:hover { background: var(--hover); color: var(--text); }
 .tag-toggle { font-size: 12px; padding: 3px 10px; opacity: 0.4; }
 .tag-toggle.active { opacity: 1; }
 
