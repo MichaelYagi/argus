@@ -125,7 +125,7 @@ def test_environments_isolated_between_users(client):
 
 
 def test_delete_environment_preserves_file_shared_with_other_env(client):
-    """Deleting an environment must not queue a source file for deletion when another env row references the same file."""
+    """Deleting an environment must not queue a source file for deletion when another env references it."""
     user_id, _ = _create_user_and_key("env-del-test")
 
     env0_id = store.get_default_environment_id(user_id) or 0
@@ -138,7 +138,8 @@ def test_delete_environment_preserves_file_shared_with_other_env(client):
     for env_id, iid in [(env0_id, iid0), (env1_id, iid1)]:
         with store._connect() as conn:
             conn.execute(
-                "INSERT OR IGNORE INTO source_images (user_id, environment_id, file_path, width, height) VALUES (?, ?, ?, 640, 480)",
+                "INSERT OR IGNORE INTO source_images"
+                " (user_id, environment_id, file_path, width, height) VALUES (?, ?, ?, 640, 480)",
                 (user_id, env_id, shared_file),
             )
             src_id = conn.execute(

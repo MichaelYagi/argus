@@ -258,7 +258,8 @@ def _insert_source_and_detection(user_id: int, env_id: int, identity_id: int, fi
     """Insert a source_images row + one detection in a specific environment."""
     with store._connect() as conn:
         conn.execute(
-            "INSERT OR IGNORE INTO source_images (user_id, environment_id, file_path, width, height) VALUES (?, ?, ?, 640, 480)",
+            "INSERT OR IGNORE INTO source_images"
+            " (user_id, environment_id, file_path, width, height) VALUES (?, ?, ?, 640, 480)",
             (user_id, env_id, file_path),
         )
         src_id = conn.execute(
