@@ -22,11 +22,17 @@
     if (nmBadge) { nmBadge.textContent = countNm || ''; nmBadge.style.display = countNm ? '' : 'none'; }
   }
 
+  const toTop = document.getElementById('scroll-top');
+  const updateToTop = () => { if (toTop) toTop.style.display = window.scrollY > 300 ? 'flex' : 'none'; };
+  window.addEventListener('scroll', updateToTop, { passive: true });
+  if (toTop) toTop.addEventListener('click', () => window.scrollTo({ top: 0, behavior: 'smooth' }));
+
   window.switchTab = tab => {
     document.getElementById('panel-sg').style.display = tab === 'sg' ? '' : 'none';
     document.getElementById('panel-nm').style.display = tab === 'nm' ? '' : 'none';
     document.getElementById('tab-sg').classList.toggle('active', tab === 'sg');
     document.getElementById('tab-nm').classList.toggle('active', tab === 'nm');
+    window.scrollTo({ top: 0, behavior: 'instant' });
   };
 
   function esc(s) {
