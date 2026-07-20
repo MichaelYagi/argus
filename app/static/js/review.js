@@ -190,9 +190,9 @@
     card.id = 'rc-' + item.detection_id;
     card.innerHTML = `
       <div style="display:flex;width:100%;align-items:flex-start;gap:12px">
+        <input type="checkbox" class="rc-check" data-id="${item.detection_id}" style="margin-top:4px;flex-shrink:0">
         ${matched ? `
         <div style="display:flex;flex-direction:column;align-items:center;gap:6px;flex-shrink:0;width:110px">
-          <input type="checkbox" class="rc-check" data-id="${item.detection_id}" style="align-self:flex-start">
           <img src="${esc(item.crop_url)}" alt=""
                style="width:110px;height:110px;object-fit:cover;border-radius:4px;${item.source_image_url ? 'cursor:zoom-in' : ''}"
                ${item.source_image_url ? `onclick="openSourceModal('${esc(item.source_image_url)}')"` : ''}>
@@ -201,7 +201,6 @@
             ${currentSimPct ? `<br><span class="muted" style="font-size:11px">${currentSimPct} similarity</span>` : ''}
           </div>
         </div>` : `
-        <input type="checkbox" class="rc-check" data-id="${item.detection_id}" style="margin-top:4px;flex-shrink:0">
         <img src="${esc(item.crop_url)}" alt=""
              style="width:110px;height:110px;object-fit:cover;border-radius:4px;flex-shrink:0;${item.source_image_url ? 'cursor:zoom-in' : ''}"
              ${item.source_image_url ? `onclick="openSourceModal('${esc(item.source_image_url)}')"` : ''}>`}
