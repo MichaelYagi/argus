@@ -12,6 +12,23 @@
   const selNm = new Set();   // no-match detection ids
   const itemCache = new Map(); // detection_id -> item (for moving rejected cards to no-match)
 
+  // Tab counts (cards currently rendered in each list).
+  let countSg = 0, countNm = 0;
+
+  function updateTabBadges() {
+    const sgBadge = document.getElementById('sg-tab-badge');
+    const nmBadge = document.getElementById('nm-tab-badge');
+    if (sgBadge) { sgBadge.textContent = countSg || ''; sgBadge.style.display = countSg ? '' : 'none'; }
+    if (nmBadge) { nmBadge.textContent = countNm || ''; nmBadge.style.display = countNm ? '' : 'none'; }
+  }
+
+  window.switchTab = tab => {
+    document.getElementById('panel-sg').style.display = tab === 'sg' ? '' : 'none';
+    document.getElementById('panel-nm').style.display = tab === 'nm' ? '' : 'none';
+    document.getElementById('tab-sg').classList.toggle('active', tab === 'sg');
+    document.getElementById('tab-nm').classList.toggle('active', tab === 'nm');
+  };
+
   function esc(s) {
     return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
   }
@@ -65,7 +82,16 @@
       method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(items),
     });
     if (!ok) return;
-    ids.forEach(id => { document.getElementById('rc-' + id)?.remove(); sel.delete(id); });
+    ids.forEach(id => {
+      const card = document.getElementById('rc-' + id);
+      if (card) {
+        if (card.closest('#suggested-list')) countSg = Math.max(0, countSg - 1);
+        else countNm = Math.max(0, countNm - 1);
+        card.remove();
+      }
+      sel.delete(id);
+    });
+    updateTabBadges();
     decrementBadge(ids.length);
     if (allCb) allCb.checked = false;
     updateBars();
@@ -135,6 +161,8 @@
     const currentId = matched ? matched.identity_id : null;
     const listEl = matched ? suggestedList : nomatchList;
     const sel = matched ? selSg : selNm;
+    if (matched) countSg++; else countNm++;
+    updateTabBadges();
 
     const currentMatchData = item.suggested_matches.find(m => m.identity_id === currentId);
     const currentSim = currentMatchData
@@ -220,7 +248,14 @@
   }
 
   function removeCard(id) {
-    document.getElementById('rc-' + id)?.remove();
+    const card = document.getElementById('rc-' + id);
+    if (card) {
+      const inSg = card.closest('#suggested-list');
+      if (inSg) countSg = Math.max(0, countSg - 1);
+      else countNm = Math.max(0, countNm - 1);
+      card.remove();
+      updateTabBadges();
+    }
     selSg.delete(id); selNm.delete(id);
     decrementBadge(1);
     updateBars();
@@ -233,12 +268,16 @@
   // "No, not [name]" — mark rejected, keep in queue under the no-match section.
   window.doReject = async id => {
     if (!await sendReview('/api/review/' + id + '/reject', { method: 'POST' })) return;
+    const card = document.getElementById('rc-' + id);
+    if (card) { countSg = Math.max(0, countSg - 1); card.remove(); updateTabBadges(); }
     selSg.delete(id); selNm.delete(id);
-    document.getElementById('rc-' + id)?.remove();
+    decrementBadge(1);
     updateBars();
     // Re-render as a no-match card so the user can dismiss it from there.
     const item = itemCache.get(id);
     if (item) renderItem({ ...item, current_identity: null, suggested_matches: [] });
+    // Switch to No match tab so the re-rendered card is visible.
+    switchTab('nm');
     checkEmpty();
   };
   // "Dismiss" — remove from queue and send to /unidentified.
@@ -263,16 +302,18 @@
   };
 
   const sentinel = document.createElement('div');
-  nomatchList.parentElement.parentElement.after(sentinel);
+  document.getElementById('panel-nm').after(sentinel);
   new IntersectionObserver(([e]) => { if (e.isIntersecting) loadPage(); }, { rootMargin: '300px' }).observe(sentinel);
 
   function reset() {
     cursor = null; hasMore = true; loading = false;
     selSg.clear(); selNm.clear();
+    countSg = 0; countNm = 0;
     updateBars();
+    updateTabBadges();
     suggestedList.innerHTML = '';
     nomatchList.innerHTML = '';
-    if (!sentinel.parentNode) nomatchList.parentElement.parentElement.after(sentinel);
+    if (!sentinel.parentNode) document.getElementById('panel-nm').after(sentinel);
     loadPage();
   }
 

@@ -7,32 +7,37 @@
   <span class="muted" style="font-size:13px">Faces awaiting review</span>
 </div>
 
-<div class="review-cols">
-  <!-- Suggested matches: faces Argus tentatively matched to someone. -->
-  <section class="review-col">
-    <h2 style="font-size:15px;margin-bottom:8px">Suggested matches</h2>
-    <div class="review-bulk" style="border-left-color:var(--success)">
-      <label style="display:flex;align-items:center;gap:6px;font-size:13px;cursor:pointer">
-        <input type="checkbox" id="sg-select-all" onchange="sgSelectAll(this)"> Select all
-      </label>
-      <span class="muted" style="font-size:13px"><span id="sg-count">0</span> selected</span>
-      <button id="sg-confirm-btn" class="btn btn-success" onclick="sgConfirm()" disabled>Confirm selected</button>
-    </div>
-    <div id="suggested-list"></div>
-  </section>
+<div class="tab-bar">
+  <button class="tab-btn active" id="tab-sg" onclick="switchTab('sg')">
+    Suggested matches <span id="sg-tab-badge" class="tab-count"></span>
+  </button>
+  <button class="tab-btn" id="tab-nm" onclick="switchTab('nm')">
+    No match <span id="nm-tab-badge" class="tab-count"></span>
+  </button>
+</div>
 
-  <!-- No match: faces with no above-threshold match (pick a name or dismiss). -->
-  <section class="review-col">
-    <h2 style="font-size:15px;margin-bottom:8px">No match</h2>
-    <div class="review-bulk" style="border-left-color:var(--danger)">
-      <label style="display:flex;align-items:center;gap:6px;font-size:13px;cursor:pointer">
-        <input type="checkbox" id="nm-select-all" onchange="nmSelectAll(this)"> Select all
-      </label>
-      <span class="muted" style="font-size:13px"><span id="nm-count">0</span> selected</span>
-      <button id="nm-dismiss-btn" class="btn btn-danger" onclick="nmDismiss()" disabled>Dismiss selected</button>
-    </div>
-    <div id="nomatch-list"></div>
-  </section>
+<!-- Suggested matches panel -->
+<div id="panel-sg">
+  <div class="review-bulk" style="border-left-color:var(--success)">
+    <label style="display:flex;align-items:center;gap:6px;font-size:13px;cursor:pointer">
+      <input type="checkbox" id="sg-select-all" onchange="sgSelectAll(this)"> Select all
+    </label>
+    <span class="muted" style="font-size:13px"><span id="sg-count">0</span> selected</span>
+    <button id="sg-confirm-btn" class="btn btn-success" onclick="sgConfirm()" disabled>Confirm selected</button>
+  </div>
+  <div id="suggested-list"></div>
+</div>
+
+<!-- No match panel -->
+<div id="panel-nm" style="display:none">
+  <div class="review-bulk" style="border-left-color:var(--danger)">
+    <label style="display:flex;align-items:center;gap:6px;font-size:13px;cursor:pointer">
+      <input type="checkbox" id="nm-select-all" onchange="nmSelectAll(this)"> Select all
+    </label>
+    <span class="muted" style="font-size:13px"><span id="nm-count">0</span> selected</span>
+    <button id="nm-dismiss-btn" class="btn btn-danger" onclick="nmDismiss()" disabled>Dismiss selected</button>
+  </div>
+  <div id="nomatch-list"></div>
 </div>
 {% endblock %}
 
