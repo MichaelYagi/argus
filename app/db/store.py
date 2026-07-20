@@ -806,9 +806,14 @@ def delete_identity(
                 row = conn.execute(
                     "SELECT file_path FROM source_images WHERE id = ?", (sid,)
                 ).fetchone()
-                if row and row["file_path"]:
-                    sources.append(row["file_path"])
+                file_path = row["file_path"] if row else None
                 conn.execute("DELETE FROM source_images WHERE id = ?", (sid,))
+                if file_path:
+                    still_ref = conn.execute(
+                        "SELECT 1 FROM source_images WHERE file_path = ? LIMIT 1", (file_path,)
+                    ).fetchone()
+                    if not still_ref:
+                        sources.append(file_path)
 
         conn.execute(
             "DELETE FROM identities WHERE id = ? AND user_id = ?",
@@ -818,7 +823,7 @@ def delete_identity(
         return True, crops, sources
 
 
-def delete_all_identities(user_id: int, environment_id: int | None = None) -> tuple[int, list[str]]:
+def delete_all_identities(user_id: int, environment_id: int | None = None) -> tuple[int, list[str], list[str]]:
     """Delete all identities and related data for a user in one environment.
 
     Returns (count, crop_filenames) so the caller can remove crop files from disk.
@@ -837,7 +842,7 @@ def delete_all_identities(user_id: int, environment_id: int | None = None) -> tu
             ).fetchall()
             if r["crop_path"]
         ]
-        sources = [
+        source_candidates = [
             r["file_path"]
             for r in conn.execute(
                 "SELECT file_path FROM source_images WHERE user_id = ? AND environment_id = ?",
@@ -862,6 +867,13 @@ def delete_all_identities(user_id: int, environment_id: int | None = None) -> tu
             "DELETE FROM identities WHERE user_id = ? AND environment_id = ?",
             (user_id, env_id),
         )
+        # Only delete files with no remaining cross-env/cross-user references.
+        sources = [
+            fp for fp in source_candidates
+            if not conn.execute(
+                "SELECT 1 FROM source_images WHERE file_path = ? LIMIT 1", (fp,)
+            ).fetchone()
+        ]
         return count, crops, sources
 
 
@@ -1355,6 +1367,13 @@ def delete_source_image(
             "SELECT 1 FROM source_images WHERE file_path = ? LIMIT 1", (file_path,)
         ).fetchone()
         return ids, crops, None if still_ref else file_path, external_ref
+
+
+def list_all_source_file_paths() -> list[str]:
+    """Return distinct file_path values from source_images — used for startup integrity check."""
+    with _connect() as conn:
+        rows = conn.execute("SELECT DISTINCT file_path FROM source_images").fetchall()
+    return [r[0] for r in rows]
 
 
 def count_detections_for_source(
@@ -2775,7 +2794,7 @@ def delete_environment(env_id: int, user_id: int) -> tuple[bool, list[str], list
             "SELECT crop_path FROM detections WHERE environment_id = ? AND user_id = ?",
             (env_id, user_id),
         ).fetchall() if r["crop_path"]]
-        sources = [r["file_path"] for r in conn.execute(
+        source_candidates = [r["file_path"] for r in conn.execute(
             "SELECT file_path FROM source_images WHERE environment_id = ? AND user_id = ?",
             (env_id, user_id),
         ).fetchall() if r["file_path"]]
@@ -2814,6 +2833,13 @@ def delete_environment(env_id: int, user_id: int) -> tuple[bool, list[str], list
             "DELETE FROM environments WHERE id = ? AND user_id = ?",
             (env_id, user_id),
         )
+        # Only delete files with no remaining cross-env/cross-user references.
+        sources = [
+            fp for fp in source_candidates
+            if not conn.execute(
+                "SELECT 1 FROM source_images WHERE file_path = ? LIMIT 1", (fp,)
+            ).fetchone()
+        ]
         return True, crops, sources
 
 

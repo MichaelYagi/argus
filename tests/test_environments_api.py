@@ -122,3 +122,38 @@ def test_environments_isolated_between_users(client):
     client.post("/api/environments", json={"name": "u1-env"}, headers={"X-API-Key": key1})
     envs2 = client.get("/api/environments", headers={"X-API-Key": key2}).json()
     assert all(e["name"] != "u1-env" for e in envs2)
+
+
+def test_delete_environment_preserves_file_shared_with_other_env(client):
+    """Deleting an environment must not queue a source file for deletion when another env row references the same file."""
+    user_id, _ = _create_user_and_key("env-del-test")
+
+    env0_id = store.get_default_environment_id(user_id) or 0
+    env1_id = store.create_environment(user_id, "env1")
+
+    iid0, _ = store.get_or_create_identity(user_id, "face", "Shared", environment_id=env0_id)
+    iid1, _ = store.get_or_create_identity(user_id, "face", "Shared", environment_id=env1_id)
+
+    shared_file = "shared_env_file.jpg"
+    for env_id, iid in [(env0_id, iid0), (env1_id, iid1)]:
+        with store._connect() as conn:
+            conn.execute(
+                "INSERT OR IGNORE INTO source_images (user_id, environment_id, file_path, width, height) VALUES (?, ?, ?, 640, 480)",
+                (user_id, env_id, shared_file),
+            )
+            src_id = conn.execute(
+                "SELECT id FROM source_images WHERE user_id = ? AND environment_id = ? AND file_path = ?",
+                (user_id, env_id, shared_file),
+            ).fetchone()[0]
+            conn.execute(
+                """INSERT INTO detections
+                   (user_id, environment_id, identity_id, source_image_id, type, model_id, confidence,
+                    bbox_x, bbox_y, bbox_w, bbox_h, crop_path)
+                   VALUES (?, ?, ?, ?, 'face', NULL, 0.9, 0, 0, 100, 100, 'crop.jpg')""",
+                (user_id, env_id, iid, src_id),
+            )
+
+    _deleted, _crops, sources = store.delete_environment(env0_id, user_id)
+
+    # env1 still references shared_file — it must not be queued for deletion.
+    assert shared_file not in sources

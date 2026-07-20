@@ -279,3 +279,43 @@ def test_tag_wrong_image_detection_returns_not_found(client):
     ], headers=h)
 
     assert r.json()[0]["status"] == "not_found"
+
+
+# ---------------------------------------------------------------------------
+# GET /api/images/{id}/url
+# ---------------------------------------------------------------------------
+
+def test_source_image_url_returns_url(client):
+    user_id, h = _setup(client)
+    src_id = _insert_source(user_id, "photo.jpg")
+    r = client.get(f"/api/images/{src_id}/url", headers=h)
+    assert r.status_code == 200
+    data = r.json()
+    assert "image_url" in data
+    assert data["image_url"] == "/media/sources/photo.jpg"
+
+
+def test_source_image_url_not_found(client):
+    _, h = _setup(client)
+    r = client.get("/api/images/999/url", headers=h)
+    assert r.status_code == 404
+
+
+def test_source_image_url_requires_auth(client):
+    user_id, _ = _setup(client)
+    src_id = _insert_source(user_id)
+    r = client.get(f"/api/images/{src_id}/url")
+    assert r.status_code in (401, 403)
+
+
+def test_source_image_url_not_accessible_by_other_user(client):
+    from app.core.security import hash_password
+    user_id, _ = _setup(client)
+    src_id = _insert_source(user_id)
+
+    user2 = store.create_user("bob", hash_password("pass12345"))
+    k2 = generate_api_key()
+    store.create_api_key(user2, hash_api_key(k2), "b")
+
+    r = client.get(f"/api/images/{src_id}/url", headers={"X-API-Key": k2})
+    assert r.status_code == 404

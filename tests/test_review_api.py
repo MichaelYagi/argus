@@ -74,6 +74,16 @@ def test_review_queue_returns_pending_faces(client):
     assert items[0]["confidence"] < items[1]["confidence"]
 
 
+def test_review_queue_items_include_source_image_id(client):
+    user_id, h = _setup(client)
+    _insert_detection(user_id, 0.4)
+
+    items = client.get("/api/review", headers=h).json()["items"]
+    assert len(items) == 1
+    assert "source_image_id" in items[0]
+    assert items[0]["source_image_id"] is not None
+
+
 def test_review_queue_excludes_objects(client):
     user_id, h = _setup(client)
     _insert_detection(user_id, 0.5, det_type="object")

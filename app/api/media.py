@@ -54,6 +54,16 @@ async def serve_source(
 ):
     path = sources_dir() / filename
     if not path.exists():
+        # Fall back to any cached thumbnail if the original was deleted externally.
+        stem = Path(filename).stem
+        thumbs = list((sources_dir() / "thumbs").glob(f"{stem}_h*.jpg"))
+        if thumbs:
+            # Pick the largest available thumbnail.
+            thumbs.sort(key=lambda p: int(p.stem.rsplit("_h", 1)[-1]), reverse=True)
+            best = thumbs[0]
+            if h:
+                return FileResponse(best, media_type="image/jpeg")
+            return FileResponse(best, media_type="image/jpeg")
         raise HTTPException(404, "Source image not found")
     if not h:
         return FileResponse(path)

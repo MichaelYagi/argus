@@ -58,7 +58,12 @@
 <div style="display:flex;align-items:center">
   <a id="prev-nav" class="tag-nav" href="#" style="display:none" aria-label="Previous image">&#8249;</a>
   <div id="tag-wrap">
-    <img id="tag-photo" src="{{ image_url }}" alt="" onload="renderBoxes(); scrollWrapIntoView()">
+    <img id="tag-photo" src="{{ image_url }}" alt=""
+         onload="renderBoxes(); scrollWrapIntoView()"
+         onerror="this.style.display='none'; document.getElementById('tag-missing').style.display='flex'">
+    <div id="tag-missing" style="display:none;align-items:center;justify-content:center;min-height:200px;color:var(--muted);font-size:14px">
+      Source image no longer on disk — detections below are still valid.
+    </div>
   </div>
   <a id="next-nav" class="tag-nav" href="#" style="display:none" aria-label="Next image">&#8250;</a>
 </div>

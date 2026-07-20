@@ -248,3 +248,68 @@ def test_unknown_detections_filter_by_type(client):
     items = r.json()["items"]
     assert len(items) == 1
     assert items[0]["type"] == "face"
+
+
+# ---------------------------------------------------------------------------
+# Cross-environment source file reference counting
+# ---------------------------------------------------------------------------
+
+def _insert_source_and_detection(user_id: int, env_id: int, identity_id: int, file_path: str) -> None:
+    """Insert a source_images row + one detection in a specific environment."""
+    with store._connect() as conn:
+        conn.execute(
+            "INSERT OR IGNORE INTO source_images (user_id, environment_id, file_path, width, height) VALUES (?, ?, ?, 640, 480)",
+            (user_id, env_id, file_path),
+        )
+        src_id = conn.execute(
+            "SELECT id FROM source_images WHERE user_id = ? AND environment_id = ? AND file_path = ?",
+            (user_id, env_id, file_path),
+        ).fetchone()[0]
+        conn.execute(
+            """INSERT INTO detections
+               (user_id, environment_id, identity_id, source_image_id, type, model_id, confidence,
+                bbox_x, bbox_y, bbox_w, bbox_h, crop_path)
+               VALUES (?, ?, ?, ?, 'face', NULL, 0.9, 0, 0, 100, 100, 'crop.jpg')""",
+            (user_id, env_id, identity_id, src_id),
+        )
+
+
+def test_delete_all_identities_preserves_file_shared_with_other_env(client):
+    """Deleting all identities in env0 must not queue a file for deletion when env1 still references it."""
+    from app.core.security import hash_password
+    user_id = store.create_user("xtest", hash_password("pass12345"))
+
+    env0_id = store.get_default_environment_id(user_id) or 0
+    env1_id = store.create_environment(user_id, "env1")
+
+    iid0, _ = store.get_or_create_identity(user_id, "face", "PersonA", environment_id=env0_id)
+    iid1, _ = store.get_or_create_identity(user_id, "face", "PersonA", environment_id=env1_id)
+
+    shared_file = "shared_hash.jpg"
+    _insert_source_and_detection(user_id, env0_id, iid0, shared_file)
+    _insert_source_and_detection(user_id, env1_id, iid1, shared_file)
+
+    _count, _crops, sources = store.delete_all_identities(user_id, env0_id)
+
+    # The file must NOT appear in the deletion list — env1 still references it.
+    assert shared_file not in sources
+
+
+def test_delete_identity_preserves_file_shared_with_other_env(client):
+    """Deleting one identity must not queue a file for deletion when another env row references the same file."""
+    from app.core.security import hash_password
+    user_id = store.create_user("xtest2", hash_password("pass12345"))
+
+    env0_id = store.get_default_environment_id(user_id) or 0
+    env1_id = store.create_environment(user_id, "env1")
+
+    iid0, _ = store.get_or_create_identity(user_id, "face", "PersonB", environment_id=env0_id)
+    iid1, _ = store.get_or_create_identity(user_id, "face", "PersonB", environment_id=env1_id)
+
+    shared_file = "shared_hash2.jpg"
+    _insert_source_and_detection(user_id, env0_id, iid0, shared_file)
+    _insert_source_and_detection(user_id, env1_id, iid1, shared_file)
+
+    _deleted, _crops, sources = store.delete_identity(iid0, user_id, env0_id)
+
+    assert shared_file not in sources

@@ -52,7 +52,31 @@ async def lifespan(app: FastAPI):
     log_buffer.install(_buf_size)
     activity_buffer.install(_buf_size)
     _autoload_engines()
+    _check_data_path_integrity()
     yield
+
+
+def _check_data_path_integrity() -> None:
+    """Warn at startup if source files referenced in the DB are missing from sources_dir().
+
+    This catches the most common footgun: DATA_PATH was changed between runs (e.g. moving
+    media to a new drive), leaving existing source_images rows pointing at files that no
+    longer exist at the new path.  Does not scan crops — missing crops are a separate issue
+    and far less common since they're always written alongside a source insert."""
+    from app.core.paths import sources_dir
+    src_dir = sources_dir()
+    try:
+        rows = store.list_all_source_file_paths()
+    except Exception:
+        return
+    missing = [p for p in rows if not (src_dir / p).exists()]
+    if missing:
+        log.warning(
+            "DATA_PATH integrity: %d source file(s) referenced in the DB are missing from %s. "
+            "This usually means DATA_PATH changed between runs. "
+            "Affected file hashes (first 5): %s",
+            len(missing), src_dir, missing[:5],
+        )
 
 
 def _autoload_engines() -> None:
