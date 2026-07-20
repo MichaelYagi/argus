@@ -191,7 +191,6 @@
                style="width:110px;height:110px;object-fit:cover;border-radius:4px;${item.source_image_url ? 'cursor:zoom-in' : ''}"
                ${item.source_image_url ? `onclick="openSourceModal('${esc(item.source_image_url)}')"` : ''}>
           <div style="text-align:center;line-height:1.5;width:100%">
-            <span class="muted" style="font-size:11px">Matched to</span><br>
             <strong style="font-size:13px">${name}</strong>
             ${currentSimPct ? `<br><span class="muted" style="font-size:11px">${currentSimPct} similarity</span>` : ''}
           </div>
