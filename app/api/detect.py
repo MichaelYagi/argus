@@ -94,6 +94,7 @@ async def detect_faces(
     environment_id: int = Depends(require_env_id),
 ):
     run_async = is_truthy(request.query_params.get("async", ""))
+    force = is_truthy(request.query_params.get("force", ""))
     raw = await acquire_image(request)
     label = await _extract_label(request)
     replace = await _extract_replace(request)
@@ -101,12 +102,22 @@ async def detect_faces(
     if run_async:
         job_id = store.create_job(user_id, "detect_faces", environment_id)
         background_tasks.add_task(
-            _run_detection_job, job_id, user_id, environment_id, raw, label, replace, "face", external_ref)
+            _run_detection_job, job_id, user_id, environment_id, raw, label, replace, "face", external_ref, force)
         return {"job_id": job_id, "status": "pending"}
     img = open_and_validate(raw)
     _, source_id, source_scale = _save_source_image(user_id, environment_id, raw, img, external_ref)
-    if replace:
+    if replace or force:
         _clear_detections(user_id, environment_id, source_id, "face")
+    else:
+        existing = store.get_image_detections(source_id, user_id, "face", environment_id)
+        if existing:
+            logger.debug("detect_faces: returning %d cached detections for source_id=%d", len(existing), source_id)
+            return {
+                "source_image_id": source_id, "external_ref": external_ref,
+                "source_scale": source_scale,
+                "faces": _format_cached_faces(existing, source_scale),
+                "cached": True,
+            }
     result = {"source_image_id": source_id, "external_ref": external_ref,
               "source_scale": source_scale,
               "faces": _run_faces(user_id, environment_id, img, source_id, label=label, source_scale=source_scale)}
@@ -127,18 +138,29 @@ async def detect_objects(
     environment_id: int = Depends(require_env_id),
 ):
     run_async = is_truthy(request.query_params.get("async", ""))
+    force = is_truthy(request.query_params.get("force", ""))
     raw = await acquire_image(request)
     replace = await _extract_replace(request)
     external_ref = await _extract_external_ref(request)
     if run_async:
         job_id = store.create_job(user_id, "detect_objects", environment_id)
         background_tasks.add_task(
-            _run_detection_job, job_id, user_id, environment_id, raw, None, replace, "object", external_ref)
+            _run_detection_job, job_id, user_id, environment_id, raw, None, replace, "object", external_ref, force)
         return {"job_id": job_id, "status": "pending"}
     img = open_and_validate(raw)
     _, source_id, source_scale = _save_source_image(user_id, environment_id, raw, img, external_ref)
-    if replace:
+    if replace or force:
         _clear_detections(user_id, environment_id, source_id, "object")
+    else:
+        existing = store.get_image_detections(source_id, user_id, "object", environment_id)
+        if existing:
+            logger.debug("detect_objects: returning %d cached detections for source_id=%d", len(existing), source_id)
+            return {
+                "source_image_id": source_id, "external_ref": external_ref,
+                "source_scale": source_scale,
+                "objects": _format_cached_objects(existing, source_scale),
+                "cached": True,
+            }
     objs, img_tags = _run_objects(user_id, environment_id, img, source_id, source_scale)
     result: dict = {"source_image_id": source_id, "external_ref": external_ref,
                     "source_scale": source_scale, "objects": objs}
@@ -161,6 +183,7 @@ async def detect_all(
     environment_id: int = Depends(require_env_id),
 ):
     run_async = is_truthy(request.query_params.get("async", ""))
+    force = is_truthy(request.query_params.get("force", ""))
     raw = await acquire_image(request)
     label = await _extract_label(request)
     replace = await _extract_replace(request)
@@ -168,23 +191,58 @@ async def detect_all(
     if run_async:
         job_id = store.create_job(user_id, "detect_all", environment_id)
         background_tasks.add_task(
-            _run_detection_job, job_id, user_id, environment_id, raw, label, replace, "all", external_ref)
+            _run_detection_job, job_id, user_id, environment_id, raw, label, replace, "all", external_ref, force)
         return {"job_id": job_id, "status": "pending"}
     img = open_and_validate(raw)
     _, source_id, source_scale = _save_source_image(user_id, environment_id, raw, img, external_ref)
-    if replace:
+    if replace or force:
         _clear_detections(user_id, environment_id, source_id, None)  # both faces and objects
-    objs, img_tags = _run_objects(user_id, environment_id, img, source_id, source_scale)
+        cached_face_rows: list = []
+        cached_obj_rows: list = []
+    else:
+        cached_face_rows = store.get_image_detections(source_id, user_id, "face", environment_id)
+        cached_obj_rows = store.get_image_detections(source_id, user_id, "object", environment_id)
+
+    run_faces = len(cached_face_rows) == 0
+    run_objects = len(cached_obj_rows) == 0
+
+    if not run_faces and not run_objects:
+        logger.debug(
+            "detect_all: returning cached detections for source_id=%d (faces=%d objects=%d)",
+            source_id, len(cached_face_rows), len(cached_obj_rows),
+        )
+        return {
+            "source_image_id": source_id, "external_ref": external_ref,
+            "source_scale": source_scale,
+            "faces": _format_cached_faces(cached_face_rows, source_scale),
+            "objects": _format_cached_objects(cached_obj_rows, source_scale),
+            "cached": True,
+        }
+
+    if run_objects:
+        objs, img_tags = _run_objects(user_id, environment_id, img, source_id, source_scale)
+    else:
+        objs, img_tags = _format_cached_objects(cached_obj_rows, source_scale), None
+
     result = {
         "source_image_id": source_id,
         "external_ref": external_ref,
         "source_scale": source_scale,
-        "faces": _run_faces(user_id, environment_id, img, source_id, label=label, source_scale=source_scale),
+        "faces": (
+            _run_faces(user_id, environment_id, img, source_id, label=label, source_scale=source_scale)
+            if run_faces else _format_cached_faces(cached_face_rows, source_scale)
+        ),
         "objects": objs,
     }
     if img_tags is not None:
         result["image_tags"] = img_tags
-    _emit_det(len(result["faces"]), len(objs), external_ref)
+    if not run_faces or not run_objects:
+        result["cached"] = True
+    _emit_det(
+        len(result["faces"]) if run_faces else 0,
+        len(result["objects"]) if run_objects else 0,
+        external_ref,
+    )
     if _cleanup_if_no_detections(source_id, user_id, environment_id):
         result["discarded"] = True
     from app.core import webhook
@@ -849,20 +907,52 @@ def _run_detection_job(
     replace: bool,
     det_type: str,  # 'face' | 'object' | 'all'
     external_ref: str | None = None,
+    force: bool = False,
 ) -> None:
     from app.core import webhook
     try:
         store.update_job(job_id, "running")
         img = open_and_validate(raw)
         _, source_id, source_scale = _save_source_image(user_id, environment_id, raw, img, external_ref)
-        if replace:
+        if replace or force:
             _clear_detections(user_id, environment_id, source_id, None if det_type == "all" else det_type)
-        result: dict = {"source_image_id": source_id, "external_ref": external_ref}
-        if not replace:
-            count_type = None if det_type == "all" else det_type
-            existing = store.count_detections_for_source(source_id, user_id, count_type)
-            if existing:
-                result["existing_detections"] = existing
+        else:
+            # Idempotency: return existing detections without re-running the model.
+            query_type = None if det_type == "all" else det_type
+            existing_rows = store.get_image_detections(source_id, user_id, query_type, environment_id)
+            if existing_rows:
+                logger.debug(
+                    "_run_detection_job: returning %d cached detections for source_id=%d det_type=%s",
+                    len(existing_rows), source_id, det_type,
+                )
+                if det_type == "face":
+                    result: dict = {
+                        "source_image_id": source_id, "external_ref": external_ref,
+                        "source_scale": source_scale,
+                        "faces": _format_cached_faces(existing_rows, source_scale),
+                        "cached": True,
+                    }
+                elif det_type == "object":
+                    result = {
+                        "source_image_id": source_id, "external_ref": external_ref,
+                        "source_scale": source_scale,
+                        "objects": _format_cached_objects(existing_rows, source_scale),
+                        "cached": True,
+                    }
+                else:  # all
+                    face_rows = [r for r in existing_rows if r["type"] == "face"]
+                    obj_rows = [r for r in existing_rows if r["type"] == "object"]
+                    result = {
+                        "source_image_id": source_id, "external_ref": external_ref,
+                        "source_scale": source_scale,
+                        "faces": _format_cached_faces(face_rows, source_scale),
+                        "objects": _format_cached_objects(obj_rows, source_scale),
+                        "cached": True,
+                    }
+                store.update_job(job_id, "done", result)
+                webhook.fire(user_id, environment_id, "job.done", {"job_id": job_id, "status": "done", **result})
+                return
+        result = {"source_image_id": source_id, "external_ref": external_ref, "source_scale": source_scale}
         if det_type in ("face", "all"):
             result["faces"] = _run_faces(
                 user_id, environment_id, img, source_id, label=label, source_scale=source_scale)
@@ -1014,6 +1104,58 @@ def _emit_det(nf: int, no: int, ref: str | None = None) -> None:
     if ref:
         msg += f" ({ref})"
     _ab.emit("detection", msg)
+
+
+def _format_cached_faces(rows: list, source_scale: float) -> list[dict]:
+    """Format DB detection rows into the same shape as _run_faces() results."""
+    faces = []
+    for row in rows:
+        attrs: dict = {}
+        if row["attributes"]:
+            try:
+                attrs = json.loads(row["attributes"])
+            except Exception:
+                pass
+        faces.append({
+            "detection_id": row["id"],
+            "bbox": {
+                "x": row["bbox_x"] * source_scale,
+                "y": row["bbox_y"] * source_scale,
+                "w": row["bbox_w"] * source_scale,
+                "h": row["bbox_h"] * source_scale,
+            },
+            "confidence": row["confidence"],
+            "similarity": None,
+            "identity_id": row["identity_id"],
+            "label": row["identity_label"],
+            "crop_url": f"/media/crops/{row['crop_path']}",
+            "review_status": row["review_status"],
+            **attrs,
+        })
+    return faces
+
+
+def _format_cached_objects(rows: list, source_scale: float) -> list[dict]:
+    """Format DB detection rows into the same shape as _run_objects() results."""
+    objects = []
+    for row in rows:
+        objects.append({
+            "detection_id": row["id"],
+            "bbox": {
+                "x": row["bbox_x"] * source_scale,
+                "y": row["bbox_y"] * source_scale,
+                "w": row["bbox_w"] * source_scale,
+                "h": row["bbox_h"] * source_scale,
+            },
+            "confidence": row["confidence"],
+            "class_name": row["identity_label"],
+            "class_id": None,
+            "identity_id": row["identity_id"],
+            "label": row["identity_label"],
+            "crop_url": f"/media/crops/{row['crop_path']}",
+            "review_status": row["review_status"],
+        })
+    return objects
 
 
 async def _extract_replace(request: Request) -> bool:

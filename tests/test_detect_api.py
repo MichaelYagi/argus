@@ -275,7 +275,8 @@ def test_detect_faces_replace_clears_prior(client):
     assert _count_detections(user_id, source_id, "face") == 1
 
 
-def test_detect_faces_without_replace_accumulates(client):
+def test_detect_faces_idempotent_by_default(client):
+    """Calling detect/faces twice for the same source returns cached result, no duplicate rows."""
     user_id, key = _create_user_and_key()
     _activate_face_model()
     source_id = _insert_source_image(user_id)
@@ -286,6 +287,7 @@ def test_detect_faces_without_replace_accumulates(client):
     ]
     mock_img = _mock_image()
 
+    responses = []
     for _ in range(2):
         with patch("app.api.detect.acquire_image", return_value=b"bytes"), \
              patch("app.api.detect.open_and_validate", return_value=mock_img), \
@@ -293,10 +295,15 @@ def test_detect_faces_without_replace_accumulates(client):
              patch("app.api.detect._save_source_image", return_value=("src.jpg", source_id, 1.0)), \
              patch("app.api.detect._save_crop", return_value="crop.jpg"), \
              patch.object(registry, "get_face_engine", return_value=mock_engine):
-            client.post("/api/detect/faces", files={"file": FAKE_FILE},
-                        headers={"X-API-Key": key})
+            r = client.post("/api/detect/faces", files={"file": FAKE_FILE},
+                            headers={"X-API-Key": key})
+            responses.append(r.json())
 
-    assert _count_detections(user_id, source_id, "face") == 2
+    # Only one detection row stored — second call was idempotent
+    assert _count_detections(user_id, source_id, "face") == 1
+    # Second response flags that it came from cache
+    assert responses[1].get("cached") is True
+    assert len(responses[1]["faces"]) == 1
 
 
 def test_detect_faces_replace_leaves_objects(client):
