@@ -281,17 +281,7 @@
   // "No, not [name]" — mark rejected, keep in queue under the no-match section.
   window.doReject = async id => {
     if (!await sendReview('/api/review/' + id + '/reject', { method: 'POST' })) return;
-    const card = document.getElementById('rc-' + id);
-    if (card) { countSg = Math.max(0, countSg - 1); card.remove(); updateTabBadges(); }
-    selSg.delete(id); selNm.delete(id);
-    decrementBadge(1);
-    updateBars();
-    // Re-render as a no-match card so the user can dismiss it from there.
-    const item = itemCache.get(id);
-    if (item) renderItem({ ...item, current_identity: null, suggested_matches: [] });
-    // Switch to No match tab so the re-rendered card is visible.
-    switchTab('nm');
-    checkEmpty();
+    removeCard(id);
   };
   // "Dismiss" — remove from queue and send to /unidentified.
   window.doDismiss = async id => {
