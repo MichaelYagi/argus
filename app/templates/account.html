@@ -294,6 +294,8 @@ document.getElementById('delete-all-data-btn').addEventListener('click', functio
         const r = await fetch('/api/identities', { method: 'DELETE' });
         if (r.ok) {
           showMessage('All identity data deleted from the "' + env + '" environment.');
+          btn.disabled = false;
+          btn.textContent = origText;
         } else {
           const d = await r.json().catch(() => ({}));
           showMessage(d.detail || 'Delete failed — please try again.');
