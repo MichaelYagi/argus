@@ -282,6 +282,9 @@
   window.doReject = async id => {
     if (!await sendReview('/api/review/' + id + '/reject', { method: 'POST' })) return;
     removeCard(id);
+    const item = itemCache.get(id);
+    if (item) renderItem({ ...item, current_identity: null, suggested_matches: [] });
+    checkEmpty();
   };
   // "Dismiss" — remove from queue and send to /unidentified.
   window.doDismiss = async id => {
