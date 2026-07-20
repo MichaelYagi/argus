@@ -8,7 +8,7 @@
   <div id="settings-alert" class="alert" hidden style="margin:0"></div>
 </div>
 
-{% for category, rows in settings.items() %}
+{% for category, rows in settings.items() if category != 'logs' %}
 <div class="card" style="margin-bottom:16px">
   <h2 style="margin-bottom:0;text-transform:capitalize">{{ category }}</h2>
   <form class="settings-form" data-category="{{ category }}">
@@ -151,10 +151,95 @@
 <div class="card" style="margin-bottom:16px">
   <h2 style="margin-bottom:4px">Logs</h2>
   <p class="muted" style="font-size:12px;margin-bottom:12px">
-    Recent application logs kept in memory (most recent lines, set by Log Buffer Size above).
-    Cleared on restart.
+    Application and activity logs are written to disk daily and purged automatically.
+    The live viewer shows the in-memory buffer for the current session.
   </p>
-  <button class="btn btn-ghost" id="view-logs-btn" type="button">View logs</button>
+
+  {# Retention setting #}
+  <div class="setting-row" style="margin-bottom:12px">
+    <div class="s-label">
+      <strong>Retention Days</strong>
+      <small>Files older than this many days are deleted at startup and at UTC midnight</small>
+      <small class="muted" style="font-size:11px">Default: 5</small>
+    </div>
+    <div class="s-ctrl" style="display:flex;align-items:center;gap:8px">
+      <input type="number" id="log-retention-input" value="{{ log_retention_days }}"
+             min="1" max="365" style="width:80px">
+      <button type="button" class="btn btn-primary" id="save-log-retention"
+              style="font-size:12px;padding:5px 14px">Save</button>
+    </div>
+  </div>
+
+  <button class="btn btn-ghost" id="view-logs-btn" type="button"
+          style="margin-bottom:16px">View live logs</button>
+
+  {# On-disk log file browser #}
+  <div style="border-top:1px solid var(--border);padding-top:12px">
+    <div style="font-size:12px;font-weight:600;color:var(--muted);margin-bottom:8px;text-transform:uppercase;letter-spacing:.04em">Log files</div>
+
+    {% if log_dates %}
+    <div id="log-file-list">
+      {% for d in log_dates %}
+      <div class="log-date-row"
+           style="display:flex;align-items:center;gap:8px;padding:7px 0;
+                  border-bottom:1px solid var(--border);flex-wrap:wrap"
+           data-date="{{ d.date }}">
+        <span style="font-size:13px;font-weight:500;min-width:130px"
+              data-utc-date="{{ d.date }}">{{ d.date }}</span>
+        <span class="muted" style="font-size:11px;flex:1">
+          {% if d.has_app %}app {{ (d.get('app_size',0) / 1024)|round(1) }} KB{% endif %}
+          {% if d.has_app and d.has_activity %} · {% endif %}
+          {% if d.has_activity %}activity {{ (d.get('activity_size',0) / 1024)|round(1) }} KB{% endif %}
+        </span>
+        {% if d.has_app %}
+        <button class="btn btn-ghost log-view-btn" data-date="{{ d.date }}" data-type="app"
+                style="font-size:11px;padding:3px 10px">App</button>
+        {% endif %}
+        {% if d.has_activity %}
+        <button class="btn btn-ghost log-view-btn" data-date="{{ d.date }}" data-type="activity"
+                style="font-size:11px;padding:3px 10px">Activity</button>
+        {% endif %}
+        <button class="btn btn-ghost log-delete-btn" data-date="{{ d.date }}"
+                style="font-size:11px;padding:3px 10px;color:var(--danger)">Delete</button>
+      </div>
+      {# Inline viewer — hidden until a view button is clicked #}
+      <div id="log-inline-{{ d.date }}" class="log-inline-viewer"
+           style="display:none;background:var(--code-bg,#1a1a2e);border-radius:6px;
+                  margin:6px 0 10px;padding:0;overflow:hidden">
+        <div style="display:flex;align-items:center;gap:8px;padding:8px 12px;
+                    border-bottom:1px solid rgba(255,255,255,.07);flex-wrap:wrap">
+          <span class="log-inline-title" style="font-size:12px;font-weight:600;
+                color:rgba(255,255,255,.7)"></span>
+          <span class="log-inline-count muted" style="font-size:11px"></span>
+          <span style="flex:1"></span>
+          <input class="log-inline-filter" type="text" placeholder="Filter…"
+                 style="font-size:11px;padding:3px 8px;width:160px;display:none">
+          <div class="log-inline-levels" style="display:none;gap:4px">
+            {% for lv in ['DEBUG','INFO','WARNING','ERROR','CRITICAL'] %}
+            <button type="button" class="btn btn-primary log-ilv-btn"
+                    data-level="{{ lv }}"
+                    style="font-size:10px;padding:2px 7px;border-radius:4px">{{ lv|lower }}</button>
+            {% endfor %}
+          </div>
+          <button type="button" class="log-inline-prev btn btn-ghost"
+                  style="font-size:11px;padding:3px 8px">Older</button>
+          <button type="button" class="log-inline-next btn btn-ghost"
+                  style="font-size:11px;padding:3px 8px">Newer</button>
+          <button type="button" class="log-inline-close btn btn-ghost"
+                  style="font-size:11px;padding:3px 8px">Close</button>
+        </div>
+        <pre class="log-inline-output"
+             style="margin:0;padding:10px 12px;font-size:11px;line-height:1.55;
+                    white-space:pre-wrap;word-break:break-word;
+                    max-height:420px;overflow-y:auto;overscroll-behavior:contain;
+                    color:rgba(255,255,255,.85)"></pre>
+      </div>
+      {% endfor %}
+    </div>
+    {% else %}
+    <p class="muted" style="font-size:12px">No log files yet — they are written starting from the next log event.</p>
+    {% endif %}
+  </div>
 </div>
 
 {# Log viewer modal (plain overlay — not .modal-overlay, so toasts don't remove it) #}
@@ -371,6 +456,219 @@
   }));
   modal.addEventListener('click', e => { if (e.target === modal) close(); });
   document.addEventListener('keydown', e => { if (e.key === 'Escape' && modal.style.display !== 'none') close(); });
+})();
+
+// ---- Log retention save ----
+(() => {
+  const btn = document.getElementById('save-log-retention');
+  if (!btn) return;
+  btn.addEventListener('click', async () => {
+    const val = document.getElementById('log-retention-input').value;
+    const n = parseInt(val, 10);
+    if (!n || n < 1) { if (window.showToast) showToast('Enter a valid number of days', 'error'); return; }
+    const r = await fetch('/api/settings/system.log_retention_days', {
+      method: 'PUT', headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({value: String(n)}),
+    });
+    if (r.ok) { if (window.showToast) showToast('Saved', 'success'); }
+    else { if (window.showToast) showToast('Failed to save', 'error'); }
+  });
+})();
+
+// ---- Log file browser ----
+(() => {
+  const USER_TZ = '{{ user_tz }}';
+  const LEVEL_COLORS = { ERROR:'#fc8181', CRITICAL:'#fc8181', WARNING:'#f6ad55', INFO:'rgba(255,255,255,.5)', DEBUG:'rgba(255,255,255,.35)' };
+  const CAT_COLORS   = { detection:'rgba(255,255,255,.5)', identity:'#68d391', enrollment:'#b794f4', model:'#f6ad55', settings:'rgba(255,255,255,.5)' };
+  const PAGE = 200;
+
+  function fmtUtc(ts) {
+    try {
+      return new Date(ts).toLocaleString('{{ user_locale }}', {timeZone: USER_TZ, hour12: false,
+        year:'numeric', month:'2-digit', day:'2-digit', hour:'2-digit', minute:'2-digit', second:'2-digit'});
+    } catch { return ts; }
+  }
+
+  function fmtDate(d) {
+    try {
+      return new Date(d + 'T00:00:00Z').toLocaleDateString('{{ user_locale }}', {timeZone: USER_TZ,
+        year:'numeric', month:'short', day:'numeric'});
+    } catch { return d; }
+  }
+
+  // Format date labels in the file list
+  document.querySelectorAll('[data-utc-date]').forEach(el => {
+    el.textContent = fmtDate(el.dataset.utcDate);
+  });
+
+  function esc(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+
+  // Per-viewer state
+  const state = {};
+
+  function getState(date, type) {
+    const k = date + '/' + type;
+    if (!state[k]) state[k] = { offset: 0, total: 0, level: null, activeLevels: new Set(['DEBUG','INFO','WARNING','ERROR','CRITICAL']), filter: '' };
+    return state[k];
+  }
+
+  function renderAppLines(viewer, lines) {
+    const out = viewer.querySelector('.log-inline-output');
+    if (!lines.length) { out.textContent = 'No lines match the filter.'; return; }
+    out.innerHTML = lines.map(l =>
+      `<div><span style="color:rgba(255,255,255,.4)">${esc(fmtUtc(l.time))}</span> ` +
+      `<strong style="color:${LEVEL_COLORS[l.level]||'#fff'}">${esc(l.level)}</strong> ` +
+      `<span style="color:rgba(255,255,255,.45)">${esc(l.logger)}</span> ${esc(l.message)}</div>`
+    ).join('');
+  }
+
+  function renderActivityEvents(viewer, events) {
+    const out = viewer.querySelector('.log-inline-output');
+    if (!events.length) { out.textContent = 'No events.'; return; }
+    out.innerHTML = events.map(e =>
+      `<div><span style="color:rgba(255,255,255,.4)">${esc(fmtUtc(e.time))}</span> ` +
+      `<span style="color:${CAT_COLORS[e.category]||'#fff'}">[${esc(e.category)}]</span> ${esc(e.message)}</div>`
+    ).join('');
+  }
+
+  async function loadViewer(date, type, offsetOverride) {
+    const k = date + '/' + type;
+    const st = getState(date, type);
+    const viewer = document.getElementById('log-inline-' + date);
+    const out    = viewer.querySelector('.log-inline-output');
+    const count  = viewer.querySelector('.log-inline-count');
+
+    out.textContent = 'Loading…';
+
+    const lvParam = (type === 'app' && st.level) ? `&level=${encodeURIComponent(st.level)}` : '';
+    const qParam  = (type === 'app' && st.filter) ? `&q=${encodeURIComponent(st.filter)}` : '';
+    const off = offsetOverride !== undefined ? offsetOverride : st.offset;
+    const url = `/api/logs/files/${date}/${type}?offset=${off}&limit=${PAGE}${lvParam}${qParam}`;
+    try {
+      const r = await fetch(url);
+      if (!r.ok) { out.textContent = 'Failed (' + r.status + ').'; return; }
+      const data = await r.json();
+      st.total  = data.total;
+      st.offset = off;
+      count.textContent = `${st.total} line${st.total !== 1 ? 's' : ''}  ·  showing ${off + 1}–${Math.min(off + PAGE, st.total)}`;
+      if (type === 'app')      renderAppLines(viewer, data.lines || []);
+      else                     renderActivityEvents(viewer, data.events || []);
+      viewer.querySelector('.log-inline-prev').disabled = st.offset <= 0;
+      viewer.querySelector('.log-inline-next').disabled = st.offset + PAGE >= st.total;
+    } catch { out.textContent = 'Failed to load.'; }
+  }
+
+  function openViewer(date, type) {
+    // Close any other open viewer for this date
+    const viewer = document.getElementById('log-inline-' + date);
+    const title  = viewer.querySelector('.log-inline-title');
+    const filter = viewer.querySelector('.log-inline-filter');
+    const levels = viewer.querySelector('.log-inline-levels');
+
+    title.textContent = fmtDate(date) + ' — ' + (type === 'app' ? 'App log' : 'Activity log');
+    filter.style.display  = type === 'app' ? '' : 'none';
+    levels.style.display  = type === 'app' ? 'flex' : 'none';
+
+    const st = getState(date, type);
+    // Default to last page
+    const startOffset = Math.max(0, (st.total || 0) - PAGE);
+    viewer.dataset.activeType = type;
+    viewer.style.display = '';
+    loadViewer(date, type, startOffset);
+
+    // Sync level buttons
+    viewer.querySelectorAll('.log-ilv-btn').forEach(b => {
+      b.classList.toggle('btn-primary', st.activeLevels.has(b.dataset.level));
+      b.classList.toggle('btn-ghost',  !st.activeLevels.has(b.dataset.level));
+    });
+  }
+
+  // Delegate events on log file list
+  const list = document.getElementById('log-file-list');
+  if (!list) return;
+
+  list.addEventListener('click', async e => {
+    // View button
+    const viewBtn = e.target.closest('.log-view-btn');
+    if (viewBtn) {
+      const date = viewBtn.dataset.date;
+      const type = viewBtn.dataset.type;
+      const viewer = document.getElementById('log-inline-' + date);
+      // Toggle: if already open with this type, close; else open
+      if (viewer.style.display !== 'none' && viewer.dataset.activeType === type) {
+        viewer.style.display = 'none';
+      } else {
+        openViewer(date, type);
+      }
+      return;
+    }
+
+    // Delete button
+    const delBtn = e.target.closest('.log-delete-btn');
+    if (delBtn) {
+      const date = delBtn.dataset.date;
+      if (!confirm('Delete log files for ' + fmtDate(date) + '?')) return;
+      const r = await fetch('/api/logs/files/' + date, {method: 'DELETE'});
+      if (r.ok || r.status === 204) {
+        const row = list.querySelector(`.log-date-row[data-date="${date}"]`);
+        const viewer = document.getElementById('log-inline-' + date);
+        if (row) row.remove();
+        if (viewer) viewer.remove();
+        if (window.showToast) showToast('Deleted', 'success');
+      } else {
+        if (window.showToast) showToast('Delete failed', 'error');
+      }
+      return;
+    }
+
+    // Inline viewer controls — prev / next / close / level / filter
+    const viewer = e.target.closest('.log-inline-viewer');
+    if (!viewer) return;
+    const date = viewer.id.replace('log-inline-', '');
+    const type = viewer.dataset.activeType;
+    if (!type) return;
+    const st = getState(date, type);
+
+    if (e.target.closest('.log-inline-prev')) {
+      const newOff = Math.max(0, st.offset - PAGE);
+      loadViewer(date, type, newOff);
+      return;
+    }
+    if (e.target.closest('.log-inline-next')) {
+      const newOff = Math.min(st.offset + PAGE, Math.max(0, st.total - PAGE));
+      loadViewer(date, type, newOff);
+      return;
+    }
+    if (e.target.closest('.log-inline-close')) {
+      viewer.style.display = 'none';
+      return;
+    }
+    const lvBtn = e.target.closest('.log-ilv-btn');
+    if (lvBtn) {
+      const lv = lvBtn.dataset.level;
+      if (st.activeLevels.has(lv)) st.activeLevels.delete(lv); else st.activeLevels.add(lv);
+      st.level = st.activeLevels.size === 5 ? null : [...st.activeLevels].join(',');
+      lvBtn.classList.toggle('btn-primary', st.activeLevels.has(lv));
+      lvBtn.classList.toggle('btn-ghost',  !st.activeLevels.has(lv));
+      loadViewer(date, type, 0);
+      return;
+    }
+  });
+
+  // Filter input — debounced server-side search
+  list.addEventListener('input', e => {
+    const filterEl = e.target.closest('.log-inline-filter');
+    if (!filterEl) return;
+    const viewer = filterEl.closest('.log-inline-viewer');
+    if (!viewer) return;
+    const date = viewer.id.replace('log-inline-', '');
+    const type = viewer.dataset.activeType;
+    if (type !== 'app') return;
+    const st = getState(date, type);
+    st.filter = filterEl.value;
+    clearTimeout(filterEl._t);
+    filterEl._t = setTimeout(() => loadViewer(date, type, 0), 300);
+  });
 })();
 </script>
 {% endblock %}

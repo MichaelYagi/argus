@@ -15,6 +15,9 @@ venv/
 /data/
 /models/
 
+# Log files (generated at runtime)
+/logs/
+
 # OS
 .DS_Store
 Thumbs.db

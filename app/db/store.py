@@ -2657,6 +2657,9 @@ _SETTINGS_SEED: list[tuple] = [
     ("system.log_buffer_size",
      "500",   "int",    "system",
      "Log Buffer Size | Number of recent log lines kept in memory and replayed in the log viewer (100–100000)"),
+    ("system.log_retention_days",
+     "5",     "int",    "logs",
+     "Log Retention Days | Log files older than this many days are deleted at startup and at UTC midnight"),
     ("system.max_inference_size",
      "1920",  "int",    "system",
      "Max Inference Size | Longest image edge (px) before downscaling for detection. "

@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import os
 from contextlib import asynccontextmanager
+from datetime import datetime, timedelta, timezone
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -51,9 +53,47 @@ async def lifespan(app: FastAPI):
     _buf_size = int(_row["value"]) if _row else log_buffer.DEFAULT_SIZE
     log_buffer.install(_buf_size)
     activity_buffer.install(_buf_size)
+    _install_log_files()
     _autoload_engines()
     _check_data_path_integrity()
+    _purge_log_files()
+    purge_task = asyncio.create_task(_midnight_purge_loop())
     yield
+    purge_task.cancel()
+    try:
+        await purge_task
+    except asyncio.CancelledError:
+        pass
+
+
+def _install_log_files() -> None:
+    from app.core import log_files
+    from app.core.paths import logs_dir
+    try:
+        log_files.install(logs_dir())
+    except Exception as exc:
+        log.warning("Failed to install log file handler: %s", exc)
+
+
+def _purge_log_files() -> None:
+    from app.core import log_files
+    from app.core.paths import logs_dir
+    row = store.get_setting("system.log_retention_days")
+    days = int(row["value"]) if row else 5
+    try:
+        log_files.purge_old(days, logs_dir())
+    except Exception as exc:
+        log.warning("Failed to purge old log files: %s", exc)
+
+
+async def _midnight_purge_loop() -> None:
+    while True:
+        now = datetime.now(timezone.utc).replace(tzinfo=None)
+        next_midnight = (now + timedelta(days=1)).replace(
+            hour=0, minute=0, second=30, microsecond=0
+        )
+        await asyncio.sleep((next_midnight - now).total_seconds())
+        _purge_log_files()
 
 
 def _check_data_path_integrity() -> None:

@@ -41,10 +41,11 @@ def test_list_settings_grouped(client):
     r = client.get("/api/settings", headers=h)
     assert r.status_code == 200
     data = r.json()
-    assert set(data.keys()) == {"face", "object", "system"}
+    assert set(data.keys()) == {"face", "object", "system", "logs"}
     assert len(data["face"]) == 9
     assert len(data["object"]) == 4
     assert len(data["system"]) == 12
+    assert len(data["logs"]) == 1
 
 
 def test_list_settings_values_are_typed(client):

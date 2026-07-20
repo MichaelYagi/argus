@@ -20,3 +20,7 @@ def sources_dir() -> Path:
 
 def crops_dir() -> Path:
     return data_dir() / "crops"
+
+
+def logs_dir() -> Path:
+    return Path(os.environ.get("LOG_PATH", "logs"))

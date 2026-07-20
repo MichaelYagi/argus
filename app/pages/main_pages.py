@@ -325,6 +325,11 @@ async def settings_page(request: Request):
     ctx["gpu_available"]     = gpu_available
     ctx["settings_defaults"] = store.get_settings_defaults()
     ctx["managed_users"]     = [dict(u) for u in store.list_managed_users(ctx["user_id"])]
+    from app.core import log_files
+    from app.core.paths import logs_dir
+    ctx["log_dates"]         = log_files.list_dates(logs_dir())
+    _ret = store.get_setting("system.log_retention_days")
+    ctx["log_retention_days"] = int(_ret["value"]) if _ret else 5
     return _r(request, "settings.html", ctx)
 
 
