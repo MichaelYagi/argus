@@ -165,9 +165,7 @@
     updateTabBadges();
 
     const currentMatchData = item.suggested_matches.find(m => m.identity_id === currentId);
-    const currentSim = currentMatchData
-      ? `<span class="muted" style="font-size:12px;margin-left:6px">${(currentMatchData.similarity*100).toFixed(0)}% similarity</span>`
-      : '';
+    const currentSimPct = currentMatchData ? `${(currentMatchData.similarity*100).toFixed(0)}%` : null;
 
     const suggestions = item.suggested_matches
       .filter(m => m.identity_id !== currentId)
@@ -177,26 +175,37 @@
          </button>`
       ).join('');
 
+    const dateStr = typeof formatDate !== 'undefined' ? formatDate(item.detected_at) : item.detected_at;
+    const bestMatchPrefix = item.suggested_matches.length
+      ? `${(item.suggested_matches[0].similarity*100).toFixed(0)}% best match · ` : '';
+
     const card = document.createElement('div');
     card.className = 'review-card rc-card';
     card.id = 'rc-' + item.detection_id;
     card.innerHTML = `
-      <div style="display:flex;width:100%;align-items:flex-start;gap:8px">
+      <div style="display:flex;width:100%;align-items:flex-start;gap:12px">
+        ${matched ? `
+        <div style="display:flex;flex-direction:column;align-items:center;gap:6px;flex-shrink:0;width:110px">
+          <input type="checkbox" class="rc-check" data-id="${item.detection_id}" style="align-self:flex-start">
+          <img src="${esc(item.crop_url)}" alt=""
+               style="width:110px;height:110px;object-fit:cover;border-radius:4px;${item.source_image_url ? 'cursor:zoom-in' : ''}"
+               ${item.source_image_url ? `onclick="openSourceModal('${esc(item.source_image_url)}')"` : ''}>
+          <div style="text-align:center;line-height:1.5;width:100%">
+            <span class="muted" style="font-size:11px">Matched to</span><br>
+            <strong style="font-size:13px">${name}</strong>
+            ${currentSimPct ? `<br><span class="muted" style="font-size:11px">${currentSimPct} similarity</span>` : ''}
+          </div>
+        </div>` : `
         <input type="checkbox" class="rc-check" data-id="${item.detection_id}" style="margin-top:4px;flex-shrink:0">
         <img src="${esc(item.crop_url)}" alt=""
              style="width:110px;height:110px;object-fit:cover;border-radius:4px;flex-shrink:0;${item.source_image_url ? 'cursor:zoom-in' : ''}"
-             ${item.source_image_url ? `onclick="openSourceModal('${esc(item.source_image_url)}')"` : ''}>
+             ${item.source_image_url ? `onclick="openSourceModal('${esc(item.source_image_url)}')"` : ''}>`}
         <div class="rc-info" style="flex:1;min-width:0">
 
           <div style="display:flex;width:100%;align-items:baseline;margin-bottom:10px">
-            ${matched ? `
-            <div>
-              <span class="muted" style="font-size:12px">Matched to</span>
-              <strong style="margin-left:4px">${name}</strong>${currentSim}
-            </div>` : `
-            <div><span class="muted">No match found</span></div>`}
-            <span class="muted" style="font-size:11px;white-space:nowrap;margin-left:auto;padding-left:16px">
-              ${item.suggested_matches.length ? `${(item.suggested_matches[0].similarity*100).toFixed(0)}% best match · ` : ''}${typeof formatDate !== 'undefined' ? formatDate(item.detected_at) : item.detected_at}
+            ${matched ? '' : '<div><span class="muted">No match found</span></div>'}
+            <span class="muted" style="font-size:11px;white-space:nowrap;margin-left:auto;padding-left:${matched ? 0 : 16}px">
+              ${bestMatchPrefix}${dateStr}
             </span>
           </div>
 
