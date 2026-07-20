@@ -276,7 +276,8 @@
 // Danger zone — delete all of the current user's identity data
 // ---------------------------------------------------------------------------
 document.getElementById('delete-all-data-btn').addEventListener('click', function() {
-  const env = this.dataset.env || 'default';
+  const btn = this;
+  const env = btn.dataset.env || 'default';
   const frag = document.createDocumentFragment();
   frag.appendChild(document.createTextNode('This will permanently delete all enrolled people, detected objects, detections, face embeddings, and stored images in the '));
   const b = document.createElement('strong');
@@ -286,8 +287,24 @@ document.getElementById('delete-all-data-btn').addEventListener('click', functio
   showConfirm(
     frag,
     async () => {
-      const r = await fetch('/api/identities', { method: 'DELETE' });
-      if (r.ok) showMessage('All identity data deleted from the "' + env + '" environment.');
+      const origText = btn.textContent;
+      btn.disabled = true;
+      btn.textContent = 'Deleting...';
+      try {
+        const r = await fetch('/api/identities', { method: 'DELETE' });
+        if (r.ok) {
+          showMessage('All identity data deleted from the "' + env + '" environment.');
+        } else {
+          const d = await r.json().catch(() => ({}));
+          showMessage(d.detail || 'Delete failed — please try again.');
+          btn.disabled = false;
+          btn.textContent = origText;
+        }
+      } catch (_) {
+        showMessage('Network error — please try again.');
+        btn.disabled = false;
+        btn.textContent = origText;
+      }
     },
     { confirmText: 'Delete all data', danger: true }
   );
