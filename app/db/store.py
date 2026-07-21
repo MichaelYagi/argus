@@ -995,7 +995,8 @@ def get_identity_gallery(
         sql = """SELECT d.id, d.crop_path, d.confidence, d.detected_at, d.review_status,
                         d.source_image_id, d.embedding, d.bbox_x, d.bbox_y, d.bbox_w, d.bbox_h,
                         fe.id AS embedding_id,
-                        si.file_path AS source_image_path
+                        si.file_path AS source_image_path,
+                        si.external_ref AS source_external_ref
                  FROM detections d
                  LEFT JOIN face_embeddings fe
                         ON fe.identity_id = d.identity_id AND fe.source_image_path = d.crop_path
