@@ -136,6 +136,38 @@ def test_renderbboxes_has_raf_retry():
     )
 
 
+def test_window_load_corrects_bbox_positions():
+    """A window.load listener must reposition or render boxes after CSS settles.
+
+    Without this, a cached image can fire img.onload before style.css is applied,
+    causing renderBoxes() to compute wrong scale factors. The window.load handler
+    runs after all resources are loaded and calls reposBoxes() to correct positions
+    (or renderBoxes() if no boxes were rendered yet).
+    """
+    tag = _tag_html()
+    assert "window.addEventListener('load'" in tag, (
+        "tag.html is missing a window.load listener — bboxes intermittently render "
+        "at wrong positions when a cached image races CSS loading"
+    )
+    assert "reposBoxes()" in tag.split("window.addEventListener('load'")[1].split("});")[0], (
+        "window.load handler does not call reposBoxes() to correct mis-positioned bboxes"
+    )
+
+
+def test_renderbboxes_has_duplicate_render_guard():
+    """renderBoxes() must guard against double-appending boxes.
+
+    When both img.onload and the window.load handler call renderBoxes() concurrently
+    (cached-image + CSS race), the second call must exit early rather than
+    appending a duplicate set of bbox divs.
+    """
+    tag = _tag_html()
+    assert "wrap.querySelector('.t-box')" in tag, (
+        "renderBoxes() is missing the duplicate-render guard — "
+        "concurrent calls from onload and window.load will double-append bbox divs"
+    )
+
+
 # ---------------------------------------------------------------------------
 # Embedding-source toast and bbox color (tag page)
 # ---------------------------------------------------------------------------

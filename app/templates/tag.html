@@ -104,6 +104,9 @@ function renderBoxes() {
   const sx = img.clientWidth / NAT_W;
   const sy = img.clientHeight / NAT_H;
   const wrap = document.getElementById('tag-wrap');
+  // Guard against duplicate renders: img onload and the window.load handler
+  // can both call renderBoxes() when a cached image races CSS loading.
+  if (wrap.querySelector('.t-box')) return;
 
   const all = [
     ...FACES.map(f => ({ ...f, kind: 'face' })),
@@ -486,6 +489,20 @@ function renderDetList() {
 }
 
 renderDetList();
+
+// Correct bbox positions after all resources (including CSS) have loaded.
+// Fixes a race where a cached image fires img.onload before style.css is
+// applied, causing renderBoxes() to compute wrong sx/sy scale factors.
+// If boxes were rendered at wrong positions: reposBoxes() corrects them.
+// If boxes weren't rendered at all (rAF still retrying): renderBoxes() runs
+// now with stable layout. The duplicate-render guard inside renderBoxes()
+// prevents double-appending when both paths complete successfully.
+window.addEventListener('load', function() {
+  const wrap = document.getElementById('tag-wrap');
+  if (!wrap) return;
+  if (wrap.querySelector('.t-box')) reposBoxes();
+  else renderBoxes();
+});
 
 // Visibility toggles — only shown when both faces and objects are present
 if (FACES.length && OBJECTS.length) {
