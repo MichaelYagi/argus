@@ -2,27 +2,29 @@
 {% block title %}Tag image — Argus{% endblock %}
 
 {% block content %}
-<div class="page-header" style="margin-bottom:12px">
-  <a id="back-link" href="/">&larr; Back</a>
-  <span class="muted" style="font-size:13px;margin-left:8px">
-    Click a box to assign or correct a label. Faces: orange = unlabeled, green = labeled. Objects: blue.
-  </span>
-  {% if external_ref %}
-  <span class="muted" style="font-size:12px;margin-left:8px">External ref: <span style="font-family:monospace">{{ external_ref }}</span></span>
-  {% endif %}
-  {% if image_tags %}
-  <span style="display:flex;gap:4px;flex-wrap:wrap;margin-left:12px">
-    {% for tag in image_tags %}
-    <span style="background:var(--hover);border:1px solid var(--border);border-radius:99px;
-                 padding:1px 8px;font-size:11px;font-weight:500">{{ tag }}</span>
-    {% endfor %}
-  </span>
-  {% endif %}
-  <span class="nav-spacer"></span>
-  <span id="tag-status" class="muted" style="font-size:12px"></span>
-  <button class="btn btn-ghost" id="draw-bbox-btn" style="margin-left:8px" title="Long-press on mobile">Draw box</button>
-  <button class="btn btn-ghost" id="reprocess-btn" style="margin-left:8px">Reprocess</button>
-  <button class="btn btn-danger" id="delete-image-btn" style="margin-left:8px">Delete image</button>
+<div style="margin-bottom:12px">
+  <div class="page-header" style="margin-bottom:6px">
+    <a id="back-link" href="/">&larr; Back</a>
+    <span class="nav-spacer"></span>
+    <span id="tag-status" class="muted" style="font-size:12px"></span>
+    <button class="btn btn-ghost" id="draw-bbox-btn" title="Long-press on mobile">Draw box</button>
+    <button class="btn btn-ghost" id="reprocess-btn">Reprocess</button>
+    <button class="btn btn-danger" id="delete-image-btn">Delete image</button>
+  </div>
+  <div style="display:flex;flex-wrap:wrap;align-items:center;gap:8px;font-size:12px">
+    <span class="muted">Click a box to assign or correct a label. Faces: orange = unlabeled, green = labeled. Objects: blue.</span>
+    {% if external_ref %}
+    <span class="muted">&#8231; External ref: <span style="font-family:monospace">{{ external_ref }}</span></span>
+    {% endif %}
+    {% if image_tags %}
+    <span style="display:flex;gap:4px;flex-wrap:wrap">
+      {% for tag in image_tags %}
+      <span style="background:var(--hover);border:1px solid var(--border);border-radius:99px;
+                   padding:1px 8px;font-size:11px;font-weight:500">{{ tag }}</span>
+      {% endfor %}
+    </span>
+    {% endif %}
+  </div>
 </div>
 
 <!-- Reprocess modal -->
