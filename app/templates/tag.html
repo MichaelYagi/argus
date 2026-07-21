@@ -59,7 +59,7 @@
 <div style="display:flex;align-items:center">
   <a id="prev-nav" class="tag-nav" href="#" style="display:none" aria-label="Previous image">&#8249;</a>
   <div id="tag-wrap">
-    <img id="tag-photo" src="{{ image_url }}" alt="" draggable="false"
+    <img id="tag-photo" src="{{ image_url }}" alt=""
          onload="renderBoxes(); scrollWrapIntoView()"
          onerror="this.style.display='none'; document.getElementById('tag-missing').style.display='flex'">
     <div id="tag-missing" style="display:none;align-items:center;justify-content:center;min-height:200px;color:var(--muted);font-size:14px">
@@ -81,6 +81,7 @@ const NAT_W = {{ nat_w }}, NAT_H = {{ nat_h }};
 const FACES = {{ faces_json | safe }};
 const OBJECTS = {{ objects_json | safe }};
 sessionStorage.setItem('argus_last_viewed', '{{ source_image_id }}');
+document.getElementById('tag-photo').addEventListener('dragstart', e => e.preventDefault());
 
 function scrollWrapIntoView() {
   setTimeout(() => {
@@ -572,7 +573,7 @@ if (FACES.length && OBJECTS.length) {
       return;
     }
     if (!drawMode) return;
-    e.preventDefault();
+    if (e.pointerType !== 'touch') e.preventDefault();
     wrap.setPointerCapture(e.pointerId);
     const r = wrap.getBoundingClientRect();
     drawStart = { x: e.clientX - r.left, y: e.clientY - r.top };
