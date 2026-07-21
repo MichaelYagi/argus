@@ -81,7 +81,6 @@ const NAT_W = {{ nat_w }}, NAT_H = {{ nat_h }};
 const FACES = {{ faces_json | safe }};
 const OBJECTS = {{ objects_json | safe }};
 sessionStorage.setItem('argus_last_viewed', '{{ source_image_id }}');
-document.getElementById('tag-photo').addEventListener('dragstart', e => e.preventDefault());
 
 function scrollWrapIntoView() {
   setTimeout(() => {
@@ -559,29 +558,28 @@ if (FACES.length && OBJECTS.length) {
     }, 'Name this face');
   }
 
-  // Unified pointer events cover mouse, touch, and stylus without passive:false.
-  // Scroll prevention in draw mode is handled by touch-action:none in CSS.
+  // Listeners go on document, not on #tag-wrap, to avoid Android Chrome
+  // compositor issues that make absolutely-positioned children invisible.
   let lpTimer = null;
   let lpStart  = null;
 
-  wrap.addEventListener('pointerdown', e => {
-    // Touch outside draw mode: start long-press timer (500ms enters draw mode)
+  document.addEventListener('pointerdown', e => {
+    const inWrap = wrap.contains(e.target);
     if (e.pointerType === 'touch' && !drawMode) {
-      if (e.target.closest('.t-box')) return;
+      if (!inWrap || e.target.closest('.t-box')) return;
       lpStart = { x: e.clientX, y: e.clientY };
       lpTimer = setTimeout(() => { lpTimer = null; enterDrawMode(); }, 500);
       return;
     }
-    if (!drawMode) return;
+    if (!drawMode || !inWrap) return;
     if (e.pointerType !== 'touch') e.preventDefault();
-    wrap.setPointerCapture(e.pointerId);
     const r = wrap.getBoundingClientRect();
     drawStart = { x: e.clientX - r.left, y: e.clientY - r.top };
     drawRect = makeRubberBand();
     updateRect(drawRect, drawStart.x, drawStart.y, 0, 0);
   });
 
-  wrap.addEventListener('pointermove', e => {
+  document.addEventListener('pointermove', e => {
     if (lpTimer && lpStart) {
       if (Math.abs(e.clientX - lpStart.x) > 10 || Math.abs(e.clientY - lpStart.y) > 10) {
         clearTimeout(lpTimer); lpTimer = null;
@@ -596,7 +594,7 @@ if (FACES.length && OBJECTS.length) {
       Math.abs(cx - drawStart.x), Math.abs(cy - drawStart.y));
   });
 
-  wrap.addEventListener('pointerup', e => {
+  document.addEventListener('pointerup', e => {
     clearTimeout(lpTimer); lpTimer = null; lpStart = null;
     if (!drawMode || !drawStart || !drawRect) return;
     const r  = wrap.getBoundingClientRect();
@@ -607,10 +605,12 @@ if (FACES.length && OBJECTS.length) {
     finishDraw(px, py, Math.abs(cx - drawStart.x), Math.abs(cy - drawStart.y));
   });
 
-  wrap.addEventListener('pointercancel', () => {
+  document.addEventListener('pointercancel', () => {
     clearTimeout(lpTimer); lpTimer = null; lpStart = null;
     if (drawMode) exitDrawMode();
   });
+
+  document.addEventListener('dragstart', e => { if (drawMode) e.preventDefault(); });
 
   // Submit the drawn box to the server and add the new bbox div to the page.
   async function submitManualBox(bbox, label) {
