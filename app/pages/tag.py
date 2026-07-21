@@ -61,6 +61,7 @@ async def tag_page(source_image_id: int, request: Request):
     for r in faces:
         age, gender, pose = _attrs(r)
         det_source = r["source"] if "source" in r.keys() else "auto"
+        emb_src = r["embedding_source"] if "embedding_source" in r.keys() else None
         face_data.append({
             "id": r["id"],
             "x": r["bbox_x"], "y": r["bbox_y"],
@@ -70,6 +71,7 @@ async def tag_page(source_image_id: int, request: Request):
             "review_status": r["review_status"],
             "similarity": _similarity(r),
             "source": det_source,
+            "embedding_source": emb_src,
             "age": age, "gender": gender, "pose": pose,
         })
 

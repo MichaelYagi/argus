@@ -134,3 +134,56 @@ def test_renderbboxes_has_raf_retry():
     assert "requestAnimationFrame(renderBoxes)" in tag, (
         "renderBoxes() is missing the rAF retry guard — bboxes will be 0x0 on slow Android hardware"
     )
+
+
+# ---------------------------------------------------------------------------
+# Embedding-source toast and bbox color (tag page)
+# ---------------------------------------------------------------------------
+
+def test_embedding_source_toast_messages():
+    """submitManualBox must show three distinct messages based on embedding_source."""
+    tag = _tag_html()
+    assert "Saved — embedding extracted (aligned)." in tag, (
+        "tag.html is missing the tier-1 toast message for aligned embedding"
+    )
+    assert "Saved — embedding extracted (unaligned)." in tag, (
+        "tag.html is missing the tier-2 toast message for raw embedding"
+    )
+    assert "Saved — no face embedding found." in tag, (
+        "tag.html is missing the tier-3 toast message for missing embedding"
+    )
+
+
+def test_toast_uses_embedding_source_not_embedding_found():
+    """Toast logic must branch on d.embedding_source, not the removed d.embedding_found field."""
+    tag = _tag_html()
+    assert "d.embedding_source" in tag, (
+        "tag.html toast does not reference d.embedding_source"
+    )
+    assert "d.embedding_found" not in tag, (
+        "tag.html still references the removed d.embedding_found field"
+    )
+
+
+def test_embedding_source_css_classes_present():
+    """style.css must define emb-aligned, emb-raw, and emb-none border colors for manual bboxes."""
+    css = _style_css()
+    assert ".t-box.manual.emb-aligned" in css, "style.css is missing .t-box.manual.emb-aligned"
+    assert ".t-box.manual.emb-raw" in css, "style.css is missing .t-box.manual.emb-raw"
+    assert ".t-box.manual.emb-none" in css, "style.css is missing .t-box.manual.emb-none"
+
+
+def test_renderbboxes_applies_embedding_source_class():
+    """renderBoxes() must apply emb-aligned/emb-raw/emb-none to manual boxes."""
+    tag = _tag_html()
+    assert "emb-aligned" in tag, "renderBoxes() does not apply emb-aligned class"
+    assert "emb-raw" in tag, "renderBoxes() does not apply emb-raw class"
+    assert "emb-none" in tag, "renderBoxes() does not apply emb-none class"
+
+
+def test_submit_manual_box_propagates_embedding_source_to_face():
+    """submitManualBox must store embedding_source on the newFace object for re-render consistency."""
+    tag = _tag_html()
+    assert "embedding_source: embSrc" in tag, (
+        "submitManualBox does not store embedding_source on the newFace object"
+    )

@@ -1230,6 +1230,7 @@ def _run_faces(user_id: int, environment_id: int, img: Any, source_id: int,
             source_scale, det.bbox[0], det.bbox[1], det.bbox[2], det.bbox[3],
             stored_bbox[0], stored_bbox[1], stored_bbox[2], stored_bbox[3],
         )
+        emb_bytes = _embedding_to_bytes(det.embedding)
         detection_id = store.insert_detection(
             user_id=user_id,
             environment_id=environment_id,
@@ -1243,7 +1244,8 @@ def _run_faces(user_id: int, environment_id: int, img: Any, source_id: int,
             bbox_w=stored_bbox[2],
             bbox_h=stored_bbox[3],
             crop_path=crop_filename,
-            embedding=_embedding_to_bytes(det.embedding),
+            embedding=emb_bytes,
+            embedding_source="aligned" if emb_bytes is not None else None,
             review_status=review_status,
             attributes=json.dumps(attrs),
         )

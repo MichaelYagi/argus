@@ -426,15 +426,34 @@ def test_create_manual_detection_persists_source_field(client, tmp_path):
     assert row["source"] == "manual"
 
 
-def test_create_manual_detection_tier2_embedding(client, tmp_path):
-    """Tier-2 fallback: when infer_faces finds nothing, ArcFace is called directly."""
+def test_create_manual_detection_tier1_embedding(client, tmp_path):
+    """Tier-1: RetinaFace finds a face in the crop → embedding_source='aligned'."""
+    from app.inference.face_engine import FaceDetection
     user_id, h = _setup(client)
     src_id = _insert_source(user_id)
     payload = {"bbox": {"x": 0, "y": 0, "w": 20, "h": 20}, "label": "Alice"}
     (tmp_path / "sources").mkdir(parents=True, exist_ok=True)
     (tmp_path / "sources" / "photo.jpg").write_bytes(b"placeholder")
-    # Provide a non-None embedding so the tier-2 branch fires. Stub _embedding_to_bytes
-    # at its source module to bypass numpy (mocked in conftest) returning a MagicMock.
+    fake_face = FaceDetection(bbox=(0, 0, 20, 20), confidence=0.95, embedding=MagicMock())
+    fake_bytes = b"\x00" * (512 * 4)
+    with patch("app.core.image_input.open_and_validate", return_value=_mock_image()), \
+         patch("app.api.detect._save_crop", return_value="crop_test.jpg"), \
+         patch("app.inference.runner.infer_faces", return_value=([fake_face], None)), \
+         patch("app.api.detect._embedding_to_bytes", return_value=fake_bytes), \
+         patch("app.core.face_index.rebuild_user"):
+        r = client.post(f"/api/images/{src_id}/detections", json=payload, headers=h)
+    assert r.status_code == 201
+    assert r.json()["embedding_source"] == "aligned"
+
+
+def test_create_manual_detection_tier2_embedding(client, tmp_path):
+    """Tier-2 fallback: when infer_faces finds nothing, ArcFace is called directly → embedding_source='raw'."""
+    user_id, h = _setup(client)
+    src_id = _insert_source(user_id)
+    payload = {"bbox": {"x": 0, "y": 0, "w": 20, "h": 20}, "label": "Alice"}
+    (tmp_path / "sources").mkdir(parents=True, exist_ok=True)
+    (tmp_path / "sources" / "photo.jpg").write_bytes(b"placeholder")
+    # Stub _embedding_to_bytes at its source module to bypass numpy (mocked in conftest).
     fake_feat = MagicMock()
     fake_bytes = b"\x00" * (512 * 4)
     with patch("app.core.image_input.open_and_validate", return_value=_mock_image()), \
@@ -445,11 +464,11 @@ def test_create_manual_detection_tier2_embedding(client, tmp_path):
          patch("app.core.face_index.rebuild_user"):
         r = client.post(f"/api/images/{src_id}/detections", json=payload, headers=h)
     assert r.status_code == 201
-    assert r.json()["embedding_found"] is True
+    assert r.json()["embedding_source"] == "raw"
 
 
 def test_create_manual_detection_tier3_no_embedding(client, tmp_path):
-    """Tier-3 fallback: when both infer_faces and infer_face_embedding fail, saves without embedding."""
+    """Tier-3 fallback: when both infer_faces and infer_face_embedding fail → embedding_source=None."""
     user_id, h = _setup(client)
     src_id = _insert_source(user_id)
     payload = {"bbox": {"x": 0, "y": 0, "w": 20, "h": 20}, "label": "Alice"}
@@ -462,7 +481,40 @@ def test_create_manual_detection_tier3_no_embedding(client, tmp_path):
          patch("app.core.face_index.rebuild_user"):
         r = client.post(f"/api/images/{src_id}/detections", json=payload, headers=h)
     assert r.status_code == 201
-    assert r.json()["embedding_found"] is False
+    assert r.json()["embedding_source"] is None
+
+
+def test_create_manual_detection_embedding_source_persisted(client, tmp_path):
+    """embedding_source is written to the DB and returned by GET /api/images/{id}/faces."""
+    user_id, h = _setup(client)
+    src_id = _insert_source(user_id)
+    payload = {"bbox": {"x": 0, "y": 0, "w": 20, "h": 20}, "label": "Alice"}
+    (tmp_path / "sources").mkdir(parents=True, exist_ok=True)
+    (tmp_path / "sources" / "photo.jpg").write_bytes(b"placeholder")
+    fake_feat = MagicMock()
+    fake_bytes = b"\x00" * (512 * 4)
+    with patch("app.core.image_input.open_and_validate", return_value=_mock_image()), \
+         patch("app.api.detect._save_crop", return_value="crop_test.jpg"), \
+         patch("app.inference.runner.infer_faces", return_value=([], None)), \
+         patch("app.inference.runner.infer_face_embedding", return_value=fake_feat), \
+         patch("app.api.detect._embedding_to_bytes", return_value=fake_bytes), \
+         patch("app.core.face_index.rebuild_user"):
+        r = client.post(f"/api/images/{src_id}/detections", json=payload, headers=h)
+    assert r.status_code == 201
+    det_id = r.json()["detection_id"]
+
+    # Check DB row
+    with store._connect() as conn:
+        row = conn.execute(
+            "SELECT embedding_source FROM detections WHERE id = ?", (det_id,)
+        ).fetchone()
+    assert row["embedding_source"] == "raw"
+
+    # Check GET endpoint includes embedding_source
+    r2 = client.get(f"/api/images/{src_id}/faces", headers=h)
+    assert r2.status_code == 200
+    face = next(f for f in r2.json()["faces"] if f["detection_id"] == det_id)
+    assert face["embedding_source"] == "raw"
 
 
 # ---------------------------------------------------------------------------

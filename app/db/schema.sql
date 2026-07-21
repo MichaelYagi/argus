@@ -108,6 +108,8 @@ CREATE TABLE IF NOT EXISTS detections (
     bbox_h          INTEGER NOT NULL,
     crop_path       TEXT    NOT NULL,
     embedding       BLOB,              -- face detections only; used for review-queue suggested matches
+    embedding_source TEXT             -- 'aligned' (tier-1: RetinaFace+ArcFace) | 'raw' (tier-2: ArcFace direct) | NULL (no embedding)
+                            CHECK(embedding_source IN ('aligned', 'raw')),
     review_status   TEXT    NOT NULL DEFAULT 'pending'
                             CHECK(review_status IN ('pending', 'confirmed', 'rejected', 'reassigned')),
     source          TEXT    NOT NULL DEFAULT 'auto'

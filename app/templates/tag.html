@@ -121,8 +121,13 @@ function renderBoxes() {
     const rejected = det.review_status === 'rejected';
     const displayLabel = rejected ? '' : det.label;
     const isManual = det.source === 'manual';
+    const embCls = isManual
+      ? (det.embedding_source === 'aligned' ? ' emb-aligned'
+       : det.embedding_source === 'raw'     ? ' emb-raw'
+       :                                      ' emb-none')
+      : '';
     div.className = isFace
-      ? 't-box' + (displayLabel ? ' labeled' : '') + (isManual ? ' manual' : '')
+      ? 't-box' + (displayLabel ? ' labeled' : '') + (isManual ? ' manual' : '') + embCls
       : 't-box object' + (isManual ? ' manual' : '');
     if (focusId && det.id === focusId) div.classList.add('focused');
     div.style.left   = Math.max(0, det.x * sx) + 'px';
@@ -679,7 +684,12 @@ if (FACES.length && OBJECTS.length) {
       return;
     }
     const d = await resp.json();
-    setStatus(d.embedding_found ? 'Saved — face matched.' : 'Saved (no face embedding found).');
+    const embSrc = d.embedding_source;
+    setStatus(
+      embSrc === 'aligned' ? 'Saved — embedding extracted (aligned).'
+    : embSrc === 'raw'     ? 'Saved — embedding extracted (unaligned).'
+    :                        'Saved — no face embedding found.'
+    );
 
     // Add to FACES and render the new box immediately.
     const newFace = {
@@ -690,6 +700,7 @@ if (FACES.length && OBJECTS.length) {
       similarity: null,
       review_status: 'confirmed',
       source: 'manual',
+      embedding_source: embSrc || null,
       age: null, gender: null, pose: null,
     };
     FACES.push(newFace);
@@ -698,8 +709,11 @@ if (FACES.length && OBJECTS.length) {
     const sx  = img.clientWidth  / NAT_W;
     const sy  = img.clientHeight / NAT_H;
 
+    const newEmbCls = embSrc === 'aligned' ? ' emb-aligned'
+                    : embSrc === 'raw'     ? ' emb-raw'
+                    :                        ' emb-none';
     const div = document.createElement('div');
-    div.className = 't-box manual' + (newFace.label ? ' labeled' : '');
+    div.className = 't-box manual' + (newFace.label ? ' labeled' : '') + newEmbCls;
     div.style.left   = (newFace.x * sx) + 'px';
     div.style.top    = (newFace.y * sy) + 'px';
     div.style.width  = (newFace.w * sx) + 'px';

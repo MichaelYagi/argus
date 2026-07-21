@@ -557,6 +557,12 @@ input[type=range] { width: 150px; cursor: pointer; }
 .t-box:hover { border-color: #fff; }
 .t-box.labeled { border-color: #3c3; }
 .t-box.labeled:hover { border-color: #9f9; }
+.t-box.manual.emb-aligned { border-color: #4c4; }
+.t-box.manual.emb-aligned:hover { border-color: #8f8; }
+.t-box.manual.emb-raw { border-color: #fb3; }
+.t-box.manual.emb-raw:hover { border-color: #fd9; }
+.t-box.manual.emb-none { border-color: #c44; }
+.t-box.manual.emb-none:hover { border-color: #f88; }
 .t-box.object { border-color: #39f; }
 .t-box.object:hover { border-color: #9cf; }
 .t-box.focused { border-color: #ff0; border-width: 3px; animation: t-focus-pulse 0.8s ease-in-out 4; z-index: 10; }

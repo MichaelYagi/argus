@@ -196,6 +196,7 @@ async def image_faces(
                 "label": r["identity_label"],
                 "crop_url": f"/media/crops/{r['crop_path']}",
                 "review_status": r["review_status"],
+                "embedding_source": r["embedding_source"] if "embedding_source" in r.keys() else None,
                 **_parse_attributes(r),
             }
             for r in rows
@@ -364,11 +365,11 @@ async def create_manual_detection(
     crop_filename = _save_crop(img, (bx, by, bw, bh), padding)
 
     # Try InsightFace recognition on just the drawn bbox area.
-    # Tier 1: full detect + embed (RetinaFace finds the face, ArcFace embeds it)
-    # Tier 2: skip detection, call ArcFace directly on the raw crop
-    # Tier 3: save without embedding (falls through on any exception or empty result)
+    # Tier 1: full detect + embed (RetinaFace finds the face, ArcFace embeds it) → "aligned"
+    # Tier 2: skip detection, call ArcFace directly on the raw crop → "raw"
+    # Tier 3: save without embedding (falls through on any exception or empty result) → None
     embedding_bytes: bytes | None = None
-    embedding_found = False
+    embedding_source: str | None = None
     try:
         from app.api.detect import _embedding_to_bytes
         from app.inference.runner import infer_face_embedding, infer_faces
@@ -382,14 +383,18 @@ async def create_manual_detection(
         faces, _ = infer_faces(crop_arr)
         if faces:
             top_face = max(faces, key=lambda f: f.confidence)
-            embedding_bytes = _embedding_to_bytes(top_face.embedding)
-            embedding_found = embedding_bytes is not None
+            b = _embedding_to_bytes(top_face.embedding)
+            if b is not None:
+                embedding_bytes = b
+                embedding_source = "aligned"
 
-        if not embedding_found:
+        if embedding_source is None:
             raw_feat = infer_face_embedding(crop_arr)
             if raw_feat is not None:
-                embedding_bytes = _embedding_to_bytes(raw_feat)
-                embedding_found = embedding_bytes is not None
+                b = _embedding_to_bytes(raw_feat)
+                if b is not None:
+                    embedding_bytes = b
+                    embedding_source = "raw"
     except Exception:
         pass  # recognition is best-effort
 
@@ -422,6 +427,7 @@ async def create_manual_detection(
         bbox_x=bx, bbox_y=by, bbox_w=bw, bbox_h=bh,
         crop_path=crop_filename,
         embedding=embedding_bytes,
+        embedding_source=embedding_source,
         review_status="confirmed",
         source="manual",
     )
@@ -454,7 +460,7 @@ async def create_manual_detection(
         "bbox": {"x": bx, "y": by, "w": bw, "h": bh},
         "crop_url": f"/media/crops/{crop_filename}",
         "source": "manual",
-        "embedding_found": embedding_found,
+        "embedding_source": embedding_source,
     }
 
 

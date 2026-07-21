@@ -212,6 +212,8 @@ def _migrate(conn: sqlite3.Connection) -> None:
         conn.execute("ALTER TABLE detections ADD COLUMN ignored INTEGER NOT NULL DEFAULT 0")
     if "source" not in existing_cols:
         conn.execute("ALTER TABLE detections ADD COLUMN source TEXT NOT NULL DEFAULT 'auto'")
+    if "embedding_source" not in existing_cols:
+        conn.execute("ALTER TABLE detections ADD COLUMN embedding_source TEXT")
 
     existing_user_cols = {r[1] for r in conn.execute("PRAGMA table_info(users)")}
     if "is_approved" not in existing_user_cols:
@@ -1278,6 +1280,7 @@ def get_image_detections(
         sql = """SELECT d.id, d.type, d.identity_id, d.confidence, d.embedding,
                         d.bbox_x, d.bbox_y, d.bbox_w, d.bbox_h,
                         d.crop_path, d.review_status, d.detected_at, d.attributes, d.source,
+                        d.embedding_source,
                         i.label AS identity_label
                  FROM detections d
                  LEFT JOIN identities i ON d.identity_id = i.id
@@ -1452,6 +1455,7 @@ def insert_detection(
     bbox_h: int,
     crop_path: str,
     embedding: bytes | None = None,
+    embedding_source: str | None = None,
     review_status: str = "pending",
     attributes: str | None = None,
     environment_id: int | None = None,
@@ -1471,10 +1475,12 @@ def insert_detection(
         conn.execute(
             """INSERT INTO detections
                (user_id, environment_id, identity_id, source_image_id, type, model_id, confidence,
-                bbox_x, bbox_y, bbox_w, bbox_h, crop_path, embedding, review_status, attributes, source)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                bbox_x, bbox_y, bbox_w, bbox_h, crop_path, embedding, embedding_source,
+                review_status, attributes, source)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
             (user_id, env_id, identity_id, source_image_id, detection_type, model_id, confidence,
-             bbox_x, bbox_y, bbox_w, bbox_h, crop_path, embedding, review_status, attributes, source),
+             bbox_x, bbox_y, bbox_w, bbox_h, crop_path, embedding, embedding_source,
+             review_status, attributes, source),
         )
         new_id = conn.execute("SELECT last_insert_rowid()").fetchone()[0]
         record_change(conn, user_id, env_id, "detection", new_id, "created", src_ref)
