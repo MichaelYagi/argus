@@ -120,7 +120,10 @@ function renderBoxes() {
     // treat them as unlabeled for display (orange box, no name chip).
     const rejected = det.review_status === 'rejected';
     const displayLabel = rejected ? '' : det.label;
-    div.className = isFace ? 't-box' + (displayLabel ? ' labeled' : '') : 't-box object';
+    const isManual = det.source === 'manual';
+    div.className = isFace
+      ? 't-box' + (displayLabel ? ' labeled' : '') + (isManual ? ' manual' : '')
+      : 't-box object' + (isManual ? ' manual' : '');
     if (focusId && det.id === focusId) div.classList.add('focused');
     div.style.left   = Math.max(0, det.x * sx) + 'px';
     div.style.top    = Math.max(0, det.y * sy) + 'px';
@@ -691,7 +694,7 @@ if (FACES.length && OBJECTS.length) {
     const sy  = img.clientHeight / NAT_H;
 
     const div = document.createElement('div');
-    div.className = 't-box' + (newFace.label ? ' labeled' : '');
+    div.className = 't-box manual' + (newFace.label ? ' labeled' : '');
     div.style.left   = (newFace.x * sx) + 'px';
     div.style.top    = (newFace.y * sy) + 'px';
     div.style.width  = (newFace.w * sx) + 'px';
