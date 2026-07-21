@@ -101,7 +101,7 @@ CREATE TABLE IF NOT EXISTS detections (
     source_image_id INTEGER NOT NULL REFERENCES source_images(id) ON DELETE CASCADE,
     type            TEXT    NOT NULL CHECK(type IN ('face', 'object')),
     model_id        INTEGER REFERENCES models(id),
-    confidence      REAL    NOT NULL,
+    confidence      REAL,
     bbox_x          INTEGER NOT NULL,
     bbox_y          INTEGER NOT NULL,
     bbox_w          INTEGER NOT NULL,
@@ -110,6 +110,8 @@ CREATE TABLE IF NOT EXISTS detections (
     embedding       BLOB,              -- face detections only; used for review-queue suggested matches
     review_status   TEXT    NOT NULL DEFAULT 'pending'
                             CHECK(review_status IN ('pending', 'confirmed', 'rejected', 'reassigned')),
+    source          TEXT    NOT NULL DEFAULT 'auto'
+                            CHECK(source IN ('auto', 'manual')),
     ignored         INTEGER NOT NULL DEFAULT 0,   -- dismissed from Suggested people; row kept
     reviewed_at     TEXT,
     detected_at     TEXT    NOT NULL DEFAULT (datetime('now'))

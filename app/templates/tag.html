@@ -20,6 +20,7 @@
   {% endif %}
   <span class="nav-spacer"></span>
   <span id="tag-status" class="muted" style="font-size:12px"></span>
+  <button class="btn btn-ghost" id="draw-bbox-btn" style="margin-left:8px" title="Long-press on mobile">Draw box</button>
   <button class="btn btn-ghost" id="reprocess-btn" style="margin-left:8px">Reprocess</button>
   <button class="btn btn-danger" id="delete-image-btn" style="margin-left:8px">Delete image</button>
 </div>
@@ -468,6 +469,240 @@ if (FACES.length && OBJECTS.length) {
       .then(d => { if (d) new Image().src = d.image_url; })
       .catch(() => {});
   });
+})();
+
+// ---- Manual bbox drawing ----
+(function() {
+  let drawMode = false;
+  let drawRect = null;   // in-progress rubber-band div (absolute inside #tag-wrap)
+  let drawStart = null;  // {x, y} in px relative to #tag-wrap
+
+  const drawBtn = document.getElementById('draw-bbox-btn');
+  const wrap    = document.getElementById('tag-wrap');
+
+  function enterDrawMode() {
+    drawMode = true;
+    wrap.classList.add('draw-mode');
+    drawBtn.classList.add('active');
+    setStatus('Click and drag to draw a bounding box. Press Esc to cancel.');
+  }
+
+  function exitDrawMode() {
+    drawMode = false;
+    wrap.classList.remove('draw-mode');
+    drawBtn.classList.remove('active');
+    if (drawRect) { drawRect.remove(); drawRect = null; }
+    drawStart = null;
+    setStatus('');
+  }
+
+  drawBtn.addEventListener('click', () => {
+    if (drawMode) exitDrawMode(); else enterDrawMode();
+  });
+
+  // Esc cancels draw mode
+  document.addEventListener('keydown', e => {
+    if (e.key === 'Escape' && drawMode) exitDrawMode();
+  });
+
+  function makeRubberBand() {
+    const el = document.createElement('div');
+    el.className = 'draw-rect';
+    wrap.appendChild(el);
+    return el;
+  }
+
+  function updateRect(el, px, py, pw, ph) {
+    el.style.left   = px + 'px';
+    el.style.top    = py + 'px';
+    el.style.width  = pw + 'px';
+    el.style.height = ph + 'px';
+  }
+
+  function finishDraw(px, py, pw, ph) {
+    const anchor = drawRect;   // keep visible as popup anchor
+    drawRect = null;
+    drawStart = null;
+    drawMode = false;
+    wrap.classList.remove('draw-mode');
+    drawBtn.classList.remove('active');
+
+    if (pw < 10 || ph < 10) { if (anchor) anchor.remove(); setStatus(''); return; }
+
+    const img = document.getElementById('tag-photo');
+    const sx  = img.clientWidth  / NAT_W;
+    const sy  = img.clientHeight / NAT_H;
+    const bx  = Math.round(px / sx);
+    const by  = Math.round(py / sy);
+    const bw  = Math.round(pw / sx);
+    const bh  = Math.round(ph / sy);
+
+    // Watch for popup close via backdrop/cancel (onConfirm not called in those cases).
+    let done = false;
+    const cleanup = () => { if (!done) { done = true; if (anchor) anchor.remove(); setStatus(''); } };
+    const obs = new MutationObserver(() => {
+      if (!document.querySelector('.label-backdrop')) { obs.disconnect(); cleanup(); }
+    });
+    obs.observe(document.body, { childList: true });
+
+    showLabelPopup(anchor, async label => {
+      cleanup(); obs.disconnect();
+      if (!label) return;
+      await submitManualBox({ x: bx, y: by, w: bw, h: bh }, label);
+    }, 'Name this face');
+  }
+
+  // Desktop: mousedown/mousemove/mouseup on the wrap
+  wrap.addEventListener('mousedown', e => {
+    if (!drawMode) return;
+    if (e.target.closest('.t-box')) return;  // don't capture clicks on existing boxes
+    e.preventDefault();
+    const r = wrap.getBoundingClientRect();
+    drawStart = { x: e.clientX - r.left, y: e.clientY - r.top };
+    drawRect = makeRubberBand();
+    updateRect(drawRect, drawStart.x, drawStart.y, 0, 0);
+  });
+
+  wrap.addEventListener('mousemove', e => {
+    if (!drawMode || !drawStart || !drawRect) return;
+    const r  = wrap.getBoundingClientRect();
+    const cx = e.clientX - r.left;
+    const cy = e.clientY - r.top;
+    updateRect(drawRect,
+      Math.min(drawStart.x, cx), Math.min(drawStart.y, cy),
+      Math.abs(cx - drawStart.x), Math.abs(cy - drawStart.y));
+  });
+
+  wrap.addEventListener('mouseup', e => {
+    if (!drawMode || !drawStart || !drawRect) return;
+    const r  = wrap.getBoundingClientRect();
+    const cx = Math.min(Math.max(0, e.clientX - r.left), r.width);
+    const cy = Math.min(Math.max(0, e.clientY - r.top),  r.height);
+    const px = Math.min(drawStart.x, cx);
+    const py = Math.min(drawStart.y, cy);
+    finishDraw(px, py, Math.abs(cx - drawStart.x), Math.abs(cy - drawStart.y));
+  });
+
+  // Mobile: long-press to enter draw mode; then touch-drag to draw
+  let lpTimer = null;
+  let lpStart  = null;
+
+  wrap.addEventListener('touchstart', e => {
+    if (drawMode) {
+      // Already in draw mode — start drawing the rect
+      if (e.touches.length !== 1) return;
+      e.preventDefault();
+      const t = e.touches[0];
+      const r = wrap.getBoundingClientRect();
+      drawStart = { x: t.clientX - r.left, y: t.clientY - r.top };
+      drawRect = makeRubberBand();
+      updateRect(drawRect, drawStart.x, drawStart.y, 0, 0);
+      return;
+    }
+    // Not in draw mode — start long-press timer
+    if (e.touches.length !== 1) return;
+    const t = e.touches[0];
+    lpStart = { x: t.clientX, y: t.clientY };
+    lpTimer = setTimeout(() => { lpTimer = null; enterDrawMode(); }, 500);
+  }, { passive: false });
+
+  wrap.addEventListener('touchmove', e => {
+    if (drawMode && drawStart && drawRect) {
+      e.preventDefault();
+      const t = e.touches[0];
+      const r = wrap.getBoundingClientRect();
+      const cx = t.clientX - r.left;
+      const cy = t.clientY - r.top;
+      updateRect(drawRect,
+        Math.min(drawStart.x, cx), Math.min(drawStart.y, cy),
+        Math.abs(cx - drawStart.x), Math.abs(cy - drawStart.y));
+      return;
+    }
+    // Cancel long-press if finger moved significantly
+    if (lpTimer && lpStart) {
+      const t = e.touches[0];
+      if (Math.abs(t.clientX - lpStart.x) > 10 || Math.abs(t.clientY - lpStart.y) > 10) {
+        clearTimeout(lpTimer); lpTimer = null;
+      }
+    }
+  }, { passive: false });
+
+  wrap.addEventListener('touchend', e => {
+    clearTimeout(lpTimer); lpTimer = null;
+    if (!drawMode || !drawStart || !drawRect) return;
+    e.preventDefault();
+    const t = e.changedTouches[0];
+    const r = wrap.getBoundingClientRect();
+    const cx = Math.min(Math.max(0, t.clientX - r.left), r.width);
+    const cy = Math.min(Math.max(0, t.clientY - r.top),  r.height);
+    const px = Math.min(drawStart.x, cx);
+    const py = Math.min(drawStart.y, cy);
+    finishDraw(px, py, Math.abs(cx - drawStart.x), Math.abs(cy - drawStart.y));
+  }, { passive: false });
+
+  // Submit the drawn box to the server and add the new bbox div to the page.
+  async function submitManualBox(bbox, label) {
+    setStatus('Saving…');
+    let resp;
+    try {
+      resp = await fetch('/api/images/{{ source_image_id }}/detections', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ bbox, label }),
+      });
+    } catch (_) {
+      setStatus('Network error — could not save detection.');
+      return;
+    }
+    if (!resp.ok) {
+      const d = await resp.json().catch(() => ({}));
+      setStatus('Error: ' + (d.detail || 'Could not save detection'));
+      return;
+    }
+    const d = await resp.json();
+    setStatus(d.embedding_found ? 'Saved — face matched.' : 'Saved (no face embedding found).');
+
+    // Add to FACES and render the new box immediately.
+    const newFace = {
+      id: d.detection_id,
+      x: bbox.x, y: bbox.y, w: bbox.w, h: bbox.h,
+      label: d.label || '',
+      confidence: null,
+      similarity: null,
+      review_status: 'confirmed',
+      source: 'manual',
+      age: null, gender: null, pose: null,
+    };
+    FACES.push(newFace);
+
+    const img = document.getElementById('tag-photo');
+    const sx  = img.clientWidth  / NAT_W;
+    const sy  = img.clientHeight / NAT_H;
+
+    const div = document.createElement('div');
+    div.className = 't-box' + (newFace.label ? ' labeled' : '');
+    div.style.left   = (newFace.x * sx) + 'px';
+    div.style.top    = (newFace.y * sy) + 'px';
+    div.style.width  = (newFace.w * sx) + 'px';
+    div.style.height = (newFace.h * sy) + 'px';
+    div.dataset.id    = newFace.id;
+    div.dataset.label = newFace.label;
+
+    const chip = document.createElement('div');
+    chip.className = 't-chip';
+    chip.textContent = newFace.label;
+    chip.style.display = newFace.label ? 'block' : 'none';
+    div.appendChild(chip);
+
+    const tip = document.createElement('div');
+    tip.className = 't-tip';
+    tip.textContent = newFace.label || 'Unknown';
+    div.addEventListener('click', () => labelBox(div, tip, chip));
+    div.appendChild(tip);
+    wrap.appendChild(div);
+
+    renderDetList();
+  }
 })();
 
 // Set breadcrumb from referrer so it always reflects where the user came from.

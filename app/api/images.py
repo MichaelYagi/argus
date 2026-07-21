@@ -312,6 +312,135 @@ async def reprocess_source_image(
     return result
 
 
+class _ManualBbox(BaseModel):
+    x: int
+    y: int
+    w: int
+    h: int
+
+
+class _ManualDetectionBody(BaseModel):
+    bbox: _ManualBbox
+    label: str | None = None
+    identity_id: int | None = None
+
+
+@router.post("/api/images/{source_image_id}/detections", status_code=201)
+async def create_manual_detection(
+    source_image_id: int,
+    body: _ManualDetectionBody,
+    user_id: int = Depends(require_auth),
+    environment_id: int = Depends(require_env_id),
+):
+    """Save a manually-drawn bounding box as a face detection.
+
+    Attempts InsightFace recognition on the crop; if no face is found, the
+    detection is saved without an embedding (label only). Requires exactly one
+    of ``label`` or ``identity_id``.
+    """
+    if not body.label and not body.identity_id:
+        raise HTTPException(400, "Provide label or identity_id")
+
+    src = store.get_source_image(source_image_id, user_id, environment_id)
+    if not src:
+        raise HTTPException(404, "Source image not found")
+
+    bx, by, bw, bh = body.bbox.x, body.bbox.y, body.bbox.w, body.bbox.h
+    if bw < 1 or bh < 1:
+        raise HTTPException(400, "bbox w and h must be >= 1")
+    if bx < 0 or by < 0 or bx + bw > src["width"] or by + bh > src["height"]:
+        raise HTTPException(400, "bbox extends outside image bounds")
+
+    source_path = sources_dir() / src["file_path"]
+    if not source_path.exists():
+        raise HTTPException(409, "Source file no longer on disk")
+
+    from app.core.image_input import open_and_validate, to_rgb_array
+    img = open_and_validate(source_path.read_bytes())
+
+    from app.api.detect import _save_crop
+    from app.core import settings_cache
+    padding = settings_cache.cache.get_or("system.crop_padding", 0.2)
+    crop_filename = _save_crop(img, (bx, by, bw, bh), padding)
+
+    # Try InsightFace recognition on just the drawn bbox area.
+    embedding_bytes: bytes | None = None
+    embedding_found = False
+    try:
+        from app.api.detect import _embedding_to_bytes
+        from app.inference.runner import infer_faces
+        x1, y1 = max(0, bx), max(0, by)
+        x2, y2 = min(img.width, bx + bw), min(img.height, by + bh)
+        crop_img = img.crop((x1, y1, x2, y2))
+        if crop_img.mode != "RGB":
+            crop_img = crop_img.convert("RGB")
+        faces, _ = infer_faces(to_rgb_array(crop_img))
+        if faces:
+            top_face = max(faces, key=lambda f: f.confidence)
+            embedding_bytes = _embedding_to_bytes(top_face.embedding)
+            embedding_found = embedding_bytes is not None
+    except Exception:
+        pass  # recognition is best-effort
+
+    identity_id = body.identity_id
+    identity_label: str | None = None
+    if identity_id:
+        identity = store.get_identity(identity_id, user_id, environment_id)
+        if not identity:
+            raise HTTPException(404, "Identity not found")
+        identity_label = identity["label"]
+    elif body.label:
+        identity_id, _created = store.get_or_create_identity(
+            user_id, "face", body.label.strip(), environment_id
+        )
+        if _created:
+            _webhook.fire(user_id, environment_id, "identity.created", {
+                "identity_id": identity_id, "label": body.label.strip(),
+                "type": "face", "external_ref": None,
+            })
+        identity_label = body.label.strip()
+
+    detection_id = store.insert_detection(
+        user_id=user_id,
+        environment_id=environment_id,
+        identity_id=identity_id,
+        source_image_id=source_image_id,
+        detection_type="face",
+        model_id=None,
+        confidence=None,
+        bbox_x=bx, bbox_y=by, bbox_w=bw, bbox_h=bh,
+        crop_path=crop_filename,
+        embedding=embedding_bytes,
+        review_status="confirmed",
+        source="manual",
+    )
+
+    if embedding_bytes and identity_id:
+        det_row = store.get_detection(detection_id, user_id, environment_id)
+        if det_row:
+            from app.api.enroll import enroll_from_detection
+            enroll_from_detection(det_row, user_id, environment_id)
+
+    from app.core import face_index
+    face_index.rebuild_user(user_id, environment_id)
+
+    _webhook.fire(user_id, environment_id, "detection.created", {
+        "source_image_id": source_image_id,
+        "external_ref": src["external_ref"],
+        "type": "face",
+    })
+
+    return {
+        "detection_id": detection_id,
+        "identity_id": identity_id,
+        "label": identity_label,
+        "bbox": {"x": bx, "y": by, "w": bw, "h": bh},
+        "crop_url": f"/media/crops/{crop_filename}",
+        "source": "manual",
+        "embedding_found": embedding_found,
+    }
+
+
 class _TagItem(BaseModel):
     detection_id: int
     identity_id: int | None = None
