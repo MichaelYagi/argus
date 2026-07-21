@@ -558,28 +558,25 @@ if (FACES.length && OBJECTS.length) {
     }, 'Name this face');
   }
 
-  // Listeners go on document, not on #tag-wrap, to avoid Android Chrome
-  // compositor issues that make absolutely-positioned children invisible.
   let lpTimer = null;
   let lpStart  = null;
 
-  document.addEventListener('pointerdown', e => {
-    const inWrap = wrap.contains(e.target);
+  wrap.addEventListener('pointerdown', e => {
     if (e.pointerType === 'touch' && !drawMode) {
-      if (!inWrap || e.target.closest('.t-box')) return;
+      if (e.target.closest('.t-box')) return;
       lpStart = { x: e.clientX, y: e.clientY };
       lpTimer = setTimeout(() => { lpTimer = null; enterDrawMode(); }, 500);
       return;
     }
-    if (!drawMode || !inWrap) return;
-    if (e.pointerType !== 'touch') e.preventDefault();
+    if (!drawMode) return;
+    wrap.setPointerCapture(e.pointerId);
     const r = wrap.getBoundingClientRect();
     drawStart = { x: e.clientX - r.left, y: e.clientY - r.top };
     drawRect = makeRubberBand();
     updateRect(drawRect, drawStart.x, drawStart.y, 0, 0);
   });
 
-  document.addEventListener('pointermove', e => {
+  wrap.addEventListener('pointermove', e => {
     if (lpTimer && lpStart) {
       if (Math.abs(e.clientX - lpStart.x) > 10 || Math.abs(e.clientY - lpStart.y) > 10) {
         clearTimeout(lpTimer); lpTimer = null;
@@ -594,7 +591,7 @@ if (FACES.length && OBJECTS.length) {
       Math.abs(cx - drawStart.x), Math.abs(cy - drawStart.y));
   });
 
-  document.addEventListener('pointerup', e => {
+  wrap.addEventListener('pointerup', e => {
     clearTimeout(lpTimer); lpTimer = null; lpStart = null;
     if (!drawMode || !drawStart || !drawRect) return;
     const r  = wrap.getBoundingClientRect();
@@ -605,12 +602,10 @@ if (FACES.length && OBJECTS.length) {
     finishDraw(px, py, Math.abs(cx - drawStart.x), Math.abs(cy - drawStart.y));
   });
 
-  document.addEventListener('pointercancel', () => {
+  wrap.addEventListener('pointercancel', () => {
     clearTimeout(lpTimer); lpTimer = null; lpStart = null;
     if (drawMode) exitDrawMode();
   });
-
-  document.addEventListener('dragstart', e => { if (drawMode) e.preventDefault(); });
 
   // Submit the drawn box to the server and add the new bbox div to the page.
   async function submitManualBox(bbox, label) {
