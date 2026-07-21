@@ -556,20 +556,35 @@ if (FACES.length && OBJECTS.length) {
     }, 'Name this face');
   }
 
-  // Desktop: mousedown/mousemove/mouseup on the wrap
-  wrap.addEventListener('mousedown', e => {
+  // Unified pointer events cover mouse, touch, and stylus without passive:false.
+  // Scroll prevention in draw mode is handled by touch-action:none in CSS.
+  let lpTimer = null;
+  let lpStart  = null;
+
+  wrap.addEventListener('pointerdown', e => {
+    // Touch outside draw mode: start long-press timer (500ms enters draw mode)
+    if (e.pointerType === 'touch' && !drawMode) {
+      if (e.target.closest('.t-box')) return;
+      lpStart = { x: e.clientX, y: e.clientY };
+      lpTimer = setTimeout(() => { lpTimer = null; enterDrawMode(); }, 500);
+      return;
+    }
     if (!drawMode) return;
-    if (e.target.closest('.t-box')) return;  // don't capture clicks on existing boxes
-    e.preventDefault();
+    wrap.setPointerCapture(e.pointerId);
     const r = wrap.getBoundingClientRect();
     drawStart = { x: e.clientX - r.left, y: e.clientY - r.top };
     drawRect = makeRubberBand();
     updateRect(drawRect, drawStart.x, drawStart.y, 0, 0);
   });
 
-  wrap.addEventListener('mousemove', e => {
+  wrap.addEventListener('pointermove', e => {
+    if (lpTimer && lpStart) {
+      if (Math.abs(e.clientX - lpStart.x) > 10 || Math.abs(e.clientY - lpStart.y) > 10) {
+        clearTimeout(lpTimer); lpTimer = null;
+      }
+    }
     if (!drawMode || !drawStart || !drawRect) return;
-    const r  = wrap.getBoundingClientRect();
+    const r = wrap.getBoundingClientRect();
     const cx = e.clientX - r.left;
     const cy = e.clientY - r.top;
     updateRect(drawRect,
@@ -577,7 +592,8 @@ if (FACES.length && OBJECTS.length) {
       Math.abs(cx - drawStart.x), Math.abs(cy - drawStart.y));
   });
 
-  wrap.addEventListener('mouseup', e => {
+  wrap.addEventListener('pointerup', e => {
+    clearTimeout(lpTimer); lpTimer = null; lpStart = null;
     if (!drawMode || !drawStart || !drawRect) return;
     const r  = wrap.getBoundingClientRect();
     const cx = Math.min(Math.max(0, e.clientX - r.left), r.width);
@@ -587,62 +603,10 @@ if (FACES.length && OBJECTS.length) {
     finishDraw(px, py, Math.abs(cx - drawStart.x), Math.abs(cy - drawStart.y));
   });
 
-  // Mobile: long-press to enter draw mode; then touch-drag to draw
-  let lpTimer = null;
-  let lpStart  = null;
-
-  wrap.addEventListener('touchstart', e => {
-    if (drawMode) {
-      // Already in draw mode — start drawing the rect
-      if (e.touches.length !== 1) return;
-      e.preventDefault();
-      const t = e.touches[0];
-      const r = wrap.getBoundingClientRect();
-      drawStart = { x: t.clientX - r.left, y: t.clientY - r.top };
-      drawRect = makeRubberBand();
-      updateRect(drawRect, drawStart.x, drawStart.y, 0, 0);
-      return;
-    }
-    // Not in draw mode — start long-press timer
-    if (e.touches.length !== 1) return;
-    const t = e.touches[0];
-    lpStart = { x: t.clientX, y: t.clientY };
-    lpTimer = setTimeout(() => { lpTimer = null; enterDrawMode(); }, 500);
-  }, { passive: false });
-
-  wrap.addEventListener('touchmove', e => {
-    if (drawMode && drawStart && drawRect) {
-      e.preventDefault();
-      const t = e.touches[0];
-      const r = wrap.getBoundingClientRect();
-      const cx = t.clientX - r.left;
-      const cy = t.clientY - r.top;
-      updateRect(drawRect,
-        Math.min(drawStart.x, cx), Math.min(drawStart.y, cy),
-        Math.abs(cx - drawStart.x), Math.abs(cy - drawStart.y));
-      return;
-    }
-    // Cancel long-press if finger moved significantly
-    if (lpTimer && lpStart) {
-      const t = e.touches[0];
-      if (Math.abs(t.clientX - lpStart.x) > 10 || Math.abs(t.clientY - lpStart.y) > 10) {
-        clearTimeout(lpTimer); lpTimer = null;
-      }
-    }
-  }, { passive: false });
-
-  wrap.addEventListener('touchend', e => {
-    clearTimeout(lpTimer); lpTimer = null;
-    if (!drawMode || !drawStart || !drawRect) return;
-    e.preventDefault();
-    const t = e.changedTouches[0];
-    const r = wrap.getBoundingClientRect();
-    const cx = Math.min(Math.max(0, t.clientX - r.left), r.width);
-    const cy = Math.min(Math.max(0, t.clientY - r.top),  r.height);
-    const px = Math.min(drawStart.x, cx);
-    const py = Math.min(drawStart.y, cy);
-    finishDraw(px, py, Math.abs(cx - drawStart.x), Math.abs(cy - drawStart.y));
-  }, { passive: false });
+  wrap.addEventListener('pointercancel', () => {
+    clearTimeout(lpTimer); lpTimer = null; lpStart = null;
+    if (drawMode) exitDrawMode();
+  });
 
   // Submit the drawn box to the server and add the new bbox div to the page.
   async function submitManualBox(bbox, label) {

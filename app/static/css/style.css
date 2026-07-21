@@ -570,7 +570,7 @@ input[type=range] { width: 150px; cursor: pointer; }
 .t-box:hover .t-tip { display: block; }
 #tag-wrap.hide-faces .t-box:not(.object) { display: none; }
 #tag-wrap.hide-objects .t-box.object { display: none; }
-#tag-wrap.draw-mode { cursor: crosshair; user-select: none; }
+#tag-wrap.draw-mode { cursor: crosshair; user-select: none; touch-action: none; }
 #tag-wrap.draw-mode .t-box { pointer-events: none; }
 .draw-rect { position: absolute; border: 2px dashed #ff0; pointer-events: none; box-sizing: border-box; z-index: 20; }
 .tag-nav { display: flex; align-items: center; justify-content: center;
