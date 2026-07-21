@@ -344,6 +344,7 @@ def _manual_patches(tmp_path, filename: str = "photo.jpg"):
         patch("app.core.image_input.open_and_validate", return_value=_mock_image()),
         patch("app.api.detect._save_crop", return_value="crop_test.jpg"),
         patch("app.inference.runner.infer_faces", return_value=([], None)),
+        patch("app.inference.runner.infer_face_embedding", return_value=None),
         patch("app.core.face_index.rebuild_user"),
     )
 
@@ -356,8 +357,8 @@ def test_create_manual_detection_returns_201(client, tmp_path):
     user_id, h = _setup(client)
     src_id = _insert_source(user_id)  # default 1920x1080 in DB
     payload = {"bbox": {"x": 10, "y": 10, "w": 30, "h": 30}, "label": "Noah"}
-    p1, p2, p3, p4 = _manual_patches(tmp_path)
-    with p1, p2, p3, p4:
+    p1, p2, p3, p4, p5 = _manual_patches(tmp_path)
+    with p1, p2, p3, p4, p5:
         r = client.post(f"/api/images/{src_id}/detections", json=payload, headers=h)
     assert r.status_code == 201
     data = r.json()
@@ -415,14 +416,53 @@ def test_create_manual_detection_persists_source_field(client, tmp_path):
     user_id, h = _setup(client)
     src_id = _insert_source(user_id)
     payload = {"bbox": {"x": 0, "y": 0, "w": 20, "h": 20}, "label": "Alice"}
-    p1, p2, p3, p4 = _manual_patches(tmp_path)
-    with p1, p2, p3, p4:
+    p1, p2, p3, p4, p5 = _manual_patches(tmp_path)
+    with p1, p2, p3, p4, p5:
         r = client.post(f"/api/images/{src_id}/detections", json=payload, headers=h)
     assert r.status_code == 201
     det_id = r.json()["detection_id"]
     with store._connect() as conn:
         row = conn.execute("SELECT source FROM detections WHERE id = ?", (det_id,)).fetchone()
     assert row["source"] == "manual"
+
+
+def test_create_manual_detection_tier2_embedding(client, tmp_path):
+    """Tier-2 fallback: when infer_faces finds nothing, ArcFace is called directly."""
+    user_id, h = _setup(client)
+    src_id = _insert_source(user_id)
+    payload = {"bbox": {"x": 0, "y": 0, "w": 20, "h": 20}, "label": "Alice"}
+    (tmp_path / "sources").mkdir(parents=True, exist_ok=True)
+    (tmp_path / "sources" / "photo.jpg").write_bytes(b"placeholder")
+    # Provide a non-None embedding so the tier-2 branch fires. Stub _embedding_to_bytes
+    # at its source module to bypass numpy (mocked in conftest) returning a MagicMock.
+    fake_feat = MagicMock()
+    fake_bytes = b"\x00" * (512 * 4)
+    with patch("app.core.image_input.open_and_validate", return_value=_mock_image()), \
+         patch("app.api.detect._save_crop", return_value="crop_test.jpg"), \
+         patch("app.inference.runner.infer_faces", return_value=([], None)), \
+         patch("app.inference.runner.infer_face_embedding", return_value=fake_feat), \
+         patch("app.api.detect._embedding_to_bytes", return_value=fake_bytes), \
+         patch("app.core.face_index.rebuild_user"):
+        r = client.post(f"/api/images/{src_id}/detections", json=payload, headers=h)
+    assert r.status_code == 201
+    assert r.json()["embedding_found"] is True
+
+
+def test_create_manual_detection_tier3_no_embedding(client, tmp_path):
+    """Tier-3 fallback: when both infer_faces and infer_face_embedding fail, saves without embedding."""
+    user_id, h = _setup(client)
+    src_id = _insert_source(user_id)
+    payload = {"bbox": {"x": 0, "y": 0, "w": 20, "h": 20}, "label": "Alice"}
+    (tmp_path / "sources").mkdir(parents=True, exist_ok=True)
+    (tmp_path / "sources" / "photo.jpg").write_bytes(b"placeholder")
+    with patch("app.core.image_input.open_and_validate", return_value=_mock_image()), \
+         patch("app.api.detect._save_crop", return_value="crop_test.jpg"), \
+         patch("app.inference.runner.infer_faces", return_value=([], None)), \
+         patch("app.inference.runner.infer_face_embedding", return_value=None), \
+         patch("app.core.face_index.rebuild_user"):
+        r = client.post(f"/api/images/{src_id}/detections", json=payload, headers=h)
+    assert r.status_code == 201
+    assert r.json()["embedding_found"] is False
 
 
 # ---------------------------------------------------------------------------

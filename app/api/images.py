@@ -364,21 +364,32 @@ async def create_manual_detection(
     crop_filename = _save_crop(img, (bx, by, bw, bh), padding)
 
     # Try InsightFace recognition on just the drawn bbox area.
+    # Tier 1: full detect + embed (RetinaFace finds the face, ArcFace embeds it)
+    # Tier 2: skip detection, call ArcFace directly on the raw crop
+    # Tier 3: save without embedding (falls through on any exception or empty result)
     embedding_bytes: bytes | None = None
     embedding_found = False
     try:
         from app.api.detect import _embedding_to_bytes
-        from app.inference.runner import infer_faces
+        from app.inference.runner import infer_face_embedding, infer_faces
         x1, y1 = max(0, bx), max(0, by)
         x2, y2 = min(img.width, bx + bw), min(img.height, by + bh)
         crop_img = img.crop((x1, y1, x2, y2))
         if crop_img.mode != "RGB":
             crop_img = crop_img.convert("RGB")
-        faces, _ = infer_faces(to_rgb_array(crop_img))
+        crop_arr = to_rgb_array(crop_img)
+
+        faces, _ = infer_faces(crop_arr)
         if faces:
             top_face = max(faces, key=lambda f: f.confidence)
             embedding_bytes = _embedding_to_bytes(top_face.embedding)
             embedding_found = embedding_bytes is not None
+
+        if not embedding_found:
+            raw_feat = infer_face_embedding(crop_arr)
+            if raw_feat is not None:
+                embedding_bytes = _embedding_to_bytes(raw_feat)
+                embedding_found = embedding_bytes is not None
     except Exception:
         pass  # recognition is best-effort
 

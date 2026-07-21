@@ -138,6 +138,21 @@ def infer_faces(img_array: Any) -> tuple[list[Any], Any]:
     return faces, model_row
 
 
+def infer_face_embedding(img_array: Any) -> Any | None:
+    """Extract a face embedding from a pre-cropped image, bypassing detection.
+
+    Used as the tier-2 fallback in manual bbox saving: when infer_faces finds
+    no face in the drawn crop, call ArcFace directly on the raw crop instead.
+    Not supported in remote sidecar mode (returns None).
+    """
+    if _inference_url():
+        return None
+    engine = registry.get_face_engine()
+    if engine is None:
+        return None
+    return engine.get_embedding(img_array)
+
+
 def infer_objects_batch(
     img_arrays: list[Any],
 ) -> tuple[list[list[Any]], list[list[str] | None], Any]:

@@ -59,6 +59,27 @@ class FaceEngine:
     def model_name(self) -> str:
         return self._model_name
 
+    def get_embedding(self, image: Any) -> Any | None:
+        """Extract a face embedding from a pre-cropped image, bypassing detection.
+
+        Calls the ArcFace recognition model's get_feat() directly on the raw
+        crop — no RetinaFace detection, no landmark alignment. Lower quality
+        than a fully detected face but usable when the detector missed the face.
+        Returns None if no recognition model is loaded or extraction fails.
+        """
+        try:
+            import numpy as np
+            rec = self._app.models.get("recognition")
+            if rec is None:
+                return None
+            feat = rec.get_feat(image)
+            if feat is None:
+                return None
+            arr = np.asarray(feat).flatten().astype(np.float32)
+            return arr if arr.size > 0 else None
+        except Exception:
+            return None
+
     def detect(self, image: Any) -> list[FaceDetection]:
         import numpy as np
 
