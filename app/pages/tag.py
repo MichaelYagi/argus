@@ -60,16 +60,16 @@ async def tag_page(source_image_id: int, request: Request):
     face_data = []
     for r in faces:
         age, gender, pose = _attrs(r)
-        src = r["source"] if "source" in r.keys() else "auto"
+        det_source = r["source"] if "source" in r.keys() else "auto"
         face_data.append({
             "id": r["id"],
             "x": r["bbox_x"], "y": r["bbox_y"],
             "w": r["bbox_w"], "h": r["bbox_h"],
             "label": r["identity_label"] or "",
-            "confidence": None if src == "manual" else r["confidence"],
+            "confidence": None if det_source == "manual" else r["confidence"],
             "review_status": r["review_status"],
             "similarity": _similarity(r),
-            "source": src,
+            "source": det_source,
             "age": age, "gender": gender, "pose": pose,
         })
 
