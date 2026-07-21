@@ -1,8 +1,9 @@
-"""Tests for GET /api/images/{id}/faces and POST /api/images/{id}/tag."""
+"""Tests for GET /api/images/{id}/faces, POST /api/images/{id}/tag, manual detection endpoints."""
 
 from __future__ import annotations
 
 import os
+from unittest.mock import MagicMock, patch
 
 import pytest
 from fastapi.testclient import TestClient
@@ -319,3 +320,160 @@ def test_source_image_url_not_accessible_by_other_user(client):
 
     r = client.get(f"/api/images/{src_id}/url", headers={"X-API-Key": k2})
     assert r.status_code == 404
+
+
+# ---------------------------------------------------------------------------
+# Helpers for manual-detection tests
+# ---------------------------------------------------------------------------
+
+def _mock_image(width: int = 1920, height: int = 1080) -> MagicMock:
+    """Return a MagicMock Pillow Image with realistic dimensions."""
+    img = MagicMock()
+    img.width = width
+    img.height = height
+    img.mode = "RGB"
+    return img
+
+
+def _manual_patches(tmp_path, filename: str = "photo.jpg"):
+    """Context manager stack that stubs out image I/O and heavy ML calls."""
+    sources = tmp_path / "sources"
+    sources.mkdir(parents=True, exist_ok=True)
+    (sources / filename).write_bytes(b"placeholder")
+    return (
+        patch("app.core.image_input.open_and_validate", return_value=_mock_image()),
+        patch("app.api.detect._save_crop", return_value="crop_test.jpg"),
+        patch("app.inference.runner.infer_faces", return_value=([], None)),
+        patch("app.core.face_index.rebuild_user"),
+    )
+
+
+# ---------------------------------------------------------------------------
+# POST /api/images/{id}/detections  (manual bbox)
+# ---------------------------------------------------------------------------
+
+def test_create_manual_detection_returns_201(client, tmp_path):
+    user_id, h = _setup(client)
+    src_id = _insert_source(user_id)  # default 1920x1080 in DB
+    payload = {"bbox": {"x": 10, "y": 10, "w": 30, "h": 30}, "label": "Noah"}
+    p1, p2, p3, p4 = _manual_patches(tmp_path)
+    with p1, p2, p3, p4:
+        r = client.post(f"/api/images/{src_id}/detections", json=payload, headers=h)
+    assert r.status_code == 201
+    data = r.json()
+    assert data["source"] == "manual"
+    assert data["label"] == "Noah"
+    assert data["bbox"] == {"x": 10, "y": 10, "w": 30, "h": 30}
+    assert "detection_id" in data
+    assert "identity_id" in data
+    assert "crop_url" in data
+
+
+def test_create_manual_detection_no_label_returns_400(client):
+    user_id, h = _setup(client)
+    src_id = _insert_source(user_id)
+    r = client.post(
+        f"/api/images/{src_id}/detections",
+        json={"bbox": {"x": 0, "y": 0, "w": 10, "h": 10}},
+        headers=h,
+    )
+    assert r.status_code == 400
+
+
+def test_create_manual_detection_bbox_out_of_bounds_returns_400(client):
+    user_id, h = _setup(client)
+    # _insert_source default is 1920x1080; bbox x=1900 w=100 → 2000 > 1920
+    src_id = _insert_source(user_id)
+    payload = {"bbox": {"x": 1900, "y": 10, "w": 100, "h": 30}, "label": "Noah"}
+    r = client.post(f"/api/images/{src_id}/detections", json=payload, headers=h)
+    assert r.status_code == 400
+
+
+def test_create_manual_detection_zero_bbox_returns_400(client):
+    user_id, h = _setup(client)
+    src_id = _insert_source(user_id)
+    r = client.post(
+        f"/api/images/{src_id}/detections",
+        json={"bbox": {"x": 0, "y": 0, "w": 0, "h": 10}, "label": "Noah"},
+        headers=h,
+    )
+    assert r.status_code == 400
+
+
+def test_create_manual_detection_unknown_source_image(client):
+    _, h = _setup(client)
+    r = client.post(
+        "/api/images/999/detections",
+        json={"bbox": {"x": 0, "y": 0, "w": 10, "h": 10}, "label": "Noah"},
+        headers=h,
+    )
+    assert r.status_code == 404
+
+
+def test_create_manual_detection_persists_source_field(client, tmp_path):
+    """DB row must have source='manual' so the tag page can show dashed border."""
+    user_id, h = _setup(client)
+    src_id = _insert_source(user_id)
+    payload = {"bbox": {"x": 0, "y": 0, "w": 20, "h": 20}, "label": "Alice"}
+    p1, p2, p3, p4 = _manual_patches(tmp_path)
+    with p1, p2, p3, p4:
+        r = client.post(f"/api/images/{src_id}/detections", json=payload, headers=h)
+    assert r.status_code == 201
+    det_id = r.json()["detection_id"]
+    with store._connect() as conn:
+        row = conn.execute("SELECT source FROM detections WHERE id = ?", (det_id,)).fetchone()
+    assert row["source"] == "manual"
+
+
+# ---------------------------------------------------------------------------
+# DELETE /api/detections/{id}
+# ---------------------------------------------------------------------------
+
+def _insert_manual_detection(user_id: int, src_id: int) -> int:
+    env_id = store.get_default_environment_id(user_id) or 0
+    iid, _ = store.get_or_create_identity(user_id, "face", "TestPerson")
+    with store._connect() as conn:
+        conn.execute(
+            """INSERT INTO detections
+               (user_id, environment_id, identity_id, source_image_id, type, model_id, confidence,
+                bbox_x, bbox_y, bbox_w, bbox_h, crop_path, source)
+               VALUES (?, ?, ?, ?, 'face', NULL, 0.0, 10, 10, 30, 30, 'crop.jpg', 'manual')""",
+            (user_id, env_id, iid, src_id),
+        )
+        return conn.execute("SELECT last_insert_rowid()").fetchone()[0]
+
+
+def test_delete_detection_removes_row(client):
+    user_id, h = _setup(client)
+    src_id = _insert_source(user_id)
+    det_id = _insert_manual_detection(user_id, src_id)
+    with patch("app.core.face_index.rebuild_user"):
+        r = client.delete(f"/api/detections/{det_id}", headers=h)
+    assert r.status_code == 204
+    with store._connect() as conn:
+        row = conn.execute("SELECT id FROM detections WHERE id = ?", (det_id,)).fetchone()
+    assert row is None
+
+
+def test_delete_detection_not_found(client):
+    _, h = _setup(client)
+    r = client.delete("/api/detections/99999", headers=h)
+    assert r.status_code == 404
+
+
+def test_delete_detection_not_accessible_by_other_user(client):
+    from app.core.security import hash_password
+    user_id, _ = _setup(client)
+    src_id = _insert_source(user_id)
+    det_id = _insert_manual_detection(user_id, src_id)
+
+    user2 = store.create_user("bob", hash_password("pass12345"))
+    k2 = generate_api_key()
+    store.create_api_key(user2, hash_api_key(k2), "b")
+
+    with patch("app.core.face_index.rebuild_user"):
+        r = client.delete(f"/api/detections/{det_id}", headers={"X-API-Key": k2})
+    assert r.status_code == 404
+    with store._connect() as conn:
+        row = conn.execute("SELECT id FROM detections WHERE id = ?", (det_id,)).fetchone()
+    assert row is not None
