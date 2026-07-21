@@ -483,14 +483,18 @@ if (FACES.length && OBJECTS.length) {
   function enterDrawMode() {
     drawMode = true;
     wrap.classList.add('draw-mode');
-    drawBtn.classList.add('active');
+    drawBtn.textContent = 'Cancel draw';
+    drawBtn.style.borderColor = 'var(--accent)';
+    drawBtn.style.color = 'var(--accent)';
     setStatus('Click and drag to draw a bounding box. Press Esc to cancel.');
   }
 
   function exitDrawMode() {
     drawMode = false;
     wrap.classList.remove('draw-mode');
-    drawBtn.classList.remove('active');
+    drawBtn.textContent = 'Draw box';
+    drawBtn.style.borderColor = '';
+    drawBtn.style.color = '';
     if (drawRect) { drawRect.remove(); drawRect = null; }
     drawStart = null;
     setStatus('');
