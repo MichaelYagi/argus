@@ -59,7 +59,7 @@
 <div style="display:flex;align-items:center">
   <a id="prev-nav" class="tag-nav" href="#" style="display:none" aria-label="Previous image">&#8249;</a>
   <div id="tag-wrap">
-    <img id="tag-photo" src="{{ image_url }}" alt=""
+    <img id="tag-photo" src="{{ image_url }}" alt="" draggable="false"
          onload="renderBoxes(); scrollWrapIntoView()"
          onerror="this.style.display='none'; document.getElementById('tag-missing').style.display='flex'">
     <div id="tag-missing" style="display:none;align-items:center;justify-content:center;min-height:200px;color:var(--muted);font-size:14px">
@@ -529,7 +529,9 @@ if (FACES.length && OBJECTS.length) {
     drawStart = null;
     drawMode = false;
     wrap.classList.remove('draw-mode');
-    drawBtn.classList.remove('active');
+    drawBtn.textContent = 'Draw box';
+    drawBtn.style.borderColor = '';
+    drawBtn.style.color = '';
 
     if (pw < 10 || ph < 10) { if (anchor) anchor.remove(); setStatus(''); return; }
 
@@ -570,6 +572,7 @@ if (FACES.length && OBJECTS.length) {
       return;
     }
     if (!drawMode) return;
+    e.preventDefault();
     wrap.setPointerCapture(e.pointerId);
     const r = wrap.getBoundingClientRect();
     drawStart = { x: e.clientX - r.left, y: e.clientY - r.top };
