@@ -126,8 +126,9 @@ function renderBoxes() {
     div.style.top    = Math.max(0, det.y * sy) + 'px';
     div.style.width  = (det.w * sx) + 'px';
     div.style.height = (det.h * sy) + 'px';
-    div.dataset.id    = det.id;
-    div.dataset.label = displayLabel;
+    div.dataset.id     = det.id;
+    div.dataset.label  = displayLabel;
+    div.dataset.source = det.source || 'auto';
     if (focusId && det.id === focusId) focusEl = div;
 
     // Persistent label chip shown above the box whenever the detection has a label.
@@ -254,8 +255,23 @@ async function unidentifyBox(div, tip, chip) {
   }
 }
 
+async function deleteDetection(div) {
+  const r = await fetch('/api/detections/' + div.dataset.id, { method: 'DELETE' });
+  if (r.ok || r.status === 204) {
+    const id = parseInt(div.dataset.id, 10);
+    div.remove();
+    const fi = FACES.findIndex(f => f.id === id);
+    if (fi !== -1) FACES.splice(fi, 1);
+    renderDetList();
+    setStatus('Detection deleted.');
+  } else {
+    setStatus('Error deleting detection.');
+  }
+}
+
 function labelBox(div, tip, chip) {
   const onUnidentify = div.dataset.label ? () => unidentifyBox(div, tip, chip) : null;
+  const onDelete = div.dataset.source === 'manual' ? () => deleteDetection(div) : null;
   showLabelPopup(div, async label => {
     if (!label) {
       await unidentifyBox(div, tip, chip);
@@ -282,7 +298,7 @@ function labelBox(div, tip, chip) {
     } else {
       setStatus('Error saving label.');
     }
-  }, 'Assign name', onUnidentify, div.dataset.label || '');
+  }, 'Assign name', onUnidentify, div.dataset.label || '', onDelete);
 }
 
 function setStatus(msg) { document.getElementById('tag-status').textContent = msg; }
@@ -680,8 +696,9 @@ if (FACES.length && OBJECTS.length) {
     div.style.top    = (newFace.y * sy) + 'px';
     div.style.width  = (newFace.w * sx) + 'px';
     div.style.height = (newFace.h * sy) + 'px';
-    div.dataset.id    = newFace.id;
-    div.dataset.label = newFace.label;
+    div.dataset.id     = newFace.id;
+    div.dataset.label  = newFace.label;
+    div.dataset.source = 'manual';
 
     const chip = document.createElement('div');
     chip.className = 't-chip';
