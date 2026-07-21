@@ -187,3 +187,44 @@ def test_submit_manual_box_propagates_embedding_source_to_face():
     assert "embedding_source: embSrc" in tag, (
         "submitManualBox does not store embedding_source on the newFace object"
     )
+
+
+# ---------------------------------------------------------------------------
+# Detection list Embedding column
+# ---------------------------------------------------------------------------
+
+def test_det_list_has_embedding_column_header():
+    """renderDetList must include an Embedding column header."""
+    tag = _tag_html()
+    assert ">Embedding<" in tag, "renderDetList is missing the Embedding column header"
+
+
+def test_det_list_embedding_column_uses_embedding_source():
+    """Embedding cell must branch on det.embedding_source for manual bboxes."""
+    tag = _tag_html()
+    assert "det.embedding_source === 'aligned'" in tag, (
+        "renderDetList Embedding cell does not check for 'aligned'"
+    )
+    assert "det.embedding_source === 'raw'" in tag, (
+        "renderDetList Embedding cell does not check for 'raw'"
+    )
+
+
+def test_det_list_embedding_column_auto_shows_percentage():
+    """Auto-detected faces show the similarity percentage with no qualifier label."""
+    tag = _tag_html()
+    # The else branch for auto rows: simPct || '—'
+    assert "simPct || '—'" in tag, (
+        "renderDetList auto-detected rows do not fall back to simPct || '—' in Embedding column"
+    )
+
+
+def test_det_list_identity_column_no_longer_contains_similarity():
+    """Similarity percentage must not be inlined in the Identity column (moved to Embedding)."""
+    tag = _tag_html()
+    # The old pattern was: displayLabel + similarity percentage in the identity cell.
+    # After the move, identity cell must not reference simPct.
+    # We check that simPct is not concatenated directly after the identity label.
+    assert "displayLabel) + (det.similarity" not in tag, (
+        "Identity column still inlines the similarity percentage — it should be in Embedding column only"
+    )

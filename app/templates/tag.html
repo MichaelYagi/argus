@@ -425,6 +425,7 @@ function renderDetList() {
   html += '<th ' + TH + '>Type</th>';
   html += '<th ' + TH + '>Identity</th>';
   html += '<th ' + TH + '>Confidence</th>';
+  html += '<th ' + TH + '>Embedding</th>';
   html += '<th ' + TH + '>Age</th>';
   html += '<th ' + TH + '>Gender</th>';
   html += '</tr></thead><tbody>';
@@ -434,11 +435,20 @@ function renderDetList() {
     const rejected = det.review_status === 'rejected';
     const displayLabel = isFace ? (rejected ? '' : det.label) : det.label;
     const identity = isFace
-      ? (displayLabel
-          ? _esc(displayLabel) + (det.similarity != null ? ' <span class="muted">' + Math.max(0, det.similarity * 100).toFixed(0) + '%</span>' : '')
-          : '<span class="muted">Unidentified</span>')
+      ? (displayLabel ? _esc(displayLabel) : '<span class="muted">Unidentified</span>')
       : (displayLabel ? _esc(displayLabel) : '<span class="muted">—</span>');
     const conf  = det.confidence != null ? (det.confidence * 100).toFixed(0) + '%' : '—';
+    const simPct = det.similarity != null ? Math.max(0, det.similarity * 100).toFixed(0) + '%' : null;
+    let emb;
+    if (!isFace) {
+      emb = '—';
+    } else if (det.source === 'manual') {
+      if (det.embedding_source === 'aligned') emb = 'aligned' + (simPct ? ' (' + simPct + ')' : '');
+      else if (det.embedding_source === 'raw')  emb = 'unaligned' + (simPct ? ' (' + simPct + ')' : '');
+      else emb = '—';
+    } else {
+      emb = simPct || '—';
+    }
     const age   = isFace && det.age   != null ? det.age : '—';
     const gen   = isFace && det.gender ? det.gender[0].toUpperCase() : '—';
     const numColor = isFace ? 'color:var(--accent)' : 'color:#39f';
@@ -447,6 +457,7 @@ function renderDetList() {
     html += '<td style="' + TD + '">' + det.kind + '</td>';
     html += '<td style="' + TD + '">' + identity + '</td>';
     html += '<td style="' + TD + '">' + conf + '</td>';
+    html += '<td style="' + TD + '">' + emb + '</td>';
     html += '<td style="' + TD + '">' + age + '</td>';
     html += '<td style="' + TD + '">' + gen + '</td>';
     html += '</tr>';
