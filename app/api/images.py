@@ -429,6 +429,12 @@ async def create_manual_detection(
         "external_ref": src["external_ref"],
         "type": "face",
     })
+    if identity_id:
+        _webhook.fire(user_id, environment_id, "identity.updated", {
+            "identity_id": identity_id,
+            "action": "detection_added",
+            "detection_id": detection_id,
+        })
 
     return {
         "detection_id": detection_id,
