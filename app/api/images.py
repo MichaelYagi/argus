@@ -407,7 +407,7 @@ async def create_manual_detection(
         source_image_id=source_image_id,
         detection_type="face",
         model_id=None,
-        confidence=None,
+        confidence=0.0,
         bbox_x=bx, bbox_y=by, bbox_w=bw, bbox_h=bh,
         crop_path=crop_filename,
         embedding=embedding_bytes,

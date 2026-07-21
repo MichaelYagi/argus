@@ -1444,7 +1444,7 @@ def insert_detection(
     source_image_id: int,
     detection_type: str,
     model_id: int | None,
-    confidence: float | None,
+    confidence: float,
     bbox_x: int,
     bbox_y: int,
     bbox_w: int,

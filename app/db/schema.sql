@@ -101,7 +101,7 @@ CREATE TABLE IF NOT EXISTS detections (
     source_image_id INTEGER NOT NULL REFERENCES source_images(id) ON DELETE CASCADE,
     type            TEXT    NOT NULL CHECK(type IN ('face', 'object')),
     model_id        INTEGER REFERENCES models(id),
-    confidence      REAL,
+    confidence      REAL    NOT NULL DEFAULT 0,
     bbox_x          INTEGER NOT NULL,
     bbox_y          INTEGER NOT NULL,
     bbox_w          INTEGER NOT NULL,
