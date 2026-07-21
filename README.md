@@ -11,7 +11,7 @@ Self-hosted face and object recognition you can both **use and build on** — a 
 - Review queue with ranked match suggestions, configurable auto-confirm threshold, and auto-enroll on confirm
 - Suggested people — clusters unlabeled faces into proposed identities; name a cluster to enroll everyone in it at once
 - Justified infinite-scroll galleries per identity with cover photo selection and bulk operations
-- Tag page — full source image with clickable face and object bbox overlays for labelling; Prev/Next navigation across a gallery sequence with adjacent-image preloading; last-viewed thumbnail highlighted on return
+- Tag page — full source image with clickable face and object bbox overlays for labelling; draw bounding boxes manually for faces the detector missed (click-drag on desktop, long-press-drag on mobile); Prev/Next navigation across a gallery sequence with adjacent-image preloading; last-viewed thumbnail highlighted on return
 - Test page — check whether an image contains people or objects, and who each face looks like, without storing or enrolling anything (read-only)
 - Integration helpers — opaque `external_ref` correlation ids, a change feed for delta sync, webhooks, a capabilities manifest with hardware reporting, and batch label/read endpoints
 - Bulk detection with optional async mode — submit many images in one call; fire-and-forget with a job id and webhook notification on completion
@@ -805,12 +805,12 @@ The version string lives in `app/__init__.py` and is the single source of truth 
 
 Edit `app/__init__.py`:
 ```python
-__version__ = "0.1.0-alpha.2"
+__version__ = "0.1.0-alpha.19"
 ```
 
 **2. Update the changelog**
 
-In `CHANGELOG.md`, replace `— unreleased` on the new version header with today's date, and update the comparison link at the bottom from `...HEAD` to `...v0.1.0-alpha.2`.
+Add a new section at the top of `CHANGELOG.md` and a comparison link at the bottom.
 
 **3. Run tests**
 
@@ -824,16 +824,16 @@ All checks must pass before tagging.
 **4. Commit**
 
 ```bash
-git add app/__init__.py CHANGELOG.md
-git commit -m "Release v0.1.0-alpha.2"
+git add app/__init__.py CHANGELOG.md README.md
+git commit -m "Release v0.1.0-alpha.19"
 ```
 
 **5. Tag and push**
 
 ```bash
-git tag v0.1.0-alpha.2
+git tag v0.1.0-alpha.19
 git push origin main
-git push origin v0.1.0-alpha.2
+git push origin v0.1.0-alpha.19
 ```
 
 **6. GitHub Actions takes over**

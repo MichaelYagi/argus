@@ -5,6 +5,55 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [0.1.0-alpha.18] — 2026-07-20
+
+### Added
+
+- **Regression tests for manual bbox and Android compositor invariants.** API tests cover `POST /api/images/{id}/detections` (happy path, validation rejections, `source='manual'` persisted) and `DELETE /api/detections/{id}` (removes row, 404 on unknown, cross-user isolation). Template guard tests in `test_templates.py` assert CSS/JS invariants that prevent Android bbox and desktop image-drag regressions: `transform: translateZ(0)` on `#tag-wrap`, `will-change: transform` on `.t-box`, no `{ passive: false }` listeners, no `draggable` attribute on `#tag-photo`, `document.addEventListener('dragstart')` present, and `renderBoxes()` rAF retry intact.
+
+### Changed
+
+- **Manual bbox popup simplified.** Manually-drawn bboxes show only the name input, Apply, Cancel, and Delete — "Unidentify" is removed. Manual bboxes are user-asserted and never auto-matched, so there is nothing to unidentify.
+
+---
+
+## [0.1.0-alpha.17] — 2026-07-20
+
+### Added
+
+- **`source_external_ref` in identity gallery response.** `GET /api/identities/{id}/gallery` items now include the source image's `external_ref`, so a client can correlate a gallery crop back to its own record without a separate lookup.
+- **Delete button for manually-drawn bboxes.** Clicking the label popup's Delete button on a manual bbox calls `DELETE /api/detections/{id}` and removes it from the DOM immediately. Auto-detected bboxes are not deletable from the tag page — only manually drawn ones show the Delete button.
+- **Visual distinction for manually-drawn bboxes.** Manual bboxes render with a dashed border (`.manual { border-style: dashed }`) and carry `data-source="manual"` so client-side logic can distinguish them from auto-detected results.
+
+### Fixed
+
+- **bbox overlays invisible on Android Chrome.** Two root causes: (1) `img.clientWidth === 0` when `onload` fires on slow hardware — fixed with a `requestAnimationFrame` retry loop in `renderBoxes()`. (2) Android Chrome's GPU compositor dropping absolutely-positioned children — fixed by adding `transform: translateZ(0)` to `#tag-wrap` and `will-change: transform` to `.t-box`, and by ensuring no `{ passive: false }` touch listeners, no `draggable` attribute on `#tag-photo`, and no `dragstart` listener on elements inside `#tag-wrap`. A `reposBoxes()` function handles resize when the Android address bar slides in/out.
+- **Desktop image drag during bbox drawing.** Click-dragging to draw a bbox on desktop triggered the browser's HTML5 image drag, moving the photo instead of drawing. Fixed with `document.addEventListener('dragstart', e => { if (drawMode) e.preventDefault(); })` inside the draw-mode IIFE — `dragstart` never fires on Android touch, so this is desktop-only without side effects.
+- **Draw box button state not reset after drawing.** After a successful draw the button text and accent color were not restored to "Draw box" state. `finishDraw()` now resets `textContent`, `borderColor`, and `color` to match `exitDrawMode()`.
+- **`NOT NULL` constraint on manual bbox save.** `insert_detection` rejected manual bboxes because confidence is not meaningful for user-drawn boxes. The column is now nullable; manual rows set `confidence = NULL`.
+- **`identity.updated` webhook not firing after manual bbox.** `POST /api/images/{id}/detections` now fires `identity.updated` with `action: "detection_added"` after saving the detection, consistent with the auto-detect paths.
+- **Variable shadowing in `tag.py`.** A local loop variable shadowed an outer scope variable, producing stale data in certain tag-page responses.
+
+---
+
+## [0.1.0-alpha.16] — 2026-07-20
+
+### Added
+
+- **Persistent log files.** Argus now writes log output to rotating files under `DATA_PATH/logs/` (configurable via `LOG_PATH`). The log viewer in Settings loads from files when the in-memory buffer is empty or exhausted, giving access to logs across restarts. `system.log_buffer_size` controls the in-memory ring buffer; files are capped by rotation policy.
+- **Manual bbox drawing on the tag page.** A "Draw box" button enters crosshair mode; click-drag on desktop or 500 ms long-press followed by a drag on mobile draws a bounding box over a face InsightFace missed. On release, the standard label popup appears — type a name and Apply to save. The backend crops the drawn region, runs InsightFace on it (best-effort; saves without embedding if no face is found), creates the identity if needed, enrolls the embedding, and returns the detection. Schema changes: `detections.confidence` is now nullable; a new `detections.source` column (`'auto'` | `'manual'`, default `'auto'`) distinguishes drawn from detected bboxes. New endpoint: `POST /api/images/{source_image_id}/detections`.
+- **Review queue tabbed layout.** "Suggested matches" and "No match" sections are now tabs rather than side-by-side columns. Each tab shows a count badge. Switching tabs is instant (no re-fetch). This matches the practical workflow: users typically work one section at a time.
+
+### Changed
+
+- **Detect returns cached results on re-submit.** Re-detecting an image that already has results returns the stored detections immediately without re-running inference — no more duplicate identity rows from accidental re-submits. Add `?force=true` to bypass the cache and re-run inference without clearing existing results (`replace=true` still clears first then re-runs as before).
+
+### Fixed
+
+- **Source image files correctly reference-counted on delete.** Deleting a source image or running auto-discard now checks whether any other `source_images` row (across all users and environments) still references the same file path before removing the file from disk. Previously, a multi-user or multi-environment setup could delete a file still needed by another row.
+
+---
+
 ## [0.1.0-alpha.15] — 2026-07-19
 
 ### Added
@@ -536,6 +585,9 @@ Initial alpha release.
 
 ---
 
+[0.1.0-alpha.18]: https://github.com/MichaelYagi/argus/compare/v0.1.0-alpha.17...v0.1.0-alpha.18
+[0.1.0-alpha.17]: https://github.com/MichaelYagi/argus/compare/v0.1.0-alpha.16...v0.1.0-alpha.17
+[0.1.0-alpha.16]: https://github.com/MichaelYagi/argus/compare/v0.1.0-alpha.15...v0.1.0-alpha.16
 [0.1.0-alpha.15]: https://github.com/MichaelYagi/argus/compare/v0.1.0-alpha.14...v0.1.0-alpha.15
 [0.1.0-alpha.14]: https://github.com/MichaelYagi/argus/compare/v0.1.0-alpha.13...v0.1.0-alpha.14
 [0.1.0-alpha.13]: https://github.com/MichaelYagi/argus/compare/v0.1.0-alpha.12...v0.1.0-alpha.13
