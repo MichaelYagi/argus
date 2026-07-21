@@ -273,11 +273,12 @@ async function deleteDetection(div) {
 }
 
 function labelBox(div, tip, chip) {
-  const onUnidentify = div.dataset.label ? () => unidentifyBox(div, tip, chip) : null;
-  const onDelete = div.dataset.source === 'manual' ? () => deleteDetection(div) : null;
+  const isManual = div.dataset.source === 'manual';
+  const onUnidentify = (!isManual && div.dataset.label) ? () => unidentifyBox(div, tip, chip) : null;
+  const onDelete = isManual ? () => deleteDetection(div) : null;
   showLabelPopup(div, async label => {
     if (!label) {
-      await unidentifyBox(div, tip, chip);
+      if (!isManual) await unidentifyBox(div, tip, chip);
       return;
     }
     const resp = await fetch('/api/detections/' + div.dataset.id + '/label', {
