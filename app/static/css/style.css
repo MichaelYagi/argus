@@ -550,7 +550,7 @@ input[type=range] { width: 150px; cursor: pointer; }
                    border-radius: var(--radius); cursor: pointer; }
 
 /* ---------- Tag page ---------- */
-#tag-wrap { position: relative; display: inline-block; }
+#tag-wrap { position: relative; display: inline-block; transform: translateZ(0); }
 #tag-wrap img { max-width: 90vw; max-height: 82vh; display: block; }
 .t-box { position: absolute; border: 2px solid #f93; cursor: pointer; box-sizing: border-box; transition: border-color .15s; }
 .t-box:hover { border-color: #fff; }

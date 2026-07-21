@@ -181,7 +181,12 @@ function reposBoxes() {
     el.style.height = (det.h * sy) + 'px';
   });
 }
-window.addEventListener('resize', reposBoxes);
+let _reposPending = false;
+window.addEventListener('resize', () => {
+  if (_reposPending) return;
+  _reposPending = true;
+  requestAnimationFrame(() => { _reposPending = false; reposBoxes(); });
+});
 
 function trackLabeled(id) {
   try {
