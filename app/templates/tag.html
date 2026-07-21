@@ -655,6 +655,10 @@ if (FACES.length && OBJECTS.length) {
     if (drawMode) exitDrawMode();
   });
 
+  // Prevent browser image-drag on desktop when drawing. dragstart never fires
+  // on Android/touch so this listener has zero effect on mobile.
+  document.addEventListener('dragstart', e => { if (drawMode) e.preventDefault(); });
+
   // Submit the drawn box to the server and add the new bbox div to the page.
   async function submitManualBox(bbox, label) {
     setStatus('Saving…');
