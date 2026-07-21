@@ -95,6 +95,12 @@ function scrollWrapIntoView() {
 
 function renderBoxes() {
   const img = document.getElementById('tag-photo');
+  // On Android Chrome, onload can fire before layout computes the image's
+  // display dimensions. Retry via rAF until the dimensions are non-zero.
+  if (!img.clientWidth || !img.clientHeight) {
+    requestAnimationFrame(renderBoxes);
+    return;
+  }
   const sx = img.clientWidth / NAT_W;
   const sy = img.clientHeight / NAT_H;
   const wrap = document.getElementById('tag-wrap');
@@ -159,6 +165,23 @@ function renderBoxes() {
     setTimeout(() => focusEl.click(), 350);
   }
 }
+
+function reposBoxes() {
+  const img = document.getElementById('tag-photo');
+  if (!img.clientWidth || !img.clientHeight) return;
+  const sx = img.clientWidth / NAT_W;
+  const sy = img.clientHeight / NAT_H;
+  const wrap = document.getElementById('tag-wrap');
+  [...FACES, ...OBJECTS].forEach(det => {
+    const el = wrap.querySelector('.t-box[data-id="' + det.id + '"]');
+    if (!el) return;
+    el.style.left   = Math.max(0, det.x * sx) + 'px';
+    el.style.top    = Math.max(0, det.y * sy) + 'px';
+    el.style.width  = (det.w * sx) + 'px';
+    el.style.height = (det.h * sy) + 'px';
+  });
+}
+window.addEventListener('resize', reposBoxes);
 
 function trackLabeled(id) {
   try {
