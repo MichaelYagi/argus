@@ -1834,6 +1834,7 @@ def _source_images_inner(
     until: str | None,
     no_tagged_faces: bool,
     no_crops: bool,
+    has_manual_detections: bool = False,
 ) -> tuple[str, list]:
     """Returns (inner CTE SELECT sql, params) shared by list/count/ids source-image queries."""
     conds = ["si.user_id = ?", "si.environment_id = ?"]
@@ -1866,6 +1867,11 @@ def _source_images_inner(
             " WHERE _nc.source_image_id = si.id"
             " AND _nc.crop_path IS NOT NULL AND _nc.crop_path != '')"
         )
+    if has_manual_detections:
+        conds.append(
+            "EXISTS (SELECT 1 FROM detections _md"
+            " WHERE _md.source_image_id = si.id AND _md.source = 'manual')"
+        )
     where = " AND ".join(conds)
     inner = (
         f"SELECT si.id, si.file_path, si.width, si.height, si.uploaded_at,"
@@ -1893,6 +1899,7 @@ def list_source_images(
     no_detections: bool = False,
     no_tagged_faces: bool = False,
     no_crops: bool = False,
+    has_manual_detections: bool = False,
     sort: str = "newest",
 ) -> list[sqlite3.Row]:
     """Processed source images with per-image detection count, using CTE for sort flexibility.
@@ -1901,7 +1908,7 @@ def list_source_images(
         env_id = _resolve_env(conn, user_id, environment_id)
         inner, params = _source_images_inner(
             user_id, env_id, identity_ids, detection_type,
-            since, until, no_tagged_faces, no_crops,
+            since, until, no_tagged_faces, no_crops, has_manual_detections,
         )
         sql = f"WITH base AS ({inner}) SELECT * FROM base"
         outer: list[str] = []
@@ -1952,13 +1959,14 @@ def count_source_images_filtered(
     no_detections: bool = False,
     no_tagged_faces: bool = False,
     no_crops: bool = False,
+    has_manual_detections: bool = False,
 ) -> int:
     """Total count of source images matching the given filters."""
     with _connect() as conn:
         env_id = _resolve_env(conn, user_id, environment_id)
         inner, params = _source_images_inner(
             user_id, env_id, identity_ids, detection_type,
-            since, until, no_tagged_faces, no_crops,
+            since, until, no_tagged_faces, no_crops, has_manual_detections,
         )
         sql = f"WITH base AS ({inner}) SELECT COUNT(*) FROM base"
         if no_detections:
@@ -1976,13 +1984,14 @@ def list_source_image_ids(
     no_detections: bool = False,
     no_tagged_faces: bool = False,
     no_crops: bool = False,
+    has_manual_detections: bool = False,
 ) -> list[int]:
     """All source image IDs matching the given filters (no pagination)."""
     with _connect() as conn:
         env_id = _resolve_env(conn, user_id, environment_id)
         inner, params = _source_images_inner(
             user_id, env_id, identity_ids, detection_type,
-            since, until, no_tagged_faces, no_crops,
+            since, until, no_tagged_faces, no_crops, has_manual_detections,
         )
         sql = f"WITH base AS ({inner}) SELECT id FROM base"
         if no_detections:
