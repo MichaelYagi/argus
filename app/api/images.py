@@ -59,13 +59,14 @@ async def list_source_images(
     no_detections: bool = Query(False, description="Only return images with zero detections"),
     no_tagged_faces: bool = Query(False, description="Only return images with no identified faces"),
     no_crops: bool = Query(False, description="Only return images with no detection crops"),
+    has_manual_detections: bool = Query(False, description="Only return images with at least one manually drawn detection"),
     sort: str = Query("newest", description="Sort order: newest | oldest | most_detections | fewest_detections"),
     user_id: int = Depends(require_auth),
     environment_id: int = Depends(require_env_id),
 ):
     """Paginated list of all processed source images (one row per image).
     Optional filters: identity_id (repeatable, AND semantics), type (face/object),
-    since, until, no_detections, no_tagged_faces.
+    since, until, no_detections, no_tagged_faces, has_manual_detections.
     sort: newest (default), oldest, most_detections, fewest_detections."""
     t0 = time.monotonic()
     if type and type not in ("face", "object"):
@@ -78,7 +79,7 @@ async def list_source_images(
         user_id, cursor=cursor, limit=limit, environment_id=environment_id,
         identity_ids=identity_id or None, detection_type=type, since=since, until=until,
         no_detections=no_detections, no_tagged_faces=no_tagged_faces, no_crops=no_crops,
-        sort=sort,
+        has_manual_detections=has_manual_detections, sort=sort,
     )
     if sort in ("most_detections", "fewest_detections"):
         cursor_fn = lambda r: f"{r['detection_count']}_{r['id']}"  # noqa: E731
@@ -110,6 +111,7 @@ async def count_source_images(
     no_detections: bool = Query(False),
     no_tagged_faces: bool = Query(False),
     no_crops: bool = Query(False),
+    has_manual_detections: bool = Query(False),
     user_id: int = Depends(require_auth),
     environment_id: int = Depends(require_env_id),
 ):
@@ -123,6 +125,7 @@ async def count_source_images(
         identity_ids=identity_id or None, detection_type=type,
         since=since, until=until,
         no_detections=no_detections, no_tagged_faces=no_tagged_faces, no_crops=no_crops,
+        has_manual_detections=has_manual_detections,
     )
     return {"count": count}
 
@@ -136,6 +139,7 @@ async def list_source_image_ids(
     no_detections: bool = Query(False),
     no_tagged_faces: bool = Query(False),
     no_crops: bool = Query(False),
+    has_manual_detections: bool = Query(False),
     user_id: int = Depends(require_auth),
     environment_id: int = Depends(require_env_id),
 ):
@@ -149,6 +153,7 @@ async def list_source_image_ids(
         identity_ids=identity_id or None, detection_type=type,
         since=since, until=until,
         no_detections=no_detections, no_tagged_faces=no_tagged_faces, no_crops=no_crops,
+        has_manual_detections=has_manual_detections,
     )
     return {"ids": ids}
 

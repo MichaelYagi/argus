@@ -569,3 +569,106 @@ def test_delete_detection_not_accessible_by_other_user(client):
     with store._connect() as conn:
         row = conn.execute("SELECT id FROM detections WHERE id = ?", (det_id,)).fetchone()
     assert row is not None
+
+
+# ---------------------------------------------------------------------------
+# has_manual_detections filter
+# ---------------------------------------------------------------------------
+
+def test_has_manual_detections_filter_returns_only_manual_images(client):
+    user_id, h = _setup(client)
+    src_manual = _insert_source(user_id, "manual.jpg")
+    src_auto = _insert_source(user_id, "auto.jpg")
+
+    _insert_manual_detection(user_id, src_manual)
+    _insert_face(user_id, src_auto, label="Alice")
+
+    r = client.get("/api/source-images?has_manual_detections=true", headers=h)
+    assert r.status_code == 200
+    ids = [it["source_image_id"] for it in r.json()["items"]]
+    assert src_manual in ids
+    assert src_auto not in ids
+
+
+def test_has_manual_detections_filter_includes_mixed_images(client):
+    """Image with both auto and manual detections must appear in the filter."""
+    user_id, h = _setup(client)
+    src_mixed = _insert_source(user_id, "mixed.jpg")
+
+    _insert_face(user_id, src_mixed, label="Alice")
+    _insert_manual_detection(user_id, src_mixed)
+
+    r = client.get("/api/source-images?has_manual_detections=true", headers=h)
+    assert r.status_code == 200
+    ids = [it["source_image_id"] for it in r.json()["items"]]
+    assert src_mixed in ids
+
+
+def test_has_manual_detections_filter_excludes_auto_only_images(client):
+    user_id, h = _setup(client)
+    src_auto = _insert_source(user_id, "auto.jpg")
+    _insert_face(user_id, src_auto, label="Alice")
+
+    r = client.get("/api/source-images?has_manual_detections=true", headers=h)
+    assert r.status_code == 200
+    ids = [it["source_image_id"] for it in r.json()["items"]]
+    assert src_auto not in ids
+
+
+def test_has_manual_detections_count(client):
+    user_id, h = _setup(client)
+    src_manual = _insert_source(user_id, "manual.jpg")
+    src_auto = _insert_source(user_id, "auto.jpg")
+
+    _insert_manual_detection(user_id, src_manual)
+    _insert_face(user_id, src_auto, label="Alice")
+
+    r = client.get("/api/source-images/count?has_manual_detections=true", headers=h)
+    assert r.status_code == 200
+    assert r.json()["count"] == 1
+
+
+def test_has_manual_detections_ids(client):
+    user_id, h = _setup(client)
+    src_manual = _insert_source(user_id, "manual.jpg")
+    src_auto = _insert_source(user_id, "auto.jpg")
+
+    _insert_manual_detection(user_id, src_manual)
+    _insert_face(user_id, src_auto, label="Alice")
+
+    r = client.get("/api/source-images/ids?has_manual_detections=true", headers=h)
+    assert r.status_code == 200
+    ids = r.json()["ids"]
+    assert src_manual in ids
+    assert src_auto not in ids
+
+
+def test_has_manual_detections_isolated_per_user(client):
+    """Another user's manual detections don't affect the current user's filter."""
+    from app.core.security import hash_password
+    user1, h1 = _setup(client)
+    user2 = store.create_user("bob", hash_password("pass12345"))
+    k2 = generate_api_key()
+    store.create_api_key(user2, hash_api_key(k2), "b")
+    h2 = {"X-API-Key": k2}
+
+    src1 = _insert_source(user1, "img.jpg")
+    env2 = store.get_default_environment_id(user2) or 0
+    with store._connect() as conn:
+        conn.execute(
+            "INSERT INTO source_images (user_id, environment_id, file_path, width, height) VALUES (?, ?, ?, 1920, 1080)",
+            (user2, env2, "img.jpg"),
+        )
+        src2 = conn.execute("SELECT last_insert_rowid()").fetchone()[0]
+
+    _insert_face(user1, src1, label="Alice")
+    _insert_manual_detection(user2, src2)
+
+    r1 = client.get("/api/source-images?has_manual_detections=true", headers=h1)
+    assert r1.status_code == 200
+    assert r1.json()["items"] == []
+
+    r2 = client.get("/api/source-images?has_manual_detections=true", headers=h2)
+    assert r2.status_code == 200
+    ids2 = [it["source_image_id"] for it in r2.json()["items"]]
+    assert src2 in ids2

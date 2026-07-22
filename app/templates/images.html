@@ -50,6 +50,7 @@
       <option value="face">Faces only</option>
       <option value="object">Objects only</option>
       <option value="no_tagged_faces">No tagged faces</option>
+      <option value="manually_tagged">Manually tagged faces</option>
       <option value="no_crops">No crops</option>
     </select>
   </div>
@@ -189,9 +190,10 @@ function localDateToUTC(dateStr, endOfDay) {
     try {
       const params = new URLSearchParams();
       (window.filterIdentityIds || []).forEach(f => params.append('identity_id', f.id));
-      if (window.filterType === 'no_tagged_faces') params.set('no_tagged_faces', 'true');
-      else if (window.filterType === 'no_crops')   params.set('no_crops', 'true');
-      else if (window.filterType)                  params.set('type', window.filterType);
+      if (window.filterType === 'no_tagged_faces')       params.set('no_tagged_faces', 'true');
+      else if (window.filterType === 'manually_tagged')  params.set('has_manual_detections', 'true');
+      else if (window.filterType === 'no_crops')         params.set('no_crops', 'true');
+      else if (window.filterType)                        params.set('type', window.filterType);
       if (window.filterSince) params.set('since', localDateToUTC(window.filterSince, false));
       if (window.filterUntil) params.set('until', localDateToUTC(window.filterUntil, true));
       const resp = await fetch('/api/source-images/ids?' + params);
@@ -345,9 +347,10 @@ function localDateToUTC(dateStr, endOfDay) {
       const params = new URLSearchParams({ limit: 40 });
       if (cursor) params.set('cursor', cursor);
       (window.filterIdentityIds || []).forEach(f => params.append('identity_id', f.id));
-      if (window.filterType === 'no_tagged_faces') params.set('no_tagged_faces', 'true');
-      else if (window.filterType === 'no_crops')   params.set('no_crops', 'true');
-      else if (window.filterType)                  params.set('type', window.filterType);
+      if (window.filterType === 'no_tagged_faces')       params.set('no_tagged_faces', 'true');
+      else if (window.filterType === 'manually_tagged')  params.set('has_manual_detections', 'true');
+      else if (window.filterType === 'no_crops')         params.set('no_crops', 'true');
+      else if (window.filterType)                        params.set('type', window.filterType);
       if (window.filterSince) params.set('since', localDateToUTC(window.filterSince, false));
       if (window.filterUntil) params.set('until', localDateToUTC(window.filterUntil, true));
       if (window.filterSort && window.filterSort !== 'newest') params.set('sort', window.filterSort);
@@ -461,9 +464,10 @@ function localDateToUTC(dateStr, endOfDay) {
     countEl.textContent = '';
     const params = new URLSearchParams();
     (window.filterIdentityIds || []).forEach(f => params.append('identity_id', f.id));
-    if (window.filterType === 'no_tagged_faces') params.set('no_tagged_faces', 'true');
-    else if (window.filterType === 'no_crops')   params.set('no_crops', 'true');
-    else if (window.filterType)                  params.set('type', window.filterType);
+    if (window.filterType === 'no_tagged_faces')       params.set('no_tagged_faces', 'true');
+    else if (window.filterType === 'manually_tagged')  params.set('has_manual_detections', 'true');
+    else if (window.filterType === 'no_crops')         params.set('no_crops', 'true');
+    else if (window.filterType)                        params.set('type', window.filterType);
     if (window.filterSince) params.set('since', localDateToUTC(window.filterSince, false));
     if (window.filterUntil) params.set('until', localDateToUTC(window.filterUntil, true));
     try {
