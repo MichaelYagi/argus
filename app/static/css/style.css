@@ -300,6 +300,12 @@ a:hover { text-decoration: underline; }
   .rc-card > div { flex-wrap: wrap; }
   .rc-card .rc-info { flex: 1 1 100% !important; margin-top: 8px; }
   .rc-card .rc-info > div { flex-wrap: wrap; }
+
+  /* Pin percentage + timestamp to card top-right; its container collapses out of flow */
+  .review-card { position: relative; }
+  .rc-meta-row { margin-bottom: 0 !important; }
+  .rc-meta { position: absolute; top: 14px; right: 14px; white-space: normal !important;
+             text-align: right; max-width: 120px; }
 }
 
 /* ---------- Buttons ---------- */

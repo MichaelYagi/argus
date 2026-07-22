@@ -206,9 +206,9 @@
              ${item.source_image_url ? `onclick="openSourceModal('${esc(item.source_image_url)}')"` : ''}>`}
         <div class="rc-info" style="flex:1;min-width:0">
 
-          <div style="display:flex;width:100%;align-items:baseline;margin-bottom:10px">
+          <div class="rc-meta-row" style="display:flex;width:100%;align-items:baseline;margin-bottom:10px">
             ${matched ? '' : '<div><span class="muted">No match found</span></div>'}
-            <span class="muted" style="font-size:11px;white-space:nowrap;margin-left:auto;padding-left:${matched ? 0 : 16}px">
+            <span class="muted rc-meta" style="font-size:11px;white-space:nowrap;margin-left:auto;padding-left:${matched ? 0 : 16}px">
               ${bestMatchPrefix}${dateStr}
             </span>
           </div>
