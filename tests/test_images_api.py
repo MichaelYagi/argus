@@ -656,7 +656,8 @@ def test_has_manual_detections_isolated_per_user(client):
     env2 = store.get_default_environment_id(user2) or 0
     with store._connect() as conn:
         conn.execute(
-            "INSERT INTO source_images (user_id, environment_id, file_path, width, height) VALUES (?, ?, ?, 1920, 1080)",
+            "INSERT INTO source_images"
+            " (user_id, environment_id, file_path, width, height) VALUES (?, ?, ?, 1920, 1080)",
             (user2, env2, "img.jpg"),
         )
         src2 = conn.execute("SELECT last_insert_rowid()").fetchone()[0]

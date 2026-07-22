@@ -59,7 +59,7 @@ async def list_source_images(
     no_detections: bool = Query(False, description="Only return images with zero detections"),
     no_tagged_faces: bool = Query(False, description="Only return images with no identified faces"),
     no_crops: bool = Query(False, description="Only return images with no detection crops"),
-    has_manual_detections: bool = Query(False, description="Only return images with at least one manually drawn detection"),
+    has_manual_detections: bool = Query(False, description="Images with at least one manually drawn detection"),
     sort: str = Query("newest", description="Sort order: newest | oldest | most_detections | fewest_detections"),
     user_id: int = Depends(require_auth),
     environment_id: int = Depends(require_env_id),
