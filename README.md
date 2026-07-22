@@ -34,7 +34,7 @@ Self-hosted face and object recognition you can both **use and build on** — a 
 
 **Getting started:** [Quick start (Docker)](#quick-start-docker) · [First run](#first-run) · [Native run (no Docker)](#native-run-no-docker) · [Docker reference](#docker-reference)
 
-**Concepts:** [Review queue](#review-queue) · [Suggested people](#suggested-people-face-clustering) · [Object detection models](#object-detection-models) · [Environments](#environments)
+**Concepts:** [Review queue](#review-queue) · [Suggested people](#suggested-people-face-clustering) · [Manual face tagging](#manual-face-tagging) · [Object detection models](#object-detection-models) · [Environments](#environments)
 
 **API:** [API](#api) · [Webhooks](#webhooks) · [Bulk detection](#bulk-detection) · [Identity merge](#identity-merge) · [Reprocess](#reprocess) · [Image filtering](#image-filtering) · [Export and import](#export-and-import) · [Integrating another system](#integrating-another-system)
 
@@ -210,6 +210,49 @@ and you're mostly done.
 
 It complements the review queue: the queue handles faces that *do* resemble an enrolled
 person, clustering handles the residual unknowns that match no one yet.
+
+---
+
+## Manual face tagging
+
+When the face detector misses someone — profile shots, occluded faces, poor lighting — you can draw a bounding box yourself on the tag page. Click-drag on desktop; long-press-drag on mobile. Label the box with a name and save.
+
+### Three-tier embedding fallback
+
+After you save a manual box, Argus runs three attempts in order to extract a face embedding so the crop participates in future matching:
+
+1. **Aligned (tier 1)** — RetinaFace re-runs on the cropped region to detect and align the face, then ArcFace extracts an embedding from the aligned face. Best quality. Most manual boxes on a reasonably visible face land here.
+2. **Unaligned (tier 2)** — RetinaFace found nothing (face too obscured, too small, or at an extreme angle), so ArcFace runs directly on the raw crop without alignment. The embedding is real and participates in matching, but accuracy is lower than aligned. Useful for side profiles or partially covered faces.
+3. **No embedding (tier 3)** — ArcFace also returned nothing. The detection is saved as a labelled crop and appears in the identity's gallery, but it won't match against future detections and won't strengthen the recognition model. Rare — typically only very small or heavily obscured faces.
+
+### Border colors on the tag page
+
+Manually drawn boxes are shown with a dashed border. The color indicates which tier was reached:
+
+| Color | Meaning |
+|---|---|
+| Green | Aligned embedding extracted (tier 1) |
+| Amber | Unaligned embedding extracted (tier 2) |
+| Red | No embedding found (tier 3) |
+
+Auto-detected boxes use a solid white border regardless of outcome.
+
+### Embedding column in the detection list
+
+The detection list on the tag page has an **Embedding** column. For manual detections it shows `aligned`, `unaligned`, or a dash, plus the similarity percentage when one was computed. For auto-detected faces it shows the similarity percentage alone (the embedding is always aligned for those). Objects show a dash.
+
+### API
+
+`POST /api/images/{source_image_id}/detections` creates a manual detection. The response includes `embedding_source: "aligned" | "raw" | null` so a client can see which tier succeeded. The same field is returned by `GET /api/images/{id}/faces`.
+
+```bash
+curl -X POST \
+  -H "X-API-Key: argus_..." \
+  -H "Content-Type: application/json" \
+  -d '{"label": "Noah", "bbox": {"x": 120, "y": 80, "w": 60, "h": 80}}' \
+  http://localhost:8100/api/images/42/detections
+# → {"detection_id": 99, "label": "Noah", "embedding_source": "aligned", ...}
+```
 
 ---
 
