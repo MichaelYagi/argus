@@ -17,7 +17,7 @@ Self-hosted face and object recognition you can both **use and build on** — a 
 - Bulk detection with optional async mode — submit many images in one call; fire-and-forget with a job id and webhook notification on completion
 - Identity merge — combine two identities, moving all detections and enrolled references to the target; available via API and the gallery UI
 - Reprocess — re-run detection on any stored image with the current active models, with optional replace to clear prior results; available via API and the tag page UI
-- Source image filtering — filter the image browser by identity, detection type, and date range
+- Source image filtering — filter the image browser by identity, detection type, date range, no-detections, no tagged faces, manually tagged faces, no crops; sortable by newest, oldest, most or fewest detections
 - Export and import with merge — move recognition data between instances
 - Live settings (thresholds, GPU, crop padding) — no restart needed
 - Hot-swap models without restarting
@@ -26,7 +26,7 @@ Self-hosted face and object recognition you can both **use and build on** — a 
 - REST API — everything the UI does is available via API, fully paginated
 - Mobile-responsive browser UI
 
-**Supported image formats:** JPEG, PNG, WEBP, BMP, GIF (first frame), TIFF, HEIC/HEIF, MPO (first frame)
+**Supported image formats:** JPEG, PNG, WEBP, BMP, GIF (first frame), TIFF, HEIC/HEIF, AVIF, MPO (first frame)
 
 ---
 
@@ -433,7 +433,7 @@ curl -X PUT \
 
 Register HTTP callbacks to be notified when async jobs finish or new detections are created. Webhooks are per-environment and can filter on specific events.
 
-**Supported events:** `job.done` · `detection.created`
+**Supported events:** `detection.created` · `detection.labeled` · `detection.deleted` · `identity.created` · `identity.updated` · `identity.deleted` · `identity.merged` · `job.done`
 
 **Managing webhooks from the UI:** go to **Account → Webhooks** (or navigate to `/webhooks`). Each webhook card shows its label, URL, event chips, and an Active toggle. From there you can create, edit, and delete webhooks via a modal form. The **Test** button sends a synchronous test ping and shows the HTTP status code and latency inline. Each card has an expandable **delivery log** showing the last 50 deliveries — timestamp, event, HTTP status, and round-trip duration — lazy-loaded on first expand with a Refresh button.
 
@@ -466,7 +466,7 @@ curl -H "X-API-Key: argus_..." http://localhost:8100/api/webhooks/1/deliveries
 
 When a `secret` is set, each request carries an `X-Argus-Signature: sha256=<hmac>` header computed over the JSON body. Verify it on your server to confirm the call is from Argus. Test pings are included in the delivery log (tagged `is_test: true`) and are signed the same way.
 
-The `detection.created` event fires from all three synchronous detect endpoints (`/api/detect/faces`, `/api/detect/objects`, `/api/detect/all`). `job.done` fires when an async bulk detect or reprocess job completes.
+`detection.created` fires from all detect endpoints — `/api/detect/faces`, `/api/detect/objects`, `/api/detect/all`, manual detection (`POST /api/images/{id}/detections`), and the tag page label flow. `detection.labeled` fires whenever a detection is assigned or reassigned to an identity (confirm, reassign, relabel). `detection.deleted` fires when a source image or detection is deleted. `identity.*` events fire on create, update (rename, cover change, external_ref), delete, and merge. `job.done` fires when an async bulk detect or reprocess job completes.
 
 ---
 
@@ -582,6 +582,17 @@ Queries shorter than 3 characters fall back to a case-insensitive `LIKE` substri
 
 Query the source image list with filters. All params are optional and combinable.
 
+| Param | Type | Description |
+|---|---|---|
+| `identity_id` | int (repeatable) | Images that contain this identity (AND semantics across multiple) |
+| `type` | `face` \| `object` | Only images with detections of this type |
+| `since` / `until` | ISO timestamp | Upload date range |
+| `no_detections` | bool | Images with zero detections |
+| `no_tagged_faces` | bool | Images where no face has been identified |
+| `no_crops` | bool | Images with no stored crop files |
+| `has_manual_detections` | bool | Images with at least one manually drawn detection (mixed with auto is fine) |
+| `sort` | `newest` \| `oldest` \| `most_detections` \| `fewest_detections` | Sort order (default: `newest`) |
+
 ```bash
 # Images containing identity 5 (face or object)
 curl -H "X-API-Key: argus_..." \
@@ -590,7 +601,13 @@ curl -H "X-API-Key: argus_..." \
 # Face-detection images from a date range
 curl -H "X-API-Key: argus_..." \
   "http://localhost:8100/api/source-images?type=face&since=2025-01-01T00:00:00&until=2025-12-31T23:59:59"
+
+# Images with at least one manually drawn bbox, sorted by most detections
+curl -H "X-API-Key: argus_..." \
+  "http://localhost:8100/api/source-images?has_manual_detections=true&sort=most_detections"
 ```
+
+Companion endpoints use the same params: `GET /api/source-images/count` returns the matching total; `GET /api/source-images/ids` returns all matching IDs (no pagination, for select-all operations).
 
 For cross-identity search with AND semantics (images that contain *all* of the listed identities), use `POST /api/images/search`:
 
@@ -603,7 +620,7 @@ curl -X POST \
 # → images where BOTH identity 3 AND identity 7 appear
 ```
 
-From the UI: the **Images** page has a filter bar — search for an identity by name, pick a type, set a date range, then click Apply.
+From the UI: the **Images** page has a filter bar — search for an identity by name, pick a detection type, set a date range, choose a preset filter (no tagged faces, manually tagged faces, no crops), pick a sort order, then click Apply.
 
 ---
 
