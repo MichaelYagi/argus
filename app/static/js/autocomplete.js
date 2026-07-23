@@ -487,18 +487,34 @@
   };
 })();
 
-window.openSourceModal = function openSourceModal(url) {
+window.openSourceModal = function openSourceModal(url, bbox) {
   if (!url) return;
   document.querySelectorAll('.src-modal').forEach(m => m.remove());
   const overlay = document.createElement('div');
   overlay.className = 'src-modal';
+  const wrap = document.createElement('div');
+  wrap.className = 'src-modal-wrap';
   const img = document.createElement('img');
   img.src = url;
   img.alt = '';
+  wrap.appendChild(img);
+  if (bbox && bbox.w && bbox.h) {
+    img.addEventListener('load', () => {
+      const sx = img.clientWidth  / img.naturalWidth;
+      const sy = img.clientHeight / img.naturalHeight;
+      const box = document.createElement('div');
+      box.className = 'src-modal-bbox';
+      box.style.left   = (bbox.x * sx) + 'px';
+      box.style.top    = (bbox.y * sy) + 'px';
+      box.style.width  = (bbox.w * sx) + 'px';
+      box.style.height = (bbox.h * sy) + 'px';
+      wrap.appendChild(box);
+    });
+  }
   const closeBtn = document.createElement('button');
   closeBtn.className = 'src-modal-close';
   closeBtn.textContent = '×';
-  overlay.appendChild(img);
+  overlay.appendChild(wrap);
   overlay.appendChild(closeBtn);
   document.body.appendChild(overlay);
   const close = () => overlay.remove();

@@ -240,17 +240,15 @@
         <input type="checkbox" class="rc-check" data-id="${item.detection_id}" style="margin-top:4px;flex-shrink:0">
         ${matched ? `
         <div style="display:flex;flex-direction:column;align-items:center;gap:6px;flex-shrink:0;width:110px">
-          <img src="${esc(item.crop_url)}" alt=""
-               style="width:110px;height:110px;object-fit:cover;border-radius:4px;${item.source_image_url ? 'cursor:zoom-in' : ''}"
-               ${item.source_image_url ? `onclick="openSourceModal('${esc(item.source_image_url)}')"` : ''}>
+          <img src="${esc(item.crop_url)}" alt="" class="rc-crop-img"
+               style="width:110px;height:110px;object-fit:cover;border-radius:4px;${item.source_image_url ? 'cursor:zoom-in' : ''}">
           <div style="text-align:center;line-height:1.5;width:100%">
             <strong style="font-size:13px">${name}</strong>
             ${currentSimPct ? `<br><span class="muted" style="font-size:11px">${currentSimPct} similarity</span>` : ''}
           </div>
         </div>` : `
-        <img src="${esc(item.crop_url)}" alt=""
-             style="width:110px;height:110px;object-fit:cover;border-radius:4px;flex-shrink:0;${item.source_image_url ? 'cursor:zoom-in' : ''}"
-             ${item.source_image_url ? `onclick="openSourceModal('${esc(item.source_image_url)}')"` : ''}>`}
+        <img src="${esc(item.crop_url)}" alt="" class="rc-crop-img"
+             style="width:110px;height:110px;object-fit:cover;border-radius:4px;flex-shrink:0;${item.source_image_url ? 'cursor:zoom-in' : ''}">`}
         <div class="rc-info" style="flex:1;min-width:0">
 
           <div class="rc-meta-row" style="display:flex;width:100%;align-items:baseline;margin-bottom:10px">
@@ -301,6 +299,12 @@
       sessionStorage.setItem('argus_nav_back', location.href);
       sessionStorage.setItem('argus_nav_depth', '0');
     });
+    if (item.source_image_url) {
+      card.querySelector('.rc-crop-img').addEventListener('click', e => {
+        e.stopPropagation();
+        openSourceModal(item.source_image_url, item.bbox);
+      });
+    }
 
     const raInput = card.querySelector('#ra-' + item.detection_id);
     listEl.appendChild(card);
