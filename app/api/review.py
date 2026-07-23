@@ -74,11 +74,15 @@ async def review_count(
 async def get_review_queue(
     cursor: str | None = Query(None),
     limit: int | None = Query(None),
+    has_suggestion: bool | None = Query(None),
     user_id: int = Depends(require_auth),
     environment_id: int = Depends(require_env_id),
 ):
     page_size = limit or settings_cache.cache.get_or("system.gallery_page_size", 30)
-    rows = store.get_review_queue(user_id, cursor=cursor, limit=page_size, environment_id=environment_id)
+    rows = store.get_review_queue(
+        user_id, cursor=cursor, limit=page_size,
+        environment_id=environment_id, has_suggestion=has_suggestion,
+    )
     has_more = len(rows) > page_size
     items = rows[:page_size]
 

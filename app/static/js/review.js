@@ -4,23 +4,9 @@
   const nomatchList   = document.getElementById('nomatch-list');
   if (!suggestedList || !nomatchList) return;
 
-  let cursor = null, hasMore = true, loading = false;
-
-  // Independent selection per section so a checkbox's meaning is unambiguous:
-  // Suggested → Confirm; No match → Dismiss.
-  const selSg = new Set();   // suggested-match detection ids
-  const selNm = new Set();   // no-match detection ids
-  const itemCache = new Map(); // detection_id -> item (for moving rejected cards to no-match)
-
-  // Tab counts (cards currently rendered in each list).
-  let countSg = 0, countNm = 0;
-
-  function updateTabBadges() {
-    const sgBadge = document.getElementById('sg-tab-badge');
-    const nmBadge = document.getElementById('nm-tab-badge');
-    if (sgBadge) { sgBadge.textContent = countSg || ''; sgBadge.style.display = countSg ? '' : 'none'; }
-    if (nmBadge) { nmBadge.textContent = countNm || ''; nmBadge.style.display = countNm ? '' : 'none'; }
-  }
+  const selSg = new Set();
+  const selNm = new Set();
+  const itemCache = new Map();
 
   const toTop = document.getElementById('scroll-top');
   const updateToTop = () => { if (toTop) toTop.style.display = window.scrollY > 300 ? 'flex' : 'none'; };
@@ -64,9 +50,14 @@
     badge.style.display = next === 0 ? 'none' : 'inline';
   }
 
-  // Single feedback helper so every review action reports success/failure. Returns
-  // true only when the server accepted it, so callers don't optimistically remove
-  // cards for requests that actually failed.
+  function updateTabBadge(listEl, count) {
+    const id = listEl === suggestedList ? 'sg-tab-badge' : 'nm-tab-badge';
+    const badge = document.getElementById(id);
+    if (!badge) return;
+    badge.textContent = count || '';
+    badge.style.display = count ? '' : 'none';
+  }
+
   async function sendReview(url, opts) {
     try {
       const resp = await fetch(url, opts);
@@ -91,17 +82,18 @@
     ids.forEach(id => {
       const card = document.getElementById('rc-' + id);
       if (card) {
-        if (card.closest('#suggested-list')) countSg = Math.max(0, countSg - 1);
-        else countNm = Math.max(0, countNm - 1);
+        const loader = card.closest('#suggested-list') ? sgLoader : nmLoader;
+        loader.count = Math.max(0, loader.count - 1);
+        updateTabBadge(loader.listEl, loader.count);
         card.remove();
       }
       sel.delete(id);
     });
-    updateTabBadges();
     decrementBadge(ids.length);
     if (allCb) allCb.checked = false;
     updateBars();
-    checkEmpty();
+    sgLoader.checkEmpty();
+    nmLoader.checkEmpty();
     if (window.showToast) {
       const verb = action === 'confirm' ? ' confirmed' : ' dismissed';
       showToast(ids.length + verb, 'success');
@@ -124,51 +116,89 @@
   }
 
   // ---------------------------------------------------------------------------
-  // Load + render
+  // Independent loader factory — one instance per tab
   // ---------------------------------------------------------------------------
-  async function loadPage() {
-    if (loading || !hasMore) return;
-    loading = true;
-    const params = new URLSearchParams({ limit: 20 });
-    if (cursor) params.set('cursor', cursor);
-    const resp = await fetch('/api/review?' + params);
-    if (!resp.ok) { loading = false; return; }
-    const data = await resp.json();
-    hasMore = data.has_more;
-    cursor = data.next_cursor;
-    data.items.forEach(renderItem);
-    loading = false;
-    if (!hasMore) { sentinel.remove(); checkEmpty(); }
+  function makeLoader(listEl, hasSuggestion, sel) {
+    const loader = {
+      listEl,
+      hasSuggestion,
+      sel,
+      cursor: null,
+      hasMore: true,
+      loading: false,
+      count: 0,
+      sentinel: null,
+    };
+
+    loader.checkEmpty = function () {
+      if (loader.loading || loader.hasMore) return;
+      const hasCards = listEl.querySelector('.rc-card');
+      let msg = listEl.querySelector('.rc-empty');
+      const text = hasSuggestion ? 'No suggested matches.' : 'No unmatched faces.';
+      if (!hasCards && !msg) {
+        msg = document.createElement('p');
+        msg.className = 'muted rc-empty';
+        msg.style.cssText = 'text-align:center;padding:28px;font-size:13px';
+        msg.textContent = text;
+        listEl.appendChild(msg);
+      } else if (hasCards && msg) {
+        msg.remove();
+      }
+    };
+
+    loader.loadPage = async function () {
+      if (loader.loading || !loader.hasMore) return;
+      loader.loading = true;
+      const params = new URLSearchParams({ limit: 20, has_suggestion: hasSuggestion });
+      if (loader.cursor) params.set('cursor', loader.cursor);
+      const resp = await fetch('/api/review?' + params);
+      if (!resp.ok) { loader.loading = false; return; }
+      const data = await resp.json();
+      loader.hasMore = data.has_more;
+      loader.cursor = data.next_cursor;
+      data.items.forEach(item => renderItem(item, loader));
+      loader.loading = false;
+      if (!loader.hasMore) {
+        loader.sentinel.remove();
+        loader.checkEmpty();
+      }
+    };
+
+    loader.reset = function () {
+      loader.cursor = null;
+      loader.hasMore = true;
+      loader.loading = false;
+      loader.count = 0;
+      updateTabBadge(listEl, 0);
+      listEl.innerHTML = '';
+      if (loader.sentinel && !loader.sentinel.parentNode) {
+        listEl.after(loader.sentinel);
+      }
+      loader.loadPage();
+    };
+
+    const sentinel = document.createElement('div');
+    loader.sentinel = sentinel;
+    listEl.after(sentinel);
+    new IntersectionObserver(
+      ([e]) => { if (e.isIntersecting) loader.loadPage(); },
+      { rootMargin: '300px' }
+    ).observe(sentinel);
+
+    return loader;
   }
 
-  function checkEmpty() {
-    emptyMsg(suggestedList, 'No suggested matches.');
-    emptyMsg(nomatchList, 'No unmatched faces.');
-  }
-  function emptyMsg(listEl, text) {
-    if (loading || hasMore) return;
-    const has = listEl.querySelector('.rc-card');
-    let msg = listEl.querySelector('.rc-empty');
-    if (!has && !msg) {
-      msg = document.createElement('p');
-      msg.className = 'muted rc-empty';
-      msg.style.cssText = 'text-align:center;padding:28px;font-size:13px';
-      msg.textContent = text;
-      listEl.appendChild(msg);
-    } else if (has && msg) {
-      msg.remove();
-    }
-  }
-
-  function renderItem(item) {
+  // ---------------------------------------------------------------------------
+  // Render
+  // ---------------------------------------------------------------------------
+  function renderItem(item, loader) {
     itemCache.set(item.detection_id, item);
     const matched = item.current_identity;
     const name = matched ? esc(matched.label) : null;
     const currentId = matched ? matched.identity_id : null;
-    const listEl = matched ? suggestedList : nomatchList;
-    const sel = matched ? selSg : selNm;
-    if (matched) countSg++; else countNm++;
-    updateTabBadges();
+    const { listEl, sel } = loader;
+    loader.count++;
+    updateTabBadge(listEl, loader.count);
 
     const currentMatchData = item.suggested_matches.find(m => m.identity_id === currentId);
     const currentSimPct = currentMatchData ? `${(currentMatchData.similarity*100).toFixed(0)}%` : null;
@@ -263,30 +293,28 @@
   function removeCard(id) {
     const card = document.getElementById('rc-' + id);
     if (card) {
-      const inSg = card.closest('#suggested-list');
-      if (inSg) countSg = Math.max(0, countSg - 1);
-      else countNm = Math.max(0, countNm - 1);
+      const loader = card.closest('#suggested-list') ? sgLoader : nmLoader;
+      loader.count = Math.max(0, loader.count - 1);
+      updateTabBadge(loader.listEl, loader.count);
       card.remove();
-      updateTabBadges();
     }
     selSg.delete(id); selNm.delete(id);
     decrementBadge(1);
     updateBars();
-    checkEmpty();
+    sgLoader.checkEmpty();
+    nmLoader.checkEmpty();
   }
 
   window.doConfirm = async id => {
     if (await sendReview('/api/review/' + id + '/confirm', { method: 'POST' })) removeCard(id);
   };
-  // "No, not [name]" — mark rejected, keep in queue under the no-match section.
   window.doReject = async id => {
     if (!await sendReview('/api/review/' + id + '/reject', { method: 'POST' })) return;
     removeCard(id);
     const item = itemCache.get(id);
-    if (item) renderItem({ ...item, current_identity: null, suggested_matches: [] });
-    checkEmpty();
+    if (item) renderItem({ ...item, current_identity: null, suggested_matches: [] }, nmLoader);
+    nmLoader.checkEmpty();
   };
-  // "Dismiss" — remove from queue and send to /unidentified.
   window.doDismiss = async id => {
     if (await sendReview('/api/review/' + id + '/unidentify', { method: 'POST' })) removeCard(id);
   };
@@ -307,22 +335,18 @@
     if (ok) { addFaceLabel(label); removeCard(id); }
   };
 
-  const sentinel = document.createElement('div');
-  document.getElementById('panel-nm').after(sentinel);
-  new IntersectionObserver(([e]) => { if (e.isIntersecting) loadPage(); }, { rootMargin: '300px' }).observe(sentinel);
+  // ---------------------------------------------------------------------------
+  // Init
+  // ---------------------------------------------------------------------------
+  const sgLoader = makeLoader(suggestedList, true,  selSg);
+  const nmLoader = makeLoader(nomatchList,   false, selNm);
 
-  function reset() {
-    cursor = null; hasMore = true; loading = false;
-    selSg.clear(); selNm.clear();
-    countSg = 0; countNm = 0;
-    updateBars();
-    updateTabBadges();
-    suggestedList.innerHTML = '';
-    nomatchList.innerHTML = '';
-    if (!sentinel.parentNode) document.getElementById('panel-nm').after(sentinel);
-    loadPage();
-  }
+  sgLoader.loadPage();
+  nmLoader.loadPage();
 
-  loadPage();
-  window.addEventListener('pageshow', e => { if (e.persisted) reset(); });
+  window.addEventListener('pageshow', e => {
+    if (!e.persisted) return;
+    sgLoader.reset();
+    nmLoader.reset();
+  });
 })();

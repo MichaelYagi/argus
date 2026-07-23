@@ -2113,9 +2113,11 @@ def get_review_queue(
     cursor: str | None = None,
     limit: int = 20,
     environment_id: int | None = None,
+    has_suggestion: bool | None = None,
 ) -> list[sqlite3.Row]:
     """Pending+rejected face detections, lowest confidence first. Cursor = 'confidence_id'.
-    Pending with an identity → suggested section. Rejected (no identity) → no-match section."""
+    Pending with an identity → suggested section. Rejected (no identity) → no-match section.
+    has_suggestion=True filters to items with a current identity; False filters to items without."""
     with _connect() as conn:
         env_id = _resolve_env(conn, user_id, environment_id)
         dedup = """AND NOT EXISTS (
@@ -2129,7 +2131,13 @@ def get_review_queue(
                        AND (d2.confidence < d.confidence
                             OR (d2.confidence = d.confidence AND d2.id < d.id))
                    )"""
-        base_select = """SELECT d.id, d.source_image_id, d.model_id, d.confidence,
+        if has_suggestion is True:
+            suggestion_clause = " AND d.identity_id IS NOT NULL"
+        elif has_suggestion is False:
+            suggestion_clause = " AND d.identity_id IS NULL"
+        else:
+            suggestion_clause = ""
+        base_select = f"""SELECT d.id, d.source_image_id, d.model_id, d.confidence,
                           d.crop_path, d.detected_at, d.identity_id, d.embedding,
                           d.bbox_x, d.bbox_y, d.bbox_w, d.bbox_h, d.review_status,
                           i.label AS current_label,
@@ -2141,7 +2149,7 @@ def get_review_queue(
                      AND (d.review_status = 'rejected'
                           OR (d.review_status = 'pending'
                               AND (d.identity_id IS NOT NULL OR d.reviewed_at IS NULL)))
-                     AND d.type = 'face' AND d.ignored = 0"""
+                     AND d.type = 'face' AND d.ignored = 0{suggestion_clause}"""
         if cursor:
             try:
                 c_conf, c_id = cursor.rsplit("_", 1)
