@@ -1042,7 +1042,8 @@ def get_unknown_face_embeddings(
         env_id = _resolve_env(conn, user_id, environment_id)
         return conn.execute(
             """SELECT d.id, d.crop_path, d.confidence, d.embedding,
-                      d.source_image_id, si.file_path AS source_image_path
+                      d.source_image_id, d.bbox_x, d.bbox_y, d.bbox_w, d.bbox_h,
+                      si.file_path AS source_image_path
                FROM detections d
                LEFT JOIN source_images si ON si.id = d.source_image_id
                WHERE d.user_id = ? AND d.environment_id = ? AND d.type = 'face'

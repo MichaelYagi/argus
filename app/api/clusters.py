@@ -62,6 +62,10 @@ async def get_clusters(
                         f"/media/sources/{by_id[did]['source_image_path']}"
                         if by_id[did]["source_image_path"] else None
                     ),
+                    "bbox": {
+                        "x": by_id[did]["bbox_x"], "y": by_id[did]["bbox_y"],
+                        "w": by_id[did]["bbox_w"], "h": by_id[did]["bbox_h"],
+                    },
                 }
                 for did in c
             ],
