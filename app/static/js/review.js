@@ -2,6 +2,7 @@
 (() => {
   const suggestedList = document.getElementById('suggested-list');
   const nomatchList   = document.getElementById('nomatch-list');
+  const suspectList   = document.getElementById('suspect-list');
   if (!suggestedList || !nomatchList) return;
 
   const selSg = new Set();
@@ -16,8 +17,10 @@
   window.switchTab = tab => {
     document.getElementById('panel-sg').style.display = tab === 'sg' ? '' : 'none';
     document.getElementById('panel-nm').style.display = tab === 'nm' ? '' : 'none';
+    document.getElementById('panel-sp').style.display = tab === 'sp' ? '' : 'none';
     document.getElementById('tab-sg').classList.toggle('active', tab === 'sg');
     document.getElementById('tab-nm').classList.toggle('active', tab === 'nm');
+    document.getElementById('tab-sp').classList.toggle('active', tab === 'sp');
     window.scrollTo({ top: 0, behavior: 'instant' });
   };
 
@@ -51,7 +54,7 @@
   }
 
   // Tab badge totals — fetched upfront, decremented as items are reviewed.
-  const tabCounts = { sg: 0, nm: 0 };
+  const tabCounts = { sg: 0, nm: 0, sp: 0 };
 
   function updateTabBadge(tab, delta) {
     tabCounts[tab] = Math.max(0, tabCounts[tab] + delta);
@@ -62,23 +65,19 @@
     badge.style.display = n ? '' : 'none';
   }
 
+  function setTabBadge(tab, n) {
+    tabCounts[tab] = n;
+    const badge = document.getElementById(tab + '-tab-badge');
+    if (badge) { badge.textContent = n || ''; badge.style.display = n ? '' : 'none'; }
+  }
+
   async function fetchTabCounts() {
     const [sgResp, nmResp] = await Promise.all([
       fetch('/api/review/count?has_suggestion=true'),
       fetch('/api/review/count?has_suggestion=false'),
     ]);
-    if (sgResp.ok) {
-      const d = await sgResp.json();
-      tabCounts.sg = d.count;
-      const badge = document.getElementById('sg-tab-badge');
-      if (badge) { badge.textContent = d.count || ''; badge.style.display = d.count ? '' : 'none'; }
-    }
-    if (nmResp.ok) {
-      const d = await nmResp.json();
-      tabCounts.nm = d.count;
-      const badge = document.getElementById('nm-tab-badge');
-      if (badge) { badge.textContent = d.count || ''; badge.style.display = d.count ? '' : 'none'; }
-    }
+    if (sgResp.ok) { const d = await sgResp.json(); setTabBadge('sg', d.count); }
+    if (nmResp.ok) { const d = await nmResp.json(); setTabBadge('nm', d.count); }
   }
 
   async function sendReview(url, opts) {
@@ -325,6 +324,120 @@
     nmLoader.checkEmpty();
   }
 
+  function removeSuspectCard(id) {
+    const card = document.getElementById('rc-sp-' + id);
+    if (card) card.remove();
+    updateTabBadge('sp', -1);
+    if (suspectList && !suspectList.querySelector('.rc-card')) {
+      let msg = suspectList.querySelector('.rc-empty');
+      if (!msg) {
+        msg = document.createElement('p');
+        msg.className = 'muted rc-empty';
+        msg.style.cssText = 'text-align:center;padding:28px;font-size:13px';
+        msg.textContent = 'No suspects found.';
+        suspectList.appendChild(msg);
+      }
+    }
+  }
+
+  // ---------------------------------------------------------------------------
+  // Suspect tab — load, render, actions
+  // ---------------------------------------------------------------------------
+  function renderSuspectItem(item) {
+    const name = esc(item.current_identity.label);
+    const simPct = Math.round(item.similarity * 100);
+    const dateStr = typeof formatDate !== 'undefined' ? formatDate(item.detected_at) : item.detected_at;
+
+    const card = document.createElement('div');
+    card.className = 'review-card rc-card';
+    card.id = 'rc-sp-' + item.detection_id;
+    card.innerHTML = `
+      <div style="display:flex;width:100%;align-items:flex-start;gap:12px">
+        <img src="${esc(item.crop_url)}" alt="" class="rc-crop-img"
+             style="width:110px;height:110px;object-fit:cover;border-radius:4px;flex-shrink:0;${item.source_image_url ? 'cursor:zoom-in' : ''}">
+        <div class="rc-info" style="flex:1;min-width:0">
+
+          <div class="rc-meta-row" style="display:flex;width:100%;align-items:baseline;margin-bottom:10px">
+            <div>
+              <strong style="font-size:14px">${name}</strong>
+              <span class="muted" style="font-size:12px;margin-left:8px">${simPct}% match</span>
+            </div>
+            <span class="muted rc-meta" style="font-size:11px;white-space:nowrap;margin-left:auto;padding-left:16px">${dateStr}</span>
+          </div>
+
+          <div style="display:flex;gap:6px;margin-bottom:10px;align-items:center;flex-wrap:wrap">
+            <button class="btn btn-ghost" onclick="doSuspectOk(${item.detection_id})">Looks correct</button>
+            ${item.source_image_id
+              ? `<a class="rc-tag-link" href="/tag/${item.source_image_id}?focus=${item.detection_id}" style="font-size:12px;white-space:nowrap">View in image</a>`
+              : ''}
+          </div>
+
+          <div style="display:flex;align-items:center;gap:6px">
+            <span class="muted" style="font-size:11px;white-space:nowrap">Reassign to:</span>
+            <span class="ra-wrap" style="display:inline-flex;gap:4px;position:relative;flex:1">
+              <input type="text" id="ra-sp-${item.detection_id}" placeholder="Type a name…"
+                     style="width:100%;max-width:180px" autocomplete="off">
+              <button class="btn btn-ghost" onclick="doSuspectReassignLabel(${item.detection_id})">Assign</button>
+            </span>
+          </div>
+
+        </div>
+      </div>`;
+
+    if (item.source_image_url) {
+      card.querySelector('.rc-crop-img').addEventListener('click', e => {
+        e.stopPropagation();
+        openSourceModal(item.source_image_url, item.bbox);
+      });
+    }
+    const tagLink = card.querySelector('.rc-tag-link');
+    if (tagLink) {
+      tagLink.addEventListener('click', () => {
+        sessionStorage.removeItem('argus_nav_ids');
+        sessionStorage.setItem('argus_nav_back', location.href);
+        sessionStorage.setItem('argus_nav_depth', '0');
+      });
+    }
+    const raInput = card.querySelector('#ra-sp-' + item.detection_id);
+    suspectList.appendChild(card);
+    if (window.makeAutocomplete) makeAutocomplete(raInput);
+  }
+
+  async function loadSuspects() {
+    if (!suspectList) return;
+    suspectList.innerHTML = '';
+    const resp = await fetch('/api/review/suspect');
+    if (!resp.ok) {
+      suspectList.innerHTML = '<p class="muted" style="text-align:center;padding:28px;font-size:13px">Failed to load.</p>';
+      return;
+    }
+    const data = await resp.json();
+    setTabBadge('sp', data.count);
+    if (!data.items.length) {
+      suspectList.innerHTML = '<p class="muted rc-empty" style="text-align:center;padding:28px;font-size:13px">No suspects found.</p>';
+      return;
+    }
+    data.items.forEach(renderSuspectItem);
+  }
+
+  window.doSuspectOk = async id => {
+    const ok = await sendReview('/api/review/suspect/' + id + '/dismiss', { method: 'POST' });
+    if (ok) {
+      removeSuspectCard(id);
+      if (window.showToast) showToast('Marked as correct', 'success');
+    }
+  };
+
+  window.doSuspectReassignLabel = async id => {
+    const label = document.getElementById('ra-sp-' + id)?.value.trim();
+    if (!label) return;
+    const ok = await sendReview('/api/review/' + id + '/reassign', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ label }),
+    });
+    if (ok) { addFaceLabel(label); removeSuspectCard(id); }
+  };
+
   window.doConfirm = async id => {
     if (await sendReview('/api/review/' + id + '/confirm', { method: 'POST' })) removeCard(id);
   };
@@ -364,11 +477,13 @@
   fetchTabCounts();
   sgLoader.loadPage();
   nmLoader.loadPage();
+  loadSuspects();
 
   window.addEventListener('pageshow', e => {
     if (!e.persisted) return;
     fetchTabCounts();
     sgLoader.reset();
     nmLoader.reset();
+    loadSuspects();
   });
 })();

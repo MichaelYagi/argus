@@ -64,6 +64,60 @@ router = APIRouter()
 # ---------------------------------------------------------------------------
 
 @router.get(
+    "/api/review/suspect",
+    responses={
+        **ok({
+            "items": [
+                {
+                    "detection_id": 42,
+                    "crop_url": "/media/crops/abc.jpg",
+                    "source_image_id": 7,
+                    "source_image_url": "/media/sources/def.jpg",
+                    "confidence": 0.91,
+                    "bbox": {"x": 90, "y": 60, "w": 55, "h": 70},
+                    "detected_at": "2026-01-15T11:00:00Z",
+                    "current_identity": {"identity_id": 3, "label": "Alice"},
+                    "similarity": 0.31,
+                }
+            ],
+            "count": 1,
+            "threshold": 0.5,
+        }),
+        **ERR_401,
+    },
+)
+async def get_suspect_queue(
+    threshold: float | None = Query(None, ge=0.0, le=1.0),
+    user_id: int = Depends(require_auth),
+    environment_id: int = Depends(require_env_id),
+):
+    """Confirmed face detections whose embedding scores poorly against their
+    identity's representative — possible mislabels, sorted worst-first."""
+    import asyncio
+    thr = threshold if threshold is not None else settings_cache.cache.get_or("face.recognition_threshold", 0.5)
+    rows = await asyncio.to_thread(store.get_suspect_detections, user_id, environment_id, float(thr))
+    items = [_fmt_suspect_item(r) for r in rows]
+    return {"items": items, "count": len(items), "threshold": round(float(thr), 4)}
+
+
+@router.post(
+    "/api/review/suspect/{detection_id}/dismiss",
+    status_code=200,
+    responses={**ok({"detection_id": 42, "suspect_reviewed": True}), **ERR_401, **ERR_404},
+)
+async def dismiss_suspect(
+    detection_id: int,
+    user_id: int = Depends(require_auth),
+    environment_id: int = Depends(require_env_id),
+):
+    """Mark a suspect-tab detection as reviewed-and-correct. Suppresses it from
+    future suspect scans without affecting its gallery presence or label."""
+    if not store.dismiss_suspect_detection(detection_id, user_id, environment_id):
+        raise HTTPException(404, "Detection not found")
+    return {"detection_id": detection_id, "suspect_reviewed": True}
+
+
+@router.get(
     "/api/review/count",
     responses={**ok({"count": 14}), **ERR_401},
 )
@@ -715,6 +769,21 @@ async def delete_detections(
 # ---------------------------------------------------------------------------
 # Internal
 # ---------------------------------------------------------------------------
+
+def _fmt_suspect_item(row: dict) -> dict:
+    src_path = row.get("source_image_path")
+    return {
+        "detection_id": row["id"],
+        "crop_url": f"/media/crops/{row['crop_path']}" if row["crop_path"] else None,
+        "source_image_id": row["source_image_id"],
+        "source_image_url": f"/media/sources/{src_path}" if src_path else None,
+        "confidence": row["confidence"],
+        "bbox": {"x": row["bbox_x"], "y": row["bbox_y"], "w": row["bbox_w"], "h": row["bbox_h"]},
+        "detected_at": row["detected_at"],
+        "current_identity": {"identity_id": row["identity_id"], "label": row["current_label"]},
+        "similarity": row["similarity"],
+    }
+
 
 def _fmt_review_item(row: Any, model_id: int | None, user_id: int, environment_id: int) -> dict:
     suggested: list[dict] = []

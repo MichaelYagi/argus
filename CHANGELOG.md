@@ -5,6 +5,17 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [0.1.0-alpha.22] — 2026-07-23
+
+### Added
+
+- **Suspect tab on the Review page.** A third tab shows confirmed face detections whose embedding scores poorly against their identity's representative — likely mislabels. Faces are sorted worst-first by cosine similarity. Each card shows the current label, the similarity percentage, a reassign autocomplete to correct the label, and a "Looks correct" button to suppress false positives. Reassigning resets the suppression so the face can be re-evaluated under the new identity.
+- **`GET /api/review/suspect`** — returns all suspect detections for the authenticated user below the recognition threshold, with `similarity`, `current_identity`, bbox, and source image URL.
+- **`POST /api/review/suspect/{id}/dismiss`** — marks a detection as reviewed-and-correct, suppressing it from future suspect scans without touching the gallery or label.
+- **`suspect_reviewed` column on `detections`** — new boolean flag used exclusively by the suspect tab. Distinct from `ignored` (which hides from the gallery). Reset automatically when the identity changes via label or reassign.
+
+---
+
 ## [0.1.0-alpha.21] — 2026-07-23
 
 ### Added

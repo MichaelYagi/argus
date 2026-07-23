@@ -14,6 +14,9 @@
   <button class="tab-btn" id="tab-nm" onclick="switchTab('nm')">
     No match <span id="nm-tab-badge" class="tab-count"></span>
   </button>
+  <button class="tab-btn" id="tab-sp" onclick="switchTab('sp')">
+    Suspect <span id="sp-tab-badge" class="tab-count"></span>
+  </button>
 </div>
 
 <!-- Suggested matches panel -->
@@ -38,6 +41,15 @@
     <button id="nm-dismiss-btn" class="btn btn-danger" onclick="nmDismiss()" disabled>Dismiss selected</button>
   </div>
   <div id="nomatch-list"></div>
+</div>
+
+<!-- Suspect panel -->
+<div id="panel-sp" style="display:none">
+  <p class="muted" style="font-size:13px;margin-bottom:12px">
+    Confirmed faces whose embedding scores poorly against their identity's representative — possible mislabels.
+    Reassign to correct, or mark as correct to suppress.
+  </p>
+  <div id="suspect-list"></div>
 </div>
 
 <button id="scroll-top" class="scroll-top-btn" aria-label="Back to top" title="Back to top">

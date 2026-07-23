@@ -220,6 +220,8 @@ def _migrate(conn: sqlite3.Connection) -> None:
         conn.execute("ALTER TABLE detections ADD COLUMN attributes TEXT")
     if "ignored" not in existing_cols:
         conn.execute("ALTER TABLE detections ADD COLUMN ignored INTEGER NOT NULL DEFAULT 0")
+    if "suspect_reviewed" not in existing_cols:
+        conn.execute("ALTER TABLE detections ADD COLUMN suspect_reviewed INTEGER NOT NULL DEFAULT 0")
     if "source" not in existing_cols:
         conn.execute("ALTER TABLE detections ADD COLUMN source TEXT NOT NULL DEFAULT 'auto'")
     if "embedding_source" not in existing_cols:
@@ -1074,6 +1076,80 @@ def dismiss_detections(user_id: int, detection_ids: list[int], environment_id: i
             (user_id, env_id, *detection_ids),
         )
         return cur.rowcount
+
+
+def get_suspect_detections(
+    user_id: int,
+    environment_id: int | None = None,
+    threshold: float = 0.5,
+) -> list[dict]:
+    """Confirmed face detections whose embedding scores below threshold against their
+    identity's representative. Returns dicts with similarity, sorted ascending (worst first)."""
+    import numpy as np
+
+    with _connect() as conn:
+        env_id = _resolve_env(conn, user_id, environment_id)
+        rows = conn.execute(
+            """SELECT d.id, d.crop_path, d.detected_at, d.source_image_id,
+                      d.confidence, d.bbox_x, d.bbox_y, d.bbox_w, d.bbox_h,
+                      d.identity_id,
+                      d.embedding,
+                      i.label AS current_label,
+                      i.representative_embedding,
+                      si.file_path AS source_image_path
+               FROM detections d
+               JOIN identities i ON i.id = d.identity_id
+               LEFT JOIN source_images si ON si.id = d.source_image_id
+               WHERE d.user_id = ? AND d.environment_id = ?
+                 AND d.type = 'face'
+                 AND d.review_status IN ('confirmed', 'reassigned')
+                 AND d.identity_id IS NOT NULL
+                 AND d.embedding IS NOT NULL
+                 AND i.representative_embedding IS NOT NULL
+                 AND d.suspect_reviewed = 0""",
+            (user_id, env_id),
+        ).fetchall()
+
+    results: list[dict] = []
+    for row in rows:
+        emb = np.frombuffer(bytes(row["embedding"]), dtype=np.float32)
+        rep = np.frombuffer(bytes(row["representative_embedding"]), dtype=np.float32)
+        norm_e = float(np.linalg.norm(emb))
+        norm_r = float(np.linalg.norm(rep))
+        if norm_e == 0 or norm_r == 0:
+            continue
+        sim = float(np.dot(emb, rep)) / (norm_e * norm_r)
+        if sim < threshold:
+            results.append({
+                "id": row["id"],
+                "crop_path": row["crop_path"],
+                "detected_at": row["detected_at"],
+                "source_image_id": row["source_image_id"],
+                "confidence": row["confidence"],
+                "bbox_x": row["bbox_x"],
+                "bbox_y": row["bbox_y"],
+                "bbox_w": row["bbox_w"],
+                "bbox_h": row["bbox_h"],
+                "identity_id": row["identity_id"],
+                "current_label": row["current_label"],
+                "source_image_path": row["source_image_path"],
+                "similarity": round(sim, 4),
+            })
+
+    results.sort(key=lambda x: x["similarity"])
+    return results
+
+
+def dismiss_suspect_detection(detection_id: int, user_id: int, environment_id: int | None = None) -> bool:
+    """Mark a suspect-tab review as OK — suppresses from future suspect scans without
+    affecting the gallery or the labeling. Reset automatically when identity changes."""
+    with _connect() as conn:
+        env_id = _resolve_env(conn, user_id, environment_id)
+        conn.execute(
+            "UPDATE detections SET suspect_reviewed = 1 WHERE id = ? AND user_id = ? AND environment_id = ?",
+            (detection_id, user_id, env_id),
+        )
+        return conn.execute("SELECT changes()").fetchone()[0] > 0
 
 
 def delete_detections(
@@ -2347,7 +2423,8 @@ def reassign_detection(detection_id: int, user_id: int, identity_id: int, enviro
         old_id = _detach_old_reference(conn, detection_id, user_id, identity_id)
         conn.execute(
             """UPDATE detections SET review_status = 'reassigned', identity_id = ?,
-               reviewed_at = datetime('now') WHERE id = ? AND user_id = ? AND environment_id = ?""",
+               reviewed_at = datetime('now'), suspect_reviewed = 0
+               WHERE id = ? AND user_id = ? AND environment_id = ?""",
             (identity_id, detection_id, user_id, env_id),
         )
         changed = conn.execute("SELECT changes()").fetchone()[0] > 0
@@ -2439,7 +2516,7 @@ def label_detection(detection_id: int, user_id: int, identity_id: int, environme
         old_id = _detach_old_reference(conn, detection_id, user_id, identity_id)
         conn.execute(
             """UPDATE detections SET identity_id = ?, review_status = 'confirmed',
-               reviewed_at = datetime('now'), ignored = 0
+               reviewed_at = datetime('now'), ignored = 0, suspect_reviewed = 0
                WHERE id = ? AND user_id = ? AND environment_id = ?""",
             (identity_id, detection_id, user_id, env_id),
         )
