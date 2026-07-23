@@ -38,17 +38,19 @@
   const nmCount = document.getElementById('nm-count');
   const nmBtn   = document.getElementById('nm-dismiss-btn');
   const nmAll   = document.getElementById('nm-select-all');
-  const mmCount = document.getElementById('mm-count');
-  const mmBtn   = document.getElementById('mm-confirm-btn');
-  const mmAll   = document.getElementById('mm-select-all');
+  const mmCount      = document.getElementById('mm-count');
+  const mmBtn        = document.getElementById('mm-confirm-btn');
+  const mmDismissBtn = document.getElementById('mm-dismiss-btn');
+  const mmAll        = document.getElementById('mm-select-all');
 
   function updateBars() {
     if (sgCount) sgCount.textContent = selSg.size;
     if (sgBtn)   sgBtn.disabled = selSg.size === 0;
     if (nmCount) nmCount.textContent = selNm.size;
     if (nmBtn)   nmBtn.disabled = selNm.size === 0;
-    if (mmCount) mmCount.textContent = selMm.size;
-    if (mmBtn)   mmBtn.disabled = selMm.size === 0;
+    if (mmCount)      mmCount.textContent = selMm.size;
+    if (mmBtn)        mmBtn.disabled = selMm.size === 0;
+    if (mmDismissBtn) mmDismissBtn.disabled = selMm.size === 0;
   }
 
   function decrementBadge(n = 1) {
@@ -147,6 +149,21 @@
     if (mmAll) mmAll.checked = false;
     updateBars();
     if (window.showToast) showToast(ids.length + ' confirmed', 'success');
+  };
+
+  window.mmDismiss = async () => {
+    const ids = [...selMm];
+    if (!ids.length) return;
+    const items = ids.map(id => ({ detection_id: id, action: 'unidentify' }));
+    const ok = await sendReview('/api/review/bulk', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(items),
+    });
+    if (!ok) return;
+    ids.forEach(id => removeMismatchCard(id));
+    selMm.clear();
+    if (mmAll) mmAll.checked = false;
+    updateBars();
+    if (window.showToast) showToast(ids.length + ' dismissed', 'success');
   };
 
   function toggleAll(listEl, sel, on) {
@@ -394,6 +411,7 @@
 
           <div style="display:flex;gap:6px;margin-bottom:10px;align-items:center;flex-wrap:wrap">
             <button class="btn btn-ghost" onclick="doMismatchOk(${item.detection_id})">Looks correct</button>
+            <button class="btn btn-ghost" onclick="doMismatchDismiss(${item.detection_id})">Dismiss</button>
             ${item.source_image_id
               ? `<a class="rc-tag-link" href="/tag/${item.source_image_id}?focus=${item.detection_id}" style="font-size:12px;white-space:nowrap">View in image</a>`
               : ''}
@@ -459,6 +477,13 @@
     if (ok) {
       removeMismatchCard(id);
       if (window.showToast) showToast('Marked as correct', 'success');
+    }
+  };
+
+  window.doMismatchDismiss = async id => {
+    if (await sendReview('/api/review/' + id + '/unidentify', { method: 'POST' })) {
+      removeMismatchCard(id);
+      if (window.showToast) showToast('Dismissed', 'success');
     }
   };
 
