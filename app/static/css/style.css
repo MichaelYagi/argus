@@ -551,8 +551,13 @@ input[type=range] { width: 150px; cursor: pointer; }
 .src-modal-wrap { position: relative; display: inline-block; line-height: 0; }
 .src-modal-wrap img { max-width: 90vw; max-height: 85vh; object-fit: contain;
                       display: block; border-radius: var(--radius); }
+@keyframes bbox-pulse {
+  0%, 100% { box-shadow: 0 0 0 1px rgba(0,0,0,.5), 0 0 6px 2px rgba(255,160,0,.4); }
+  50%       { box-shadow: 0 0 0 1px rgba(0,0,0,.5), 0 0 14px 5px rgba(255,160,0,.75); }
+}
 .src-modal-bbox { position: absolute; border: 2px dashed rgba(255,160,0,.9);
-                  box-shadow: 0 0 0 1px rgba(0,0,0,.5); pointer-events: none; }
+                  box-shadow: 0 0 0 1px rgba(0,0,0,.5); pointer-events: none;
+                  animation: bbox-pulse 1.4s ease-in-out infinite; }
 .src-modal-close { position: absolute; top: 16px; right: 20px;
                    background: rgba(0,0,0,.6); border: 1px solid rgba(255,255,255,.25);
                    color: #fff; font-size: 20px; line-height: 1; padding: 4px 10px;
