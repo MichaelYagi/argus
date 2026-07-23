@@ -5,6 +5,7 @@ from __future__ import annotations
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, HttpUrl
 
+from app.api._responses import ERR_400, ERR_401, ERR_404, ok, ok201
 from app.core.auth import require_auth, require_env_id
 from app.db import store
 
@@ -44,7 +45,20 @@ class _UpdateBody(BaseModel):
     is_active: bool | None = None
 
 
-@router.get("/api/webhooks")
+_WEBHOOK_EXAMPLE = {
+    "id": 1,
+    "url": "https://example.com/argus-webhook",
+    "events": ["detection.created", "identity.updated"],
+    "label": "Shashin sync",
+    "is_active": True,
+    "created_at": "2026-01-01T00:00:00Z",
+}
+
+
+@router.get(
+    "/api/webhooks",
+    responses={**ok([_WEBHOOK_EXAMPLE]), **ERR_401},
+)
 async def list_webhooks(
     user_id: int = Depends(require_auth),
     environment_id: int = Depends(require_env_id),
@@ -52,7 +66,11 @@ async def list_webhooks(
     return [_fmt(r) for r in store.list_webhooks(user_id, environment_id)]
 
 
-@router.post("/api/webhooks", status_code=201)
+@router.post(
+    "/api/webhooks",
+    status_code=201,
+    responses={**ok201(_WEBHOOK_EXAMPLE), **ERR_401, **ERR_400},
+)
 async def create_webhook(
     body: _CreateBody,
     user_id: int = Depends(require_auth),
@@ -77,7 +95,10 @@ def _get_webhook_scoped(webhook_id: int, user_id: int, environment_id: int):
     return row
 
 
-@router.get("/api/webhooks/{webhook_id}")
+@router.get(
+    "/api/webhooks/{webhook_id}",
+    responses={**ok(_WEBHOOK_EXAMPLE), **ERR_401, **ERR_404},
+)
 async def get_webhook(
     webhook_id: int,
     user_id: int = Depends(require_auth),
@@ -86,7 +107,15 @@ async def get_webhook(
     return _fmt(_get_webhook_scoped(webhook_id, user_id, environment_id))
 
 
-@router.put("/api/webhooks/{webhook_id}")
+@router.put(
+    "/api/webhooks/{webhook_id}",
+    responses={
+        **ok({**_WEBHOOK_EXAMPLE, "label": "Updated label"}),
+        **ERR_401,
+        **ERR_404,
+        **ERR_400,
+    },
+)
 async def update_webhook(
     webhook_id: int,
     body: _UpdateBody,
@@ -113,7 +142,11 @@ async def update_webhook(
     return _fmt(store.get_webhook(webhook_id, user_id))
 
 
-@router.delete("/api/webhooks/{webhook_id}", status_code=204)
+@router.delete(
+    "/api/webhooks/{webhook_id}",
+    status_code=204,
+    responses={**ERR_401, **ERR_404},
+)
 async def delete_webhook(
     webhook_id: int,
     user_id: int = Depends(require_auth),
@@ -124,7 +157,22 @@ async def delete_webhook(
         raise HTTPException(404, "Webhook not found")
 
 
-@router.get("/api/webhooks/{webhook_id}/deliveries")
+@router.get(
+    "/api/webhooks/{webhook_id}/deliveries",
+    responses={
+        **ok([
+            {
+                "id": 1,
+                "webhook_id": 1,
+                "event": "detection.created",
+                "status_code": 200,
+                "delivered_at": "2026-01-15T10:30:05Z",
+            }
+        ]),
+        **ERR_401,
+        **ERR_404,
+    },
+)
 async def list_webhook_deliveries(
     webhook_id: int,
     limit: int = 50,
@@ -136,7 +184,14 @@ async def list_webhook_deliveries(
     return [dict(r) for r in rows]
 
 
-@router.post("/api/webhooks/{webhook_id}/test")
+@router.post(
+    "/api/webhooks/{webhook_id}/test",
+    responses={
+        **ok({"status_code": 200, "ok": True, "duration_ms": 142}),
+        **ERR_401,
+        **ERR_404,
+    },
+)
 async def test_webhook(
     webhook_id: int,
     user_id: int = Depends(require_auth),

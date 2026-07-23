@@ -4,13 +4,32 @@ from __future__ import annotations
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 
+from app.api._responses import ERR_400, ERR_401, ok
 from app.core.auth import require_auth, require_env_id
 from app.db import store
 
 router = APIRouter()
 
 
-@router.get("/api/search")
+@router.get(
+    "/api/search",
+    responses={
+        **ok({
+            "items": [
+                {
+                    "id": 3,
+                    "label": "Alice",
+                    "type": "face",
+                    "external_ref": "person_alice",
+                    "cover_url": "/media/crops/abc123.jpg",
+                    "detection_count": 42,
+                }
+            ]
+        }),
+        **ERR_401,
+        **ERR_400,
+    },
+)
 async def search_identities(
     q: str = Query(..., min_length=1, max_length=200),
     type: str | None = Query(None),

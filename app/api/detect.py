@@ -13,6 +13,7 @@ from typing import Any
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request
 
+from app.api._responses import ERR_400, ERR_401
 from app.api._utils import delete_crops, delete_sources, is_truthy
 from app.core import settings_cache
 from app.core import webhook as _webhook
@@ -86,7 +87,40 @@ def _cleanup_if_no_detections(source_id: int, user_id: int, environment_id: int)
 # Routes
 # ---------------------------------------------------------------------------
 
-@router.post("/api/detect/faces")
+_FACE_DET_EXAMPLE = {
+    "source_image_id": 7,
+    "external_ref": "img_abc123",
+    "source_scale": 1.0,
+    "faces": [
+        {
+            "detection_id": 101,
+            "bbox": {"x": 120, "y": 80, "w": 60, "h": 75},
+            "confidence": 0.9832,
+            "similarity": 0.8741,
+            "identity_id": 3,
+            "label": "Alice",
+            "crop_url": "/media/crops/a1b2c3.jpg",
+            "review_status": "confirmed",
+            "age": 32,
+            "gender": "F",
+            "pose": [1.2, -0.3, 0.1],
+            "mask": False,
+            "kps": None,
+            "landmark_2d_106": None,
+            "landmark_3d_68": None,
+        }
+    ],
+}
+
+
+@router.post(
+    "/api/detect/faces",
+    responses={
+        **{200: {"content": {"application/json": {"example": _FACE_DET_EXAMPLE}}}},
+        **ERR_401,
+        **ERR_400,
+    },
+)
 async def detect_faces(
     request: Request,
     background_tasks: BackgroundTasks,
@@ -130,7 +164,35 @@ async def detect_faces(
     return result
 
 
-@router.post("/api/detect/objects")
+_OBJ_DET_EXAMPLE = {
+    "source_image_id": 8,
+    "external_ref": "img_xyz789",
+    "source_scale": 1.0,
+    "objects": [
+        {
+            "detection_id": 205,
+            "bbox": {"x": 50, "y": 30, "w": 200, "h": 150},
+            "confidence": 0.9145,
+            "class_name": "dog",
+            "class_id": 16,
+            "identity_id": 12,
+            "label": "dog",
+            "crop_url": "/media/crops/d4e5f6.jpg",
+            "review_status": "pending",
+        }
+    ],
+    "scene_tags": ["outdoor", "grass"],
+}
+
+
+@router.post(
+    "/api/detect/objects",
+    responses={
+        **{200: {"content": {"application/json": {"example": _OBJ_DET_EXAMPLE}}}},
+        **ERR_401,
+        **ERR_400,
+    },
+)
 async def detect_objects(
     request: Request,
     background_tasks: BackgroundTasks,
@@ -175,7 +237,20 @@ async def detect_objects(
     return result
 
 
-@router.post("/api/detect/all")
+@router.post(
+    "/api/detect/all",
+    responses={
+        **{200: {"content": {"application/json": {"example": {
+            "source_image_id": 9,
+            "external_ref": "img_combo",
+            "source_scale": 1.0,
+            "faces": [_FACE_DET_EXAMPLE["faces"][0]],
+            "objects": [_OBJ_DET_EXAMPLE["objects"][0]],
+        }}}}},
+        **ERR_401,
+        **ERR_400,
+    },
+)
 async def detect_all(
     request: Request,
     background_tasks: BackgroundTasks,
@@ -251,7 +326,37 @@ async def detect_all(
     return result
 
 
-@router.post("/api/detect/bulk")
+@router.post(
+    "/api/detect/bulk",
+    responses={
+        **{200: {"content": {"application/json": {"example": {
+            "total": 2,
+            "type": "all",
+            "results": [
+                {
+                    "index": 0,
+                    "filename": "photo1.jpg",
+                    "external_ref": "img_001",
+                    "source_image_id": 10,
+                    "source_scale": 1.0,
+                    "faces": [_FACE_DET_EXAMPLE["faces"][0]],
+                    "objects": [],
+                },
+                {
+                    "index": 1,
+                    "filename": "photo2.jpg",
+                    "external_ref": "img_002",
+                    "source_image_id": 11,
+                    "source_scale": 1.0,
+                    "faces": [],
+                    "objects": [_OBJ_DET_EXAMPLE["objects"][0]],
+                },
+            ],
+        }}}}},
+        **ERR_401,
+        **ERR_400,
+    },
+)
 async def detect_bulk(
     request: Request,
     background_tasks: BackgroundTasks,
@@ -405,7 +510,40 @@ async def detect_bulk(
 # Verify (1:1) and Identify (1:N, read-only) — neither stores anything
 # ---------------------------------------------------------------------------
 
-@router.post("/api/verify")
+@router.post(
+    "/api/verify",
+    responses={
+        **{200: {"content": {"application/json": {"example": {
+            "similarity": 0.8912,
+            "match": True,
+            "threshold": 0.5,
+            "face1": {
+                "bbox": {"x": 110, "y": 70, "w": 58, "h": 72},
+                "confidence": 0.9751,
+                "age": 32,
+                "gender": "F",
+                "pose": [1.1, -0.2, 0.0],
+                "mask": False,
+                "kps": None,
+                "landmark_2d_106": None,
+                "landmark_3d_68": None,
+            },
+            "face2": {
+                "bbox": {"x": 95, "y": 60, "w": 55, "h": 68},
+                "confidence": 0.9614,
+                "age": 32,
+                "gender": "F",
+                "pose": [0.8, 0.1, -0.1],
+                "mask": False,
+                "kps": None,
+                "landmark_2d_106": None,
+                "landmark_3d_68": None,
+            },
+        }}}}},
+        **ERR_401,
+        **ERR_400,
+    },
+)
 async def verify(request: Request, user_id: int = Depends(require_auth)):
     """1:1 face verification — are the two supplied images the same person?
 
@@ -440,7 +578,36 @@ async def verify(request: Request, user_id: int = Depends(require_auth)):
     }
 
 
-@router.post("/api/identify")
+@router.post(
+    "/api/identify",
+    responses={
+        **{200: {"content": {"application/json": {"example": {
+            "threshold": 0.5,
+            "faces": [
+                {
+                    "bbox": {"x": 120, "y": 80, "w": 60, "h": 75},
+                    "confidence": 0.9832,
+                    "identity_id": 3,
+                    "label": "Alice",
+                    "similarity": 0.8741,
+                    "suggestions": [
+                        {"identity_id": 3, "label": "Alice", "similarity": 0.8741},
+                        {"identity_id": 7, "label": "Bob", "similarity": 0.3102},
+                    ],
+                    "age": 32,
+                    "gender": "F",
+                    "pose": [1.2, -0.3, 0.1],
+                    "mask": False,
+                    "kps": None,
+                    "landmark_2d_106": None,
+                    "landmark_3d_68": None,
+                }
+            ],
+        }}}}},
+        **ERR_401,
+        **ERR_400,
+    },
+)
 async def identify(
     request: Request,
     user_id: int = Depends(require_auth),
@@ -492,7 +659,41 @@ async def identify(
     return {"threshold": threshold, "faces": results}
 
 
-@router.post("/api/test")
+@router.post(
+    "/api/test",
+    responses={
+        **{200: {"content": {"application/json": {"example": {
+            "faces": [
+                {
+                    "bbox": {"x": 120, "y": 80, "w": 60, "h": 75},
+                    "confidence": 0.9832,
+                    "identity_id": 3,
+                    "label": "Alice",
+                    "similarity": 0.8741,
+                    "age": 32,
+                    "gender": "F",
+                    "pose": [1.2, -0.3, 0.1],
+                    "mask": False,
+                    "kps": None,
+                    "landmark_2d_106": None,
+                    "landmark_3d_68": None,
+                }
+            ],
+            "objects": [
+                {
+                    "bbox": {"x": 50, "y": 30, "w": 200, "h": 150},
+                    "confidence": 0.9145,
+                    "class_name": "dog",
+                    "class_id": 16,
+                }
+            ],
+            "counts": {"faces": 1, "objects": 1},
+            "available": {"faces": True, "objects": True},
+        }}}}},
+        **ERR_401,
+        **ERR_400,
+    },
+)
 async def test_detect(
     request: Request,
     user_id: int = Depends(require_auth),
@@ -620,7 +821,28 @@ def _stateless_detect(
 _TEST_BATCH_MAX = 100
 
 
-@router.post("/api/test/batch")
+@router.post(
+    "/api/test/batch",
+    responses={
+        **{200: {"content": {"application/json": {"example": {
+            "total": 2,
+            "type": "all",
+            "results": [
+                {
+                    "index": 0,
+                    "filename": "photo1.jpg",
+                    "faces": [{"bbox": {"x": 120, "y": 80, "w": 60, "h": 75}, "confidence": 0.9832,
+                               "identity_id": 3, "label": "Alice", "similarity": 0.8741}],
+                    "objects": [],
+                    "counts": {"faces": 1, "objects": 0},
+                    "available": {"faces": True, "objects": True},
+                }
+            ],
+        }}}}},
+        **ERR_401,
+        **ERR_400,
+    },
+)
 async def test_detect_batch(
     request: Request,
     user_id: int = Depends(require_auth),
@@ -703,7 +925,39 @@ async def test_detect_batch(
 # Compare (read-only cross-image face matching)
 # ---------------------------------------------------------------------------
 
-@router.post("/api/compare")
+@router.post(
+    "/api/compare",
+    responses={
+        **{200: {"content": {"application/json": {"example": {
+            "threshold": 0.5,
+            "reference": {
+                "filename": "reference.jpg",
+                "faces": [
+                    {"index": 0, "bbox": {"x": 110, "y": 70, "w": 58, "h": 72},
+                     "confidence": 0.9751, "match_count": 1}
+                ],
+            },
+            "targets": [
+                {
+                    "index": 0,
+                    "filename": "target.jpg",
+                    "faces": [
+                        {
+                            "index": 0,
+                            "bbox": {"x": 95, "y": 60, "w": 55, "h": 68},
+                            "confidence": 0.9614,
+                            "matched_reference_index": 0,
+                            "best_reference_index": 0,
+                            "similarity": 0.8912,
+                        }
+                    ],
+                }
+            ],
+        }}}}},
+        **ERR_401,
+        **ERR_400,
+    },
+)
 async def compare_faces(
     request: Request,
     user_id: int = Depends(require_auth),
@@ -1575,7 +1829,19 @@ def scan_unidentified(user_id: int, environment_id: int) -> dict:
     return {"scanned": len(rows), "confirmed": confirmed, "pending": pending, "dismissed": dismissed}
 
 
-@router.post("/api/detect/scan", status_code=200)
+@router.post(
+    "/api/detect/scan",
+    status_code=200,
+    responses={
+        **{200: {"content": {"application/json": {"example": {
+            "scanned": 47,
+            "confirmed": 12,
+            "pending": 8,
+            "dismissed": 2,
+        }}}}},
+        **ERR_401,
+    },
+)
 async def scan_faces_endpoint(
     user_id: int = Depends(require_auth),
     environment_id: int = Depends(require_env_id),

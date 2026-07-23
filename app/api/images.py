@@ -9,6 +9,7 @@ import time
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, Request
 from pydantic import BaseModel
 
+from app.api._responses import ERR_400, ERR_401, ERR_404, ERR_409, ok, ok201
 from app.api._utils import delete_crops, delete_sources, is_truthy, paginate
 from app.core import webhook as _webhook
 from app.core.auth import require_auth, require_env_id
@@ -23,7 +24,31 @@ router = APIRouter()
 _VALID_SORTS = frozenset({"newest", "oldest", "most_detections", "fewest_detections"})
 
 
-@router.get("/api/images")
+@router.get(
+    "/api/images",
+    responses={
+        **ok({
+            "items": [
+                {
+                    "source_image_id": 7,
+                    "external_ref": "img_abc123",
+                    "source_image_url": "/media/sources/abc456.jpg?h=300",
+                    "width": 1920,
+                    "height": 1080,
+                    "face_count": 2,
+                    "object_count": 1,
+                    "detection_count": 3,
+                    "uploaded_at": "2026-01-15T10:30:00Z",
+                    "scene_tags": ["outdoor"],
+                }
+            ],
+            "next_cursor": "2026-01-15T10:30:00Z_7",
+            "has_more": False,
+        }),
+        **ERR_401,
+        **ERR_400,
+    },
+)
 async def list_source_images(
     cursor: str | None = Query(None),
     limit: int = Query(40, ge=1, le=200),
@@ -94,7 +119,10 @@ async def list_source_images(
     return result
 
 
-@router.get("/api/images/count")
+@router.get(
+    "/api/images/count",
+    responses={**ok({"count": 95}), **ERR_401, **ERR_400},
+)
 async def count_source_images(
     identity_id: list[int] = Query(default=[]),
     type: str | None = Query(None),
@@ -122,7 +150,10 @@ async def count_source_images(
     return {"count": count}
 
 
-@router.get("/api/images/ids")
+@router.get(
+    "/api/images/ids",
+    responses={**ok({"ids": [7, 8, 9, 10, 11]}), **ERR_401, **ERR_400},
+)
 async def list_source_image_ids(
     identity_id: list[int] = Query(default=[]),
     type: str | None = Query(None),
@@ -165,7 +196,37 @@ def _parse_attributes(row) -> dict:
     return {"age": data.get("age"), "gender": data.get("gender"), "pose": data.get("pose")}
 
 
-@router.get("/api/images/{source_image_id}/faces")
+@router.get(
+    "/api/images/{source_image_id}/faces",
+    responses={
+        **ok({
+            "source_image_id": 7,
+            "external_ref": "img_abc123",
+            "width": 1920,
+            "height": 1080,
+            "uploaded_at": "2026-01-15T10:30:00Z",
+            "source_image_url": "/media/sources/abc456.jpg",
+            "scene_tags": [],
+            "faces": [
+                {
+                    "detection_id": 101,
+                    "bbox": {"x": 120, "y": 80, "w": 60, "h": 75},
+                    "confidence": 0.9832,
+                    "identity_id": 3,
+                    "label": "Alice",
+                    "crop_url": "/media/crops/abc123.jpg",
+                    "review_status": "confirmed",
+                    "embedding_source": "aligned",
+                    "age": 32,
+                    "gender": "F",
+                    "pose": [1.2, -0.3, 0.1],
+                }
+            ],
+        }),
+        **ERR_401,
+        **ERR_404,
+    },
+)
 async def image_faces(
     source_image_id: int,
     user_id: int = Depends(require_auth),
@@ -201,7 +262,14 @@ async def image_faces(
     }
 
 
-@router.get("/api/images/{source_image_id}/url")
+@router.get(
+    "/api/images/{source_image_id}/url",
+    responses={
+        **ok({"image_url": "/media/sources/abc456.jpg"}),
+        **ERR_401,
+        **ERR_404,
+    },
+)
 async def get_source_image_url(
     source_image_id: int,
     user_id: int = Depends(require_auth),
@@ -213,7 +281,15 @@ async def get_source_image_url(
     return {"image_url": f"/media/sources/{src['file_path']}"}
 
 
-@router.delete("/api/images/{source_image_id}", status_code=200)
+@router.delete(
+    "/api/images/{source_image_id}",
+    status_code=200,
+    responses={
+        **ok({"source_image_id": 7, "detections_deleted": 3, "crops_removed": 3}),
+        **ERR_401,
+        **ERR_404,
+    },
+)
 async def delete_source_image(
     source_image_id: int,
     user_id: int = Depends(require_auth),
@@ -245,7 +321,31 @@ async def delete_source_image(
             "crops_removed": removed}
 
 
-@router.post("/api/images/{source_image_id}/reprocess", status_code=200)
+@router.post(
+    "/api/images/{source_image_id}/reprocess",
+    status_code=200,
+    responses={
+        **ok({
+            "source_image_id": 7,
+            "faces": [
+                {
+                    "detection_id": 105,
+                    "bbox": {"x": 120, "y": 80, "w": 60, "h": 75},
+                    "confidence": 0.9832,
+                    "identity_id": 3,
+                    "label": "Alice",
+                    "crop_url": "/media/crops/new001.jpg",
+                    "review_status": "confirmed",
+                }
+            ],
+            "objects": [],
+        }),
+        **ERR_401,
+        **ERR_404,
+        **ERR_400,
+        **ERR_409,
+    },
+)
 async def reprocess_source_image(
     source_image_id: int,
     request: Request,
@@ -323,7 +423,25 @@ class _ManualDetectionBody(BaseModel):
     identity_id: int | None = None
 
 
-@router.post("/api/images/{source_image_id}/detections", status_code=201)
+@router.post(
+    "/api/images/{source_image_id}/detections",
+    status_code=201,
+    responses={
+        **ok201({
+            "detection_id": 110,
+            "identity_id": 3,
+            "label": "Alice",
+            "bbox": {"x": 100, "y": 60, "w": 55, "h": 68},
+            "crop_url": "/media/crops/man001.jpg",
+            "source": "manual",
+            "embedding_source": "aligned",
+        }),
+        **ERR_401,
+        **ERR_404,
+        **ERR_400,
+        **ERR_409,
+    },
+)
 async def create_manual_detection(
     source_image_id: int,
     body: _ManualDetectionBody,
@@ -467,7 +585,18 @@ class _TagItem(BaseModel):
     label: str | None = None
 
 
-@router.post("/api/images/{source_image_id}/label", status_code=200)
+@router.post(
+    "/api/images/{source_image_id}/label",
+    status_code=200,
+    responses={
+        **ok([
+            {"detection_id": 101, "identity_id": 3, "label": "Alice", "status": "labeled"},
+            {"detection_id": 102, "identity_id": 7, "label": "Bob", "status": "labeled"},
+        ]),
+        **ERR_401,
+        **ERR_404,
+    },
+)
 async def tag_image(
     source_image_id: int,
     items: list[_TagItem],

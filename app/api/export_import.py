@@ -13,6 +13,7 @@ from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
 from app import __version__
+from app.api._responses import ERR_400, ERR_401, ok
 from app.core.auth import require_auth, require_env_id
 from app.core.paths import crops_dir, sources_dir
 from app.db import store
@@ -28,7 +29,14 @@ class _ExportBody(BaseModel):
 # Export
 # ---------------------------------------------------------------------------
 
-@router.post("/api/export")
+@router.post(
+    "/api/export",
+    responses={
+        200: {"content": {"application/zip": {}}, "description": "Zip archive of exported identity data"},
+        **ERR_401,
+        **ERR_400,
+    },
+)
 async def export_data(
     body: _ExportBody,
     user_id: int = Depends(require_auth),
@@ -87,7 +95,14 @@ async def export_data(
 # Import
 # ---------------------------------------------------------------------------
 
-@router.post("/api/import")
+@router.post(
+    "/api/import",
+    responses={
+        **ok({"identities_created": 3, "embeddings_added": 7, "detections_added": 42, "images_copied": 15}),
+        **ERR_401,
+        **ERR_400,
+    },
+)
 async def import_data(
     file: UploadFile = File(...),
     user_id: int = Depends(require_auth),

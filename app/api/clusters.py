@@ -9,6 +9,7 @@ from __future__ import annotations
 
 from fastapi import APIRouter, Depends, Query
 
+from app.api._responses import ERR_401, ok
 from app.core import clustering, settings_cache
 from app.core.auth import require_auth, require_env_id
 from app.db import store
@@ -31,7 +32,31 @@ def _compute(user_id: int, environment_id: int, threshold: float | None, min_siz
     return by_id, rows, clusters, threshold
 
 
-@router.get("/api/clusters")
+@router.get(
+    "/api/clusters",
+    responses={
+        **ok({
+            "clusters": [
+                {
+                    "size": 3,
+                    "detection_ids": [12, 45, 78],
+                    "representative_crop": "/media/crops/abc123.jpg",
+                    "crops": [
+                        {
+                            "detection_id": 12,
+                            "crop_url": "/media/crops/abc123.jpg",
+                            "source_image_url": "/media/sources/def456.jpg",
+                            "bbox": {"x": 120, "y": 80, "w": 60, "h": 75},
+                        }
+                    ],
+                }
+            ],
+            "unclustered": 3,
+            "threshold": 0.5,
+        }),
+        **ERR_401,
+    },
+)
 async def get_clusters(
     threshold: float | None = Query(None, ge=0.0, le=1.0),
     min_size: int = Query(2, ge=1, le=50),
@@ -78,7 +103,10 @@ async def get_clusters(
     }
 
 
-@router.get("/api/clusters/count")
+@router.get(
+    "/api/clusters/count",
+    responses={**ok({"count": 4}), **ERR_401},
+)
 async def clusters_count(
     user_id: int = Depends(require_auth),
     environment_id: int = Depends(require_env_id),

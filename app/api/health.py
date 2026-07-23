@@ -5,6 +5,7 @@ import platform
 from fastapi import APIRouter
 
 from app import __version__
+from app.api._responses import ERR_400, ok
 from app.core import settings_cache
 from app.db import store
 from app.inference.registry import registry
@@ -73,7 +74,20 @@ def _sidecar_model_status(url: str) -> dict:
 router = APIRouter()
 
 
-@router.api_route("/api/health", methods=["GET", "HEAD"])
+@router.api_route(
+    "/api/health",
+    methods=["GET", "HEAD"],
+    responses={
+        **ok({
+            "status": "ok",
+            "version": "0.1.0-alpha.20",
+            "gpu_available": True,
+            "active_provider": "cuda",
+            "face_model": "buffalo_l",
+            "object_model": "yolov8s",
+        }),
+    },
+)
 async def health():
     try:
         import onnxruntime as ort
@@ -106,7 +120,10 @@ async def health():
     }
 
 
-@router.get("/api/storage")
+@router.get(
+    "/api/storage",
+    responses={**ok({"data_path": "/data", "storage_bytes": 2147483648, "storage": "2.0 GB"})},
+)
 async def storage():
     """Size of the Argus data directory in bytes."""
     from app.api.identities import _cached_storage
@@ -119,7 +136,41 @@ async def storage():
 _SUPPORTED_FORMATS = ["JPEG", "PNG", "WEBP", "BMP", "GIF", "TIFF", "HEIC", "HEIF", "AVIF", "MPO"]
 
 
-@router.get("/api/capabilities")
+@router.get(
+    "/api/capabilities",
+    responses={
+        **ok({
+            "version": "0.1.0-alpha.20",
+            "os": {"name": "Linux", "version": "6.1.0"},
+            "cpu_name": "Intel Core i7-12700K",
+            "memory": {"total_gb": 32.0, "available_gb": 18.4},
+            "gpu_available": True,
+            "gpu_name": "NVIDIA GeForce RTX 3080",
+            "active_provider": "cuda",
+            "detection": {
+                "faces": {"available": True, "downloaded": True, "active_model": "buffalo_l"},
+                "objects": {"available": True, "downloaded": True, "active_model": "yolov8s"},
+            },
+            "supported_formats": ["JPEG", "PNG", "WEBP", "BMP", "GIF", "TIFF", "HEIC", "HEIF", "AVIF", "MPO"],
+            "image_input": ["file", "image_url", "image_base64"],
+            "limits": {
+                "identities_list_max": 200,
+                "identities_summary_max": 1000,
+                "changes_list_max": 1000,
+                "batch_detect_max": 500,
+            },
+            "features": {
+                "external_ref": True,
+                "change_feed": True,
+                "batch_label": True,
+                "batch_read": True,
+                "stateless_test": True,
+                "environments": True,
+            },
+        }),
+        **ERR_400,
+    },
+)
 async def capabilities():
     """Discovery manifest so clients can adapt instead of hardcoding assumptions:
     which detection types are usable right now, supported formats, pagination limits,

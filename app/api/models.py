@@ -11,6 +11,7 @@ from typing import Any
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query
 
+from app.api._responses import ERR_400, ERR_401, ERR_404, ERR_409, ok, ok202
 from app.core.auth import require_admin
 from app.core.paths import models_dir
 from app.db import store
@@ -39,7 +40,22 @@ def downloading_ids() -> set[int]:
 # Routes
 # ---------------------------------------------------------------------------
 
-@router.get("/api/models")
+_MODEL_EXAMPLE = {
+    "id": 1,
+    "type": "face",
+    "name": "buffalo_l",
+    "embedding_dim": 512,
+    "description": "High-accuracy face recognition model (large)",
+    "config": None,
+    "is_downloaded": True,
+    "is_active": True,
+}
+
+
+@router.get(
+    "/api/models",
+    responses={**ok([_MODEL_EXAMPLE]), **ERR_401, **ERR_400},
+)
 async def list_models(
     type: str | None = Query(None),
     user_id: int = Depends(require_admin),
@@ -49,7 +65,10 @@ async def list_models(
     return [_fmt(r) for r in store.list_models(model_type=type)]
 
 
-@router.get("/api/models/{model_id}")
+@router.get(
+    "/api/models/{model_id}",
+    responses={**ok(_MODEL_EXAMPLE), **ERR_401, **ERR_404},
+)
 async def get_model(model_id: int, user_id: int = Depends(require_admin)):
     row = store.get_model(model_id)
     if not row:
@@ -57,7 +76,15 @@ async def get_model(model_id: int, user_id: int = Depends(require_admin)):
     return _fmt(row)
 
 
-@router.post("/api/models/{model_id}/download", status_code=202)
+@router.post(
+    "/api/models/{model_id}/download",
+    status_code=202,
+    responses={
+        **ok202({"model_id": 1, "status": "downloading"}),
+        **ERR_401,
+        **ERR_404,
+    },
+)
 async def download_model(
     model_id: int,
     background: BackgroundTasks,
@@ -76,7 +103,14 @@ async def download_model(
     return {"model_id": model_id, "status": "downloading"}
 
 
-@router.get("/api/models/{model_id}/download/status")
+@router.get(
+    "/api/models/{model_id}/download/status",
+    responses={
+        **ok({"model_id": 1, "status": "complete", "error": None}),
+        **ERR_401,
+        **ERR_404,
+    },
+)
 async def download_status(model_id: int, user_id: int = Depends(require_admin)):
     row = store.get_model(model_id)
     if not row:
@@ -87,7 +121,15 @@ async def download_status(model_id: int, user_id: int = Depends(require_admin)):
     return {"model_id": model_id, **prog}
 
 
-@router.put("/api/models/{model_id}/activate")
+@router.put(
+    "/api/models/{model_id}/activate",
+    responses={
+        **ok({**_MODEL_EXAMPLE, "is_active": True}),
+        **ERR_401,
+        **ERR_404,
+        **ERR_409,
+    },
+)
 async def activate_model(model_id: int, user_id: int = Depends(require_admin)):
     """Hot-swap the active engine. Synchronous — loads from disk if not cached."""
     row = store.get_model(model_id)
@@ -125,7 +167,11 @@ async def activate_model(model_id: int, user_id: int = Depends(require_admin)):
     return _fmt(store.get_model(model_id))
 
 
-@router.delete("/api/models/{model_id}", status_code=204)
+@router.delete(
+    "/api/models/{model_id}",
+    status_code=204,
+    responses={**ERR_401, **ERR_404, **ERR_409},
+)
 async def delete_model(model_id: int, user_id: int = Depends(require_admin)):
     row = store.get_model(model_id)
     if not row:

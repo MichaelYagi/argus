@@ -10,6 +10,7 @@ from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
 
+from app.api._responses import ERR_400, ERR_401, ERR_404, ok
 from app.api._utils import delete_crops
 from app.core import settings_cache
 from app.core import webhook as _webhook
@@ -62,7 +63,10 @@ router = APIRouter()
 # Review queue
 # ---------------------------------------------------------------------------
 
-@router.get("/api/review/count")
+@router.get(
+    "/api/review/count",
+    responses={**ok({"count": 14}), **ERR_401},
+)
 async def review_count(
     has_suggestion: bool | None = Query(None),
     user_id: int = Depends(require_auth),
@@ -71,7 +75,31 @@ async def review_count(
     return {"count": store.count_pending_review(user_id, environment_id, has_suggestion=has_suggestion)}
 
 
-@router.get("/api/review")
+@router.get(
+    "/api/review",
+    responses={
+        **ok({
+            "items": [
+                {
+                    "detection_id": 303,
+                    "crop_url": "/media/crops/unk001.jpg",
+                    "source_image_id": 10,
+                    "source_image_url": "/media/sources/jkl012.jpg",
+                    "confidence": 0.8514,
+                    "bbox": {"x": 90, "y": 60, "w": 55, "h": 70},
+                    "detected_at": "2026-01-15T11:00:00Z",
+                    "current_identity": None,
+                    "suggested_matches": [
+                        {"identity_id": 3, "label": "Alice", "similarity": 0.7823},
+                    ],
+                }
+            ],
+            "next_cursor": "0.8514_303",
+            "has_more": False,
+        }),
+        **ERR_401,
+    },
+)
 async def get_review_queue(
     cursor: str | None = Query(None),
     limit: int | None = Query(None),
@@ -124,7 +152,11 @@ async def get_review_queue(
 # Review actions
 # ---------------------------------------------------------------------------
 
-@router.post("/api/review/{detection_id}/confirm", status_code=200)
+@router.post(
+    "/api/review/{detection_id}/confirm",
+    status_code=200,
+    responses={**ok({"detection_id": 303, "review_status": "confirmed"}), **ERR_401, **ERR_404},
+)
 async def confirm(
     detection_id: int,
     user_id: int = Depends(require_auth),
@@ -137,7 +169,11 @@ async def confirm(
     return {"detection_id": detection_id, "review_status": "confirmed"}
 
 
-@router.post("/api/review/{detection_id}/unidentify", status_code=200)
+@router.post(
+    "/api/review/{detection_id}/unidentify",
+    status_code=200,
+    responses={**ok({"detection_id": 303, "identity_id": None, "review_status": "pending"}), **ERR_401, **ERR_404},
+)
 async def unidentify(
     detection_id: int,
     user_id: int = Depends(require_auth),
@@ -161,7 +197,11 @@ async def unidentify(
     return {"detection_id": detection_id, "identity_id": None, "review_status": "pending"}
 
 
-@router.post("/api/review/{detection_id}/reject", status_code=200)
+@router.post(
+    "/api/review/{detection_id}/reject",
+    status_code=200,
+    responses={**ok({"detection_id": 303, "review_status": "rejected"}), **ERR_401, **ERR_404},
+)
 async def reject(
     detection_id: int,
     user_id: int = Depends(require_auth),
@@ -184,7 +224,11 @@ async def reject(
     return {"detection_id": detection_id, "review_status": "rejected"}
 
 
-@router.post("/api/review/{detection_id}/restore", status_code=200)
+@router.post(
+    "/api/review/{detection_id}/restore",
+    status_code=200,
+    responses={**ok({"detection_id": 303, "review_status": "confirmed"}), **ERR_401, **ERR_404},
+)
 async def restore(
     detection_id: int,
     user_id: int = Depends(require_auth),
@@ -204,7 +248,16 @@ class _ReassignBody(BaseModel):
     label: str | None = None
 
 
-@router.post("/api/review/{detection_id}/reassign", status_code=200)
+@router.post(
+    "/api/review/{detection_id}/reassign",
+    status_code=200,
+    responses={
+        **ok({"detection_id": 303, "identity_id": 7, "review_status": "reassigned"}),
+        **ERR_401,
+        **ERR_404,
+        **ERR_400,
+    },
+)
 async def reassign(
     detection_id: int, body: _ReassignBody,
     user_id: int = Depends(require_auth),
@@ -250,7 +303,17 @@ class _BulkItem(BaseModel):
     label: str | None = None
 
 
-@router.post("/api/review/bulk", status_code=200)
+@router.post(
+    "/api/review/bulk",
+    status_code=200,
+    responses={
+        **ok([
+            {"detection_id": 303, "status": "confirmed"},
+            {"detection_id": 304, "status": "rejected"},
+        ]),
+        **ERR_401,
+    },
+)
 async def bulk_review(
     items: list[_BulkItem],
     user_id: int = Depends(require_auth),
@@ -339,7 +402,25 @@ async def bulk_review(
 # Get a single detection
 # ---------------------------------------------------------------------------
 
-@router.get("/api/detections/{detection_id}")
+@router.get(
+    "/api/detections/{detection_id}",
+    responses={
+        **ok({
+            "detection_id": 101,
+            "type": "face",
+            "confidence": 0.9832,
+            "bbox": {"x": 120, "y": 80, "w": 60, "h": 75},
+            "crop_url": "/media/crops/abc123.jpg",
+            "identity_id": 3,
+            "source_image_id": 7,
+            "review_status": "confirmed",
+            "detected_at": "2026-01-15T10:30:00Z",
+            "attributes": {"age": 32, "gender": "F"},
+        }),
+        **ERR_401,
+        **ERR_404,
+    },
+)
 async def get_detection(
     detection_id: int,
     user_id: int = Depends(require_auth),
@@ -366,7 +447,14 @@ async def get_detection(
     }
 
 
-@router.get("/api/detections/{detection_id}/img")
+@router.get(
+    "/api/detections/{detection_id}/img",
+    responses={
+        200: {"content": {"image/jpeg": {}}, "description": "JPEG crop image for this detection"},
+        **ERR_401,
+        **ERR_404,
+    },
+)
 async def get_detection_img(
     detection_id: int,
     user_id: int = Depends(require_auth),
@@ -387,7 +475,11 @@ async def get_detection_img(
 # Delete a single detection permanently
 # ---------------------------------------------------------------------------
 
-@router.delete("/api/detections/{detection_id}", status_code=204)
+@router.delete(
+    "/api/detections/{detection_id}",
+    status_code=204,
+    responses={**ERR_401, **ERR_404},
+)
 async def delete_detection(
     detection_id: int,
     user_id: int = Depends(require_auth),
@@ -412,7 +504,22 @@ class _LabelBody(BaseModel):
     enroll: bool = False
 
 
-@router.put("/api/detections/{detection_id}/label", status_code=200)
+@router.put(
+    "/api/detections/{detection_id}/label",
+    status_code=200,
+    responses={
+        **ok({
+            "detection_id": 101,
+            "identity_id": 3,
+            "label": "Alice",
+            "review_status": "confirmed",
+            "enrolled": False,
+        }),
+        **ERR_401,
+        **ERR_404,
+        **ERR_400,
+    },
+)
 async def label_detection(
     detection_id: int, body: _LabelBody,
     background_tasks: BackgroundTasks,
@@ -481,7 +588,20 @@ class _BatchLabelBody(BaseModel):
     items: list[_BatchLabelItem]
 
 
-@router.post("/api/detections/label", status_code=200)
+@router.post(
+    "/api/detections/label",
+    status_code=200,
+    responses={
+        **ok({
+            "results": [
+                {"detection_id": 101, "ok": True, "identity_id": 3, "label": "Alice", "enrolled": False},
+                {"detection_id": 202, "ok": False, "error": "Detection not found"},
+            ]
+        }),
+        **ERR_401,
+        **ERR_400,
+    },
+)
 async def label_detections_batch(
     body: _BatchLabelBody,
     background_tasks: BackgroundTasks,
@@ -547,7 +667,11 @@ class _IdsBody(BaseModel):
     detection_ids: list[int]
 
 
-@router.post("/api/detections/dismiss", status_code=200)
+@router.post(
+    "/api/detections/dismiss",
+    status_code=200,
+    responses={**ok({"dismissed": 3}), **ERR_401, **ERR_400},
+)
 async def dismiss_detections(
     body: _IdsBody,
     user_id: int = Depends(require_auth),
@@ -563,7 +687,11 @@ async def dismiss_detections(
     return {"dismissed": n}
 
 
-@router.post("/api/detections/delete", status_code=200)
+@router.post(
+    "/api/detections/delete",
+    status_code=200,
+    responses={**ok({"deleted": 3, "crops_removed": 3}), **ERR_401, **ERR_400},
+)
 async def delete_detections(
     body: _IdsBody,
     user_id: int = Depends(require_auth),

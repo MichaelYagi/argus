@@ -11,6 +11,7 @@ import time as _time
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
 
+from app.api._responses import ERR_400, ERR_401, ERR_404, ERR_409, ok, ok201
 from app.api._utils import delete_crops, delete_sources, dir_size, fmt_bytes, gc_source_files, paginate
 from app.core import settings_cache
 from app.core import webhook as _webhook
@@ -76,7 +77,26 @@ async def _cached_storage() -> tuple[str, str | None, int, int | None]:
         return _storage_cache[1]
 
 
-@router.get("/api/stats")
+@router.get(
+    "/api/stats",
+    responses={
+        **ok({
+            "identities": 12,
+            "face_identities": 8,
+            "object_identities": 4,
+            "detections": 348,
+            "face_detections": 210,
+            "object_detections": 138,
+            "source_images": 95,
+            "pending_review": 14,
+            "storage": "1.2 GB",
+            "storage_free": "45.3 GB",
+            "storage_bytes": 1288490188,
+            "storage_free_bytes": 48644997120,
+        }),
+        **ERR_401,
+    },
+)
 async def stats(
     user_id: int = Depends(require_auth),
     environment_id: int = Depends(require_env_id),
@@ -96,7 +116,31 @@ async def stats(
     }
 
 
-@router.get("/api/identities/summary")
+@router.get(
+    "/api/identities/summary",
+    responses={
+        **ok({
+            "items": [
+                {
+                    "id": 3,
+                    "type": "face",
+                    "label": "Alice",
+                    "external_ref": "person_alice",
+                    "cover_detection_id": 101,
+                    "created_at": "2026-01-10T08:00:00Z",
+                    "detection_count": 42,
+                    "embedding_count": 5,
+                    "thumbnail_url": "/media/crops/abc123.jpg",
+                }
+            ],
+            "next_cursor": "Alice",
+            "has_more": True,
+            "total": 8,
+        }),
+        **ERR_401,
+        **ERR_400,
+    },
+)
 async def identities_summary(
     type: str | None = Query(None),
     cursor: str | None = Query(None),
@@ -133,7 +177,27 @@ async def identities_summary(
     }
 
 
-@router.get("/api/identities")
+@router.get(
+    "/api/identities",
+    responses={
+        **ok({
+            "items": [
+                {
+                    "id": 3,
+                    "type": "face",
+                    "label": "Alice",
+                    "external_ref": "person_alice",
+                    "cover_detection_id": 101,
+                    "created_at": "2026-01-10T08:00:00Z",
+                }
+            ],
+            "next_cursor": "Alice",
+            "has_more": False,
+        }),
+        **ERR_401,
+        **ERR_400,
+    },
+)
 async def list_identities(
     type: str | None = Query(None),
     q: str | None = Query(None),
@@ -163,7 +227,24 @@ async def list_identities(
     }
 
 
-@router.get("/api/identities/{identity_id}")
+@router.get(
+    "/api/identities/{identity_id}",
+    responses={
+        **ok({
+            "id": 3,
+            "type": "face",
+            "label": "Alice",
+            "external_ref": "person_alice",
+            "cover_detection_id": 101,
+            "created_at": "2026-01-10T08:00:00Z",
+            "detection_count": 42,
+            "embedding_count": 5,
+            "thumbnail_url": "/media/crops/abc123.jpg",
+        }),
+        **ERR_401,
+        **ERR_404,
+    },
+)
 async def get_identity(
     identity_id: int,
     user_id: int = Depends(require_auth),
@@ -180,7 +261,16 @@ async def get_identity(
     return result
 
 
-@router.post("/api/identities", status_code=201)
+@router.post(
+    "/api/identities",
+    status_code=201,
+    responses={
+        **ok201({"id": 3, "type": "face", "label": "Alice", "external_ref": "person_alice"}),
+        **ERR_401,
+        **ERR_400,
+        **ERR_409,
+    },
+)
 async def create_identity(
     body: _CreateBody,
     user_id: int = Depends(require_auth),
@@ -205,7 +295,17 @@ class _RenameBody(BaseModel):
     label: str = Field(..., max_length=200)
 
 
-@router.put("/api/identities/{identity_id}", status_code=200)
+@router.put(
+    "/api/identities/{identity_id}",
+    status_code=200,
+    responses={
+        **ok({"id": 3, "label": "Alice Smith"}),
+        **ERR_401,
+        **ERR_404,
+        **ERR_400,
+        **ERR_409,
+    },
+)
 async def rename_identity(
     identity_id: int,
     body: _RenameBody,
@@ -238,7 +338,15 @@ class _ExternalRefBody(BaseModel):
     external_ref: str | None = None
 
 
-@router.put("/api/identities/{identity_id}/external_ref", status_code=200)
+@router.put(
+    "/api/identities/{identity_id}/external_ref",
+    status_code=200,
+    responses={
+        **ok({"id": 3, "external_ref": "person_alice_v2"}),
+        **ERR_401,
+        **ERR_404,
+    },
+)
 async def set_external_ref(
     identity_id: int,
     body: _ExternalRefBody,
@@ -260,7 +368,16 @@ class _CoverBody(BaseModel):
     detection_id: int
 
 
-@router.put("/api/identities/{identity_id}/cover", status_code=200)
+@router.put(
+    "/api/identities/{identity_id}/cover",
+    status_code=200,
+    responses={
+        **ok({"identity_id": 3, "cover_detection_id": 101}),
+        **ERR_401,
+        **ERR_404,
+        **ERR_400,
+    },
+)
 async def set_cover(
     identity_id: int,
     body: _CoverBody,
@@ -280,7 +397,11 @@ async def set_cover(
     return {"identity_id": identity_id, "cover_detection_id": body.detection_id}
 
 
-@router.delete("/api/identities/{identity_id}", status_code=204)
+@router.delete(
+    "/api/identities/{identity_id}",
+    status_code=204,
+    responses={**ERR_401, **ERR_404},
+)
 async def delete_identity(
     identity_id: int,
     user_id: int = Depends(require_auth),
@@ -306,7 +427,16 @@ class _MergeBody(BaseModel):
     into: int  # target identity_id
 
 
-@router.post("/api/identities/{identity_id}/merge", status_code=200)
+@router.post(
+    "/api/identities/{identity_id}/merge",
+    status_code=200,
+    responses={
+        **ok({"merged_into": 7, "deleted": 3}),
+        **ERR_401,
+        **ERR_404,
+        **ERR_400,
+    },
+)
 async def merge_identity(
     identity_id: int,
     body: _MergeBody,
@@ -333,7 +463,11 @@ async def merge_identity(
     return {"merged_into": body.into, "deleted": identity_id}
 
 
-@router.delete("/api/identities", status_code=200)
+@router.delete(
+    "/api/identities",
+    status_code=200,
+    responses={**ok({"deleted": 12}), **ERR_401},
+)
 async def delete_all_identities(
     user_id: int = Depends(require_auth),
     environment_id: int = Depends(require_env_id),
@@ -351,7 +485,32 @@ async def delete_all_identities(
 # Galleries
 # ---------------------------------------------------------------------------
 
-@router.get("/api/identities/{identity_id}/gallery")
+@router.get(
+    "/api/identities/{identity_id}/gallery",
+    responses={
+        **ok({
+            "items": [
+                {
+                    "detection_id": 101,
+                    "source_image_id": 7,
+                    "source_external_ref": "img_abc123",
+                    "source_image_url": "/media/sources/def456.jpg",
+                    "crop_url": "/media/crops/abc123.jpg",
+                    "confidence": 0.9832,
+                    "bbox": {"x": 120, "y": 80, "w": 60, "h": 75},
+                    "similarity": 0.8741,
+                    "detected_at": "2026-01-15T10:30:00Z",
+                    "review_status": "confirmed",
+                    "enrolled": True,
+                }
+            ],
+            "next_cursor": "2026-01-15T10:30:00Z_101",
+            "has_more": False,
+        }),
+        **ERR_401,
+        **ERR_404,
+    },
+)
 async def identity_gallery(
     identity_id: int,
     cursor: str | None = Query(None),
@@ -391,7 +550,24 @@ async def identity_gallery(
     })
 
 
-@router.get("/api/identities/{identity_id}/rejected")
+@router.get(
+    "/api/identities/{identity_id}/rejected",
+    responses={
+        **ok([
+            {
+                "detection_id": 202,
+                "source_image_id": 9,
+                "source_image_url": "/media/sources/ghi789.jpg",
+                "crop_url": "/media/crops/rej001.jpg",
+                "confidence": 0.7123,
+                "bbox": {"x": 50, "y": 40, "w": 55, "h": 70},
+                "detected_at": "2026-01-14T09:00:00Z",
+            }
+        ]),
+        **ERR_401,
+        **ERR_404,
+    },
+)
 async def identity_rejected(
     identity_id: int,
     user_id: int = Depends(require_auth),
@@ -418,7 +594,32 @@ class _DetectionQueryBody(BaseModel):
     detection_ids: list[int]
 
 
-@router.post("/api/detections/query", status_code=200)
+@router.post(
+    "/api/detections/query",
+    status_code=200,
+    responses={
+        **ok({
+            "items": [
+                {
+                    "detection_id": 101,
+                    "type": "face",
+                    "identity_id": 3,
+                    "label": "Alice",
+                    "identity_external_ref": "person_alice",
+                    "source_image_id": 7,
+                    "source_external_ref": "img_abc123",
+                    "confidence": 0.9832,
+                    "review_status": "confirmed",
+                    "bbox": {"x": 120, "y": 80, "w": 60, "h": 75},
+                    "crop_url": "/media/crops/abc123.jpg",
+                    "detected_at": "2026-01-15T10:30:00Z",
+                }
+            ],
+        }),
+        **ERR_401,
+        **ERR_400,
+    },
+)
 async def query_detections(
     body: _DetectionQueryBody,
     user_id: int = Depends(require_auth),
@@ -453,7 +654,30 @@ async def query_detections(
     }
 
 
-@router.get("/api/detections/unknown")
+@router.get(
+    "/api/detections/unknown",
+    responses={
+        **ok({
+            "items": [
+                {
+                    "detection_id": 303,
+                    "type": "face",
+                    "crop_url": "/media/crops/unk001.jpg?h=300",
+                    "confidence": 0.8514,
+                    "bbox": {"x": 90, "y": 60, "w": 55, "h": 70},
+                    "attributes": {"age": 28, "gender": "M"},
+                    "detected_at": "2026-01-15T11:00:00Z",
+                    "source_image_id": 10,
+                    "source_image_url": "/media/sources/jkl012.jpg",
+                }
+            ],
+            "next_cursor": "2026-01-15T11:00:00Z_303",
+            "has_more": False,
+        }),
+        **ERR_401,
+        **ERR_400,
+    },
+)
 async def unknown_detections(
     type: str | None = Query(None),
     cursor: str | None = Query(None),

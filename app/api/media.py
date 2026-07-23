@@ -7,6 +7,7 @@ from pathlib import Path
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import FileResponse
 
+from app.api._responses import ERR_401, ERR_404
 from app.core.auth import require_auth
 from app.core.paths import crops_dir, sources_dir
 
@@ -32,7 +33,14 @@ def _thumbnail(path: Path, h: int) -> Path:
     return cache_path
 
 
-@router.get("/media/crops/{filename}")
+@router.get(
+    "/media/crops/{filename}",
+    responses={
+        200: {"content": {"image/jpeg": {}}, "description": "JPEG crop image"},
+        **ERR_401,
+        **ERR_404,
+    },
+)
 async def serve_crop(
     filename: str,
     h: int | None = Query(None, ge=10, le=4000),
@@ -46,7 +54,14 @@ async def serve_crop(
     return FileResponse(_thumbnail(path, h), media_type="image/jpeg")
 
 
-@router.get("/media/sources/{filename}")
+@router.get(
+    "/media/sources/{filename}",
+    responses={
+        200: {"content": {"image/jpeg": {}}, "description": "JPEG source image"},
+        **ERR_401,
+        **ERR_404,
+    },
+)
 async def serve_source(
     filename: str,
     h: int | None = Query(None, ge=10, le=4000),

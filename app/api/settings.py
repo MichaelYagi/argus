@@ -5,6 +5,7 @@ from __future__ import annotations
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
 
+from app.api._responses import ERR_400, ERR_401, ERR_404, ok
 from app.core import settings_cache
 from app.core.auth import require_admin
 from app.db import store
@@ -36,7 +37,36 @@ _RANGE_CONSTRAINTS: dict[str, tuple[float | None, float | None]] = {
 # Routes
 # ---------------------------------------------------------------------------
 
-@router.get("/api/settings")
+_SETTING_EXAMPLE = {
+    "key": "face.match_threshold",
+    "value": 0.5,
+    "value_type": "float",
+    "category": "face",
+    "description": "Minimum cosine similarity to accept a face match",
+    "updated_at": "2026-01-01T00:00:00Z",
+}
+
+
+@router.get(
+    "/api/settings",
+    responses={
+        **ok({
+            "face": [_SETTING_EXAMPLE],
+            "object": [
+                {
+                    "key": "object.detection_confidence",
+                    "value": 0.4,
+                    "value_type": "float",
+                    "category": "object",
+                    "description": "Minimum confidence for object detections",
+                    "updated_at": "2026-01-01T00:00:00Z",
+                }
+            ],
+            "system": [],
+        }),
+        **ERR_401,
+    },
+)
 async def list_settings(user_id: int = Depends(require_admin)):
     """All settings grouped by category. Values are type-coerced."""
     rows = store.get_all_settings()
@@ -46,7 +76,10 @@ async def list_settings(user_id: int = Depends(require_admin)):
     return grouped
 
 
-@router.get("/api/settings/{key:path}")
+@router.get(
+    "/api/settings/{key:path}",
+    responses={**ok(_SETTING_EXAMPLE), **ERR_401, **ERR_404},
+)
 async def get_setting(key: str, user_id: int = Depends(require_admin)):
     row = store.get_setting(key)
     if not row:
@@ -54,7 +87,10 @@ async def get_setting(key: str, user_id: int = Depends(require_admin)):
     return _fmt(row)
 
 
-@router.put("/api/settings/{key:path}")
+@router.put(
+    "/api/settings/{key:path}",
+    responses={**ok({**_SETTING_EXAMPLE, "value": 0.6}), **ERR_401, **ERR_404, **ERR_400},
+)
 async def update_setting(key: str, body: _UpdateBody, user_id: int = Depends(require_admin)):
     row = store.get_setting(key)
     if not row:
@@ -85,7 +121,10 @@ async def update_setting(key: str, body: _UpdateBody, user_id: int = Depends(req
     return _fmt(store.get_setting(key))
 
 
-@router.post("/api/settings/reset")
+@router.post(
+    "/api/settings/reset",
+    responses={**ok([_SETTING_EXAMPLE]), **ERR_401, **ERR_404, **ERR_400},
+)
 async def reset_settings(
     key: str | None = Query(None),
     category: str | None = Query(None),

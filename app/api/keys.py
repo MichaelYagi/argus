@@ -5,6 +5,7 @@ from __future__ import annotations
 from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel
 
+from app.api._responses import ERR_400, ERR_401, ERR_404, ok, ok201
 from app.core.auth import require_auth
 from app.core.security import generate_api_key, hash_api_key, key_hint
 from app.db import store
@@ -17,7 +18,24 @@ class _CreateKey(BaseModel):
     environment_id: int | None = None
 
 
-@router.get("/api/keys")
+@router.get(
+    "/api/keys",
+    responses={
+        **ok([
+            {
+                "id": 1,
+                "label": "Shashin integration",
+                "key_hint": "argus_...a1b2",
+                "environment_id": 1,
+                "environment_name": "Home",
+                "created_at": "2026-01-01T00:00:00Z",
+                "last_used_at": "2026-01-15T10:30:00Z",
+                "is_active": True,
+            }
+        ]),
+        **ERR_401,
+    },
+)
 async def list_keys(user_id: int = Depends(require_auth)):
     rows = store.list_api_keys(user_id)
     return [
@@ -35,7 +53,20 @@ async def list_keys(user_id: int = Depends(require_auth)):
     ]
 
 
-@router.post("/api/keys", status_code=201)
+@router.post(
+    "/api/keys",
+    status_code=201,
+    responses={
+        **ok201({
+            "id": 2,
+            "label": "New integration",
+            "environment_id": 1,
+            "environment_name": "Home",
+            "key": "argus_AbCdEfGhIjKlMnOpQrStUvWxYz0123456789",
+        }),
+        **ERR_401,
+    },
+)
 async def create_key(
     request: Request,
     body: _CreateKey,
@@ -58,7 +89,16 @@ class _RenameKey(BaseModel):
     label: str
 
 
-@router.put("/api/keys/{key_id}", status_code=200)
+@router.put(
+    "/api/keys/{key_id}",
+    status_code=200,
+    responses={
+        **ok({"id": 1, "label": "Updated label"}),
+        **ERR_401,
+        **ERR_404,
+        **ERR_400,
+    },
+)
 async def rename_key(key_id: int, body: _RenameKey, user_id: int = Depends(require_auth)):
     label = body.label.strip()
     if not label:
@@ -68,7 +108,11 @@ async def rename_key(key_id: int, body: _RenameKey, user_id: int = Depends(requi
     return {"id": key_id, "label": label}
 
 
-@router.delete("/api/keys/{key_id}", status_code=204)
+@router.delete(
+    "/api/keys/{key_id}",
+    status_code=204,
+    responses={**ERR_401, **ERR_404},
+)
 async def revoke_key(key_id: int, user_id: int = Depends(require_auth)):
     if not store.revoke_api_key(key_id, user_id):
         raise HTTPException(404, "Key not found")

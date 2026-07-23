@@ -9,13 +9,33 @@ from __future__ import annotations
 
 from fastapi import APIRouter, Depends, Query
 
+from app.api._responses import ERR_401, ok
 from app.core.auth import require_auth, require_env_id
 from app.db import store
 
 router = APIRouter()
 
 
-@router.get("/api/changes")
+@router.get(
+    "/api/changes",
+    responses={
+        **ok({
+            "items": [
+                {
+                    "id": 42,
+                    "entity_type": "detection",
+                    "entity_id": 101,
+                    "action": "labeled",
+                    "external_ref": "img_abc123",
+                    "created_at": "2026-01-15T10:30:00Z",
+                }
+            ],
+            "next_cursor": 42,
+            "has_more": False,
+        }),
+        **ERR_401,
+    },
+)
 async def get_changes(
     since: int = Query(0, ge=0),
     limit: int = Query(100, ge=1, le=1000),

@@ -7,6 +7,7 @@ from typing import Any
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request
 from fastapi.responses import FileResponse
 
+from app.api._responses import ERR_400, ERR_401, ERR_404, ERR_409, ok, ok201
 from app.core import settings_cache
 from app.core.auth import require_auth, require_env_id
 from app.core.image_input import acquire_image, open_and_validate, read_body_field, to_rgb_array
@@ -76,7 +77,16 @@ def _det_env(det: Any, environment_id: int | None) -> int:
         return 0
 
 
-@router.post("/api/detections/{detection_id}/enroll", status_code=201)
+@router.post(
+    "/api/detections/{detection_id}/enroll",
+    status_code=201,
+    responses={
+        **ok201({"detection_id": 101, "identity_id": 3, "added": True, "enrolled": True}),
+        **ERR_401,
+        **ERR_404,
+        **ERR_409,
+    },
+)
 async def enroll_detection(
     detection_id: int,
     user_id: int = Depends(require_auth),
@@ -97,7 +107,15 @@ async def enroll_detection(
     return {"detection_id": detection_id, "identity_id": det["identity_id"], "added": added, "enrolled": True}
 
 
-@router.delete("/api/detections/{detection_id}/enroll", status_code=200)
+@router.delete(
+    "/api/detections/{detection_id}/enroll",
+    status_code=200,
+    responses={
+        **ok({"detection_id": 101, "identity_id": 3, "removed": True, "enrolled": False}),
+        **ERR_401,
+        **ERR_404,
+    },
+)
 async def unenroll_detection(
     detection_id: int,
     user_id: int = Depends(require_auth),
@@ -121,7 +139,11 @@ async def unenroll_detection(
             "removed": removed, "enrolled": False}
 
 
-@router.delete("/api/face-embeddings/{embedding_id}", status_code=204)
+@router.delete(
+    "/api/face-embeddings/{embedding_id}",
+    status_code=204,
+    responses={**ERR_401, **ERR_404},
+)
 async def delete_embedding(
     embedding_id: int,
     user_id: int = Depends(require_auth),
@@ -141,7 +163,23 @@ async def delete_embedding(
     })
 
 
-@router.get("/api/face-embeddings")
+@router.get(
+    "/api/face-embeddings",
+    responses={
+        **ok([
+            {
+                "id": 5,
+                "identity_id": 3,
+                "model_id": 1,
+                "source_image_path": "abc123.jpg",
+                "confidence": 0.9832,
+                "created_at": "2026-01-15T10:00:00Z",
+            }
+        ]),
+        **ERR_401,
+        **ERR_404,
+    },
+)
 async def list_embeddings(
     identity_id: int,
     user_id: int = Depends(require_auth),
@@ -153,7 +191,21 @@ async def list_embeddings(
     return [dict(r) for r in store.list_face_embeddings(identity_id)]
 
 
-@router.get("/api/face-embeddings/{embedding_id}")
+@router.get(
+    "/api/face-embeddings/{embedding_id}",
+    responses={
+        **ok({
+            "id": 5,
+            "identity_id": 3,
+            "model_id": 1,
+            "source_image_path": "abc123.jpg",
+            "confidence": 0.9832,
+            "created_at": "2026-01-15T10:00:00Z",
+        }),
+        **ERR_401,
+        **ERR_404,
+    },
+)
 async def get_embedding(
     embedding_id: int,
     user_id: int = Depends(require_auth),
@@ -165,7 +217,10 @@ async def get_embedding(
     return dict(row)
 
 
-@router.get("/api/face-embeddings/{embedding_id}/img")
+@router.get(
+    "/api/face-embeddings/{embedding_id}/img",
+    responses={**ERR_401, **ERR_404},
+)
 async def get_embedding_img(
     embedding_id: int,
     user_id: int = Depends(require_auth),
@@ -186,7 +241,27 @@ async def get_embedding_img(
 # Routes
 # ---------------------------------------------------------------------------
 
-@router.post("/api/faces/enroll", status_code=201)
+@router.post(
+    "/api/faces/enroll",
+    status_code=201,
+    responses={
+        **ok201({
+            "identity_id": 3,
+            "label": "Alice",
+            "embeddings": 1,
+            "embedding_id": 5,
+            "detection_id": 101,
+            "external_ref": "person_alice",
+            "source_image_id": 7,
+            "source_image_url": "/media/sources/abc123.jpg",
+            "source_scale": 1.0,
+            "bbox": {"x": 120, "y": 80, "w": 60, "h": 75},
+        }),
+        **ERR_401,
+        **ERR_400,
+        **ERR_409,
+    },
+)
 async def enroll_new(
     request: Request,
     background_tasks: BackgroundTasks,
@@ -226,7 +301,16 @@ async def enroll_new(
     }
 
 
-@router.post("/api/identities/{identity_id}/enroll", status_code=201)
+@router.post(
+    "/api/identities/{identity_id}/enroll",
+    status_code=201,
+    responses={
+        **ok201({"embedding_id": 6, "identity_id": 3, "label": "Alice"}),
+        **ERR_401,
+        **ERR_404,
+        **ERR_400,
+    },
+)
 async def enroll_existing(
     identity_id: int,
     request: Request,
