@@ -44,11 +44,11 @@ def _face_response(model_id=1, model_name="buffalo_l", n_faces=1):
     return {"model_id": model_id, "model_name": model_name, "faces": faces}
 
 
-def _object_response(model_id=2, model_name="yolov8n", image_tags=None):
+def _object_response(model_id=2, model_name="yolov8n", scene_tags=None):
     return {
         "model_id": model_id,
         "model_name": model_name,
-        "image_tags": image_tags,
+        "scene_tags": scene_tags,
         "objects": [
             {"bbox": [5, 10, 100, 200], "confidence": 0.88, "class_name": "person", "class_id": 0}
         ],
@@ -88,16 +88,16 @@ def test_infer_objects_in_process_calls_engine():
 
     engine = MagicMock()
     engine.detect.return_value = []
-    engine.has_image_tags = False
+    engine.has_scene_tags = False
     img = _img_array()
 
     with patch("app.db.store.get_active_model", return_value={"id": 2, "name": "yolov8n"}), \
          patch.object(registry, "get_object_engine", return_value=engine):
-        objects, image_tags, model_row = infer_objects(img)
+        objects, scene_tags, model_row = infer_objects(img)
 
     engine.detect.assert_called_once_with(img)
     assert objects == []
-    assert image_tags is None
+    assert scene_tags is None
     assert model_row["id"] == 2
 
 
@@ -105,7 +105,7 @@ def test_infer_objects_batch_calls_detect_batch():
     from app.inference.runner import infer_objects_batch
 
     engine = MagicMock()
-    engine.has_image_tags = False
+    engine.has_scene_tags = False
     engine.detect_batch.return_value = [[], []]
     imgs = [_img_array(), _img_array()]
 
@@ -123,7 +123,7 @@ def test_infer_objects_batch_tagger_falls_back_per_image():
     from app.inference.runner import infer_objects_batch
 
     engine = MagicMock()
-    engine.has_image_tags = True
+    engine.has_scene_tags = True
     engine.detect_with_tags.return_value = (["person"], [])
     imgs = [_img_array(), _img_array()]
 
@@ -203,7 +203,7 @@ def test_infer_objects_remote_dispatches_when_url_set():
     os.environ["INFERENCE_URL"] = "http://inference:8200"
 
     with patch("app.inference.runner._remote_post", return_value=_object_response()) as mock_post:
-        objects, image_tags, model_row = infer_objects(_img_array())
+        objects, scene_tags, model_row = infer_objects(_img_array())
 
     mock_post.assert_called_once()
     _, call_path, _ = mock_post.call_args.args
@@ -213,20 +213,20 @@ def test_infer_objects_remote_dispatches_when_url_set():
     assert isinstance(objects[0], ObjectDetection)
     assert objects[0].class_name == "person"
     assert objects[0].confidence == 0.88
-    assert image_tags is None
+    assert scene_tags is None
     assert model_row == {"id": 2, "name": "yolov8n"}
 
 
-def test_infer_objects_remote_returns_image_tags():
+def test_infer_objects_remote_returns_scene_tags():
     from app.inference.runner import infer_objects
 
     os.environ["INFERENCE_URL"] = "http://inference:8200"
-    resp = _object_response(image_tags=["person", "car"])
+    resp = _object_response(scene_tags=["person", "car"])
 
     with patch("app.inference.runner._remote_post", return_value=resp):
-        objects, image_tags, _ = infer_objects(_img_array())
+        objects, scene_tags, _ = infer_objects(_img_array())
 
-    assert image_tags == ["person", "car"]
+    assert scene_tags == ["person", "car"]
 
 
 def test_remote_path_not_used_when_url_unset():

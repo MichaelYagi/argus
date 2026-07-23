@@ -194,8 +194,12 @@ def _migrate(conn: sqlite3.Connection) -> None:
     if "config" not in existing_model_cols:
         conn.execute("ALTER TABLE models ADD COLUMN config TEXT")
 
-    if "image_tags" not in {r[1] for r in conn.execute("PRAGMA table_info(source_images)")}:
-        conn.execute("ALTER TABLE source_images ADD COLUMN image_tags TEXT")
+    _si_cols = {r[1] for r in conn.execute("PRAGMA table_info(source_images)")}
+    if "scene_tags" not in _si_cols:
+        if "image_tags" in _si_cols:
+            conn.execute("ALTER TABLE source_images RENAME COLUMN image_tags TO scene_tags")
+        else:
+            conn.execute("ALTER TABLE source_images ADD COLUMN scene_tags TEXT")
 
     # external_ref: opaque caller-owned correlation id on identities + source_images
     if "external_ref" not in {r[1] for r in conn.execute("PRAGMA table_info(identities)")}:
@@ -1428,11 +1432,11 @@ def get_all_source_file_paths() -> set[str]:
     return {r["file_path"] for r in rows}
 
 
-def set_source_image_tags(source_image_id: int, tags_json: str) -> None:
+def set_source_scene_tags(source_image_id: int, tags_json: str) -> None:
     """Persist image-level keyword tags produced by a tagger engine (e.g. RAM++)."""
     with _connect() as conn:
         conn.execute(
-            "UPDATE source_images SET image_tags = ? WHERE id = ?",
+            "UPDATE source_images SET scene_tags = ? WHERE id = ?",
             (tags_json, source_image_id),
         )
 
@@ -1875,7 +1879,7 @@ def _source_images_inner(
     where = " AND ".join(conds)
     inner = (
         f"SELECT si.id, si.file_path, si.width, si.height, si.uploaded_at,"
-        f" si.image_tags, si.external_ref,"
+        f" si.scene_tags, si.external_ref,"
         f" COUNT(DISTINCT CASE WHEN d.type = 'face'   THEN d.id END) AS face_count,"
         f" COUNT(DISTINCT CASE WHEN d.type = 'object' THEN d.id END) AS object_count,"
         f" COUNT(DISTINCT d.id) AS detection_count"
@@ -2986,7 +2990,7 @@ def search_source_images(
             where_clause = " AND " + " AND ".join(extra_where)
 
         sql = f"""SELECT si.id AS source_image_id, si.file_path, si.external_ref,
-                         si.width, si.height, si.uploaded_at, si.image_tags
+                         si.width, si.height, si.uploaded_at, si.scene_tags
                   FROM source_images si
                   WHERE si.user_id = ? AND si.environment_id = ?{where_clause}
                   ORDER BY si.uploaded_at DESC, si.id DESC LIMIT ?"""

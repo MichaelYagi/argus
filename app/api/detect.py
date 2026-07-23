@@ -165,7 +165,7 @@ async def detect_objects(
     result: dict = {"source_image_id": source_id, "external_ref": external_ref,
                     "source_scale": source_scale, "objects": objs}
     if img_tags is not None:
-        result["image_tags"] = img_tags
+        result["scene_tags"] = img_tags
     _emit_det(0, len(objs), external_ref)
     if _cleanup_if_no_detections(source_id, user_id, environment_id):
         result["discarded"] = True
@@ -235,7 +235,7 @@ async def detect_all(
         "objects": objs,
     }
     if img_tags is not None:
-        result["image_tags"] = img_tags
+        result["scene_tags"] = img_tags
     if not run_faces or not run_objects:
         result["cached"] = True
     _emit_det(
@@ -386,7 +386,7 @@ async def detect_bulk(
                     objs, img_tags = _run_objects(user_id, environment_id, img, src_id, src_scale)
                 base["objects"] = objs
                 if img_tags is not None:
-                    base["image_tags"] = img_tags
+                    base["scene_tags"] = img_tags
             if _cleanup_if_no_detections(src_id, user_id, environment_id):
                 base["discarded"] = True
             _webhook.fire(user_id, environment_id, "detection.created",
@@ -539,7 +539,7 @@ def _stateless_detect(
     objects: list[dict] = []
     face_available = False
     object_available = False
-    image_tags: list[str] | None = None
+    scene_tags: list[str] | None = None
 
     if type_param in ("faces", "all"):
         try:
@@ -589,7 +589,7 @@ def _stateless_detect(
             infer_img, bbox_scale = _infer_resize(img)
             obj_array = to_rgb_array(infer_img)
             to1 = time.monotonic()
-            raw_dets, image_tags, _ = infer_objects(obj_array)
+            raw_dets, scene_tags, _ = infer_objects(obj_array)
             object_available = True
             logger.debug("_stateless_detect: objects=%d to_rgb=%.0fms infer=%dx%d infer_model=%.0fms",
                          len(raw_dets), (to1 - to0) * 1000, infer_img.width, infer_img.height,
@@ -612,8 +612,8 @@ def _stateless_detect(
         "counts": {"faces": len(faces), "objects": len(objects)},
         "available": {"faces": face_available, "objects": object_available},
     }
-    if image_tags is not None:
-        result["image_tags"] = image_tags
+    if scene_tags is not None:
+        result["scene_tags"] = scene_tags
     return result
 
 
@@ -960,7 +960,7 @@ def _run_detection_job(
             objs, img_tags = _run_objects(user_id, environment_id, img, source_id, source_scale)
             result["objects"] = objs
             if img_tags is not None:
-                result["image_tags"] = img_tags
+                result["scene_tags"] = img_tags
         _emit_det(len(result.get("faces", [])), len(result.get("objects", [])), external_ref)
         if _cleanup_if_no_detections(source_id, user_id, environment_id):
             result["discarded"] = True
@@ -1050,7 +1050,7 @@ def _run_bulk_job(
                     objs, img_tags = _run_objects(user_id, environment_id, img, src_id, src_scale)
                 base["objects"] = objs
                 if img_tags is not None:
-                    base["image_tags"] = img_tags
+                    base["scene_tags"] = img_tags
             if _cleanup_if_no_detections(src_id, user_id, environment_id):
                 base["discarded"] = True
             webhook.fire(user_id, environment_id, "detection.created", {
@@ -1285,13 +1285,13 @@ def _persist_objects(
     source_id: int,
     source_scale: float,
     raw_dets: list,
-    image_tags: list[str] | None,
+    scene_tags: list[str] | None,
     model_row: dict,
     bbox_scale: float = 1.0,
 ) -> tuple[list[dict], list[str] | None]:
     """Persistence phase for object detection: save crops, write DB rows, return API results."""
-    if image_tags is not None:
-        store.set_source_image_tags(source_id, json.dumps(image_tags))
+    if scene_tags is not None:
+        store.set_source_scene_tags(source_id, json.dumps(scene_tags))
 
     padding = settings_cache.cache.get_or("system.crop_padding", 0.2)
     results = []
@@ -1335,24 +1335,24 @@ def _persist_objects(
             "review_status": "pending",
         })
 
-    return results, image_tags
+    return results, scene_tags
 
 
 def _run_objects(
     user_id: int, environment_id: int, img: Any, source_id: int, source_scale: float = 1.0,
 ) -> tuple[list[dict], list[str] | None]:
-    """Run object/tagger detection. Returns (detections, image_tags).
+    """Run object/tagger detection. Returns (detections, scene_tags).
 
-    image_tags is a list of keyword strings when the active engine is a tagger
+    scene_tags is a list of keyword strings when the active engine is a tagger
     (RAM++ + Grounding DINO); None for all other engines.
     """
     infer_img, bbox_scale = _infer_resize(img)
     img_array = to_rgb_array(infer_img)
-    raw_dets, image_tags, model_row = infer_objects(img_array)
+    raw_dets, scene_tags, model_row = infer_objects(img_array)
     logger.debug("_run_objects: model=%s detected=%d image=%dx%d",
                  model_row["name"], len(raw_dets), img.width, img.height)
     return _persist_objects(user_id, environment_id, img, source_id, source_scale,
-                            raw_dets, image_tags, model_row, bbox_scale)
+                            raw_dets, scene_tags, model_row, bbox_scale)
 
 
 # ---------------------------------------------------------------------------

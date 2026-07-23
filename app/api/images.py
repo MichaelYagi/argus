@@ -61,7 +61,7 @@ async def list_source_images(
                     "height": r["height"],
                     "source_image_url": f"/media/sources/{r['file_path']}",
                     "uploaded_at": r["uploaded_at"],
-                    "image_tags": json.loads(r["image_tags"]) if r["image_tags"] else [],
+                    "scene_tags": json.loads(r["scene_tags"]) if r["scene_tags"] else [],
                 }
                 for r in rows
             ],
@@ -87,7 +87,7 @@ async def list_source_images(
         "object_count": r["object_count"],
         "detection_count": r["detection_count"],
         "uploaded_at": r["uploaded_at"],
-        "image_tags": json.loads(r["image_tags"]) if r["image_tags"] else [],
+        "scene_tags": json.loads(r["scene_tags"]) if r["scene_tags"] else [],
     }, cursor_fn=cursor_fn)
     logger.debug("GET /api/images: %d items sort=%s %.0fms",
                  len(result.get("items", [])), sort, (time.monotonic() - t0) * 1000)
@@ -183,7 +183,7 @@ async def image_faces(
         "height": src["height"],
         "uploaded_at": src["uploaded_at"],
         "source_image_url": f"/media/sources/{src['file_path']}",
-        "image_tags": json.loads(src["image_tags"]) if src["image_tags"] else [],
+        "scene_tags": json.loads(src["scene_tags"]) if src["scene_tags"] else [],
         "faces": [
             {
                 "detection_id": r["id"],
@@ -299,7 +299,7 @@ async def reprocess_source_image(
         objs, img_tags = _run_objects(user_id, environment_id, img, source_image_id)
         result["objects"] = objs
         if img_tags is not None:
-            result["image_tags"] = img_tags
+            result["scene_tags"] = img_tags
     if _cleanup_if_no_detections(source_image_id, user_id, environment_id):
         result["discarded"] = True
     _webhook.fire(user_id, environment_id, "detection.created", {

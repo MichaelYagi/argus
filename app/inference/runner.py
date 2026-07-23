@@ -99,7 +99,7 @@ def _remote_infer_objects(img_array: Any, url: str) -> tuple[list[Any], list[str
     data = _remote_post(url, "/infer/objects", {"array_b64": array_b64, "array_shape": array_shape})
 
     model_row = {"id": data["model_id"], "name": data["model_name"]}
-    image_tags = data.get("image_tags")
+    scene_tags = data.get("scene_tags")
     objects = [
         ObjectDetection(
             bbox=tuple(o["bbox"]),
@@ -109,7 +109,7 @@ def _remote_infer_objects(img_array: Any, url: str) -> tuple[list[Any], list[str
         )
         for o in data["objects"]
     ]
-    return objects, image_tags, model_row
+    return objects, scene_tags, model_row
 
 
 # ---------------------------------------------------------------------------
@@ -158,7 +158,7 @@ def infer_objects_batch(
 ) -> tuple[list[list[Any]], list[list[str] | None], Any]:
     """Batch object detection across multiple images in one YOLO forward pass.
 
-    Returns (per_image_dets, per_image_tags, model_row).
+    Returns (per_image_dets, per_scene_tags, model_row).
     Falls back to sequential per-image calls for tagger engines and remote mode
     (neither supports batch natively).
     """
@@ -184,7 +184,7 @@ def infer_objects_batch(
     if engine is None:
         raise HTTPException(503, "Object engine not loaded. Activate a model via /api/models/{id}/activate.")
 
-    if getattr(engine, "has_image_tags", False):
+    if getattr(engine, "has_scene_tags", False):
         per_dets = []
         per_tags = []
         for arr in img_arrays:
@@ -207,10 +207,10 @@ def infer_objects(img_array: Any) -> tuple[list[Any], list[str] | None, Any]:
     url = _inference_url()
     t0 = time.monotonic()
     if url:
-        raw_dets, image_tags, model_row = _remote_infer_objects(img_array, url)
+        raw_dets, scene_tags, model_row = _remote_infer_objects(img_array, url)
         logger.debug("infer_objects: remote url=%s model=%s -> %d objects in %.0fms",
                      url, model_row.get("name"), len(raw_dets), (time.monotonic() - t0) * 1000)
-        return raw_dets, image_tags, model_row
+        return raw_dets, scene_tags, model_row
 
     model_row = store.get_active_model("object")
     if model_row is None:
@@ -218,10 +218,10 @@ def infer_objects(img_array: Any) -> tuple[list[Any], list[str] | None, Any]:
     engine = registry.get_object_engine()
     if engine is None:
         raise HTTPException(503, "Object engine not loaded. Activate a model via /api/models/{id}/activate.")
-    if getattr(engine, "has_image_tags", False):
-        image_tags, raw_dets = engine.detect_with_tags(img_array)
+    if getattr(engine, "has_scene_tags", False):
+        scene_tags, raw_dets = engine.detect_with_tags(img_array)
     else:
-        image_tags, raw_dets = None, engine.detect(img_array)
+        scene_tags, raw_dets = None, engine.detect(img_array)
     logger.debug("infer_objects: in-process model=%s -> %d objects in %.0fms",
                  model_row["name"], len(raw_dets), (time.monotonic() - t0) * 1000)
-    return raw_dets, image_tags, model_row
+    return raw_dets, scene_tags, model_row

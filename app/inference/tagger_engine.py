@@ -5,7 +5,7 @@ and generates a list of descriptive keyword tags. Grounding DINO then localizes 
 tag with a bounding box.
 
 The two outputs are surfaced separately:
-  - image-level tags  → source_images.image_tags (JSON array)
+  - image-level tags  → source_images.scene_tags (JSON array)
   - per-instance dets → detections rows, one per localized tag instance
 
 This engine satisfies the standard object engine interface (detect()) so it can slot
@@ -95,7 +95,7 @@ def _patch_transformers_modeling_utils() -> None:
 class TaggerEngine:
     """Compound engine: RAM++ generates keyword tags, Grounding DINO localizes them."""
 
-    has_image_tags: bool = True
+    has_scene_tags: bool = True
 
     def __init__(
         self,
@@ -179,7 +179,7 @@ class TaggerEngine:
     def detect_with_tags(
         self, image: Any
     ) -> tuple[list[str], list[ObjectDetection]]:
-        """Return (image_tags, per-instance detections)."""
+        """Return (scene_tags, per-instance detections)."""
         tags = self._run_ram(image)
         dets = self._run_dino(image, tags) if tags else []
         return tags, dets

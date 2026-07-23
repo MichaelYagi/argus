@@ -157,7 +157,7 @@ def _fake_object(class_name="person", confidence=0.88):
 def test_infer_objects_happy_path(client):
     engine = MagicMock()
     engine.detect.return_value = [_fake_object()]
-    engine.has_image_tags = False
+    engine.has_scene_tags = False
 
     with patch("app.db.store.get_active_model", return_value={"id": 2, "name": "yolov8n"}), \
          patch.object(registry, "get_object_engine", return_value=engine), \
@@ -168,7 +168,7 @@ def test_infer_objects_happy_path(client):
     data = r.json()
     assert data["model_id"] == 2
     assert data["model_name"] == "yolov8n"
-    assert data["image_tags"] is None
+    assert data["scene_tags"] is None
     assert len(data["objects"]) == 1
     obj = data["objects"][0]
     assert obj["class_name"] == "person"
@@ -176,9 +176,9 @@ def test_infer_objects_happy_path(client):
     assert obj["bbox"] == [5, 10, 100, 200]
 
 
-def test_infer_objects_tagger_engine_returns_image_tags(client):
+def test_infer_objects_tagger_engine_returns_scene_tags(client):
     engine = MagicMock()
-    engine.has_image_tags = True
+    engine.has_scene_tags = True
     engine.detect_with_tags.return_value = (
         ["person", "tree"],
         [_fake_object("person"), _fake_object("tree", 0.72)],
@@ -191,5 +191,5 @@ def test_infer_objects_tagger_engine_returns_image_tags(client):
 
     assert r.status_code == 200
     data = r.json()
-    assert data["image_tags"] == ["person", "tree"]
+    assert data["scene_tags"] == ["person", "tree"]
     assert len(data["objects"]) == 2

@@ -60,7 +60,7 @@ END;
 
 -- source_images: per-user uploaded images; file_path is content-hash based
 -- (same file uploaded by two users shares the file on disk, separate DB rows)
--- image_tags: JSON array of keyword tags from a tagger engine (e.g. RAM++); null for YOLO/Florence
+-- scene_tags: JSON array of keyword tags from a tagger engine (e.g. RAM++); null for YOLO/Florence
 CREATE TABLE IF NOT EXISTS source_images (
     id          INTEGER PRIMARY KEY AUTOINCREMENT,
     user_id     INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -69,7 +69,7 @@ CREATE TABLE IF NOT EXISTS source_images (
     width       INTEGER NOT NULL,
     height      INTEGER NOT NULL,
     external_ref TEXT,             -- opaque caller-owned correlation id; never interpreted by Argus
-    image_tags  TEXT,              -- JSON array of image-level keyword tags; null when not produced
+    scene_tags  TEXT,              -- JSON array of image-level keyword tags; null when not produced
     uploaded_at TEXT    NOT NULL DEFAULT (datetime('now')),
     UNIQUE(user_id, environment_id, file_path)
 );

@@ -175,13 +175,13 @@ async def infer_objects(body: InferRequest):
     if engine is None:
         raise HTTPException(503, "Object engine not loaded.")
     img_array = _b64_to_array(body.array_b64, body.array_shape)
-    if getattr(engine, "has_image_tags", False):
-        image_tags, raw_dets = engine.detect_with_tags(img_array)
+    if getattr(engine, "has_scene_tags", False):
+        scene_tags, raw_dets = engine.detect_with_tags(img_array)
     else:
-        image_tags, raw_dets = None, engine.detect(img_array)
+        scene_tags, raw_dets = None, engine.detect(img_array)
     return {
         "model_id":   model_row["id"],
         "model_name": model_row["name"],
-        "image_tags": image_tags,
+        "scene_tags": scene_tags,
         "objects":    [_object_to_dict(o) for o in raw_dets],
     }
