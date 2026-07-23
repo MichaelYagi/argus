@@ -667,8 +667,8 @@ if (FACES.length && OBJECTS.length) {
     }
     if (!drawMode || !drawStart || !drawRect) return;
     const r = wrap.getBoundingClientRect();
-    const cx = e.clientX - r.left;
-    const cy = e.clientY - r.top;
+    const cx = Math.min(Math.max(0, e.clientX - r.left), r.width);
+    const cy = Math.min(Math.max(0, e.clientY - r.top),  r.height);
     updateRect(drawRect,
       Math.min(drawStart.x, cx), Math.min(drawStart.y, cy),
       Math.abs(cx - drawStart.x), Math.abs(cy - drawStart.y));
