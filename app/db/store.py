@@ -1086,19 +1086,25 @@ def get_mismatch_detections(
     environment_id: int | None = None,
     threshold: float = 0.5,
 ) -> list[dict]:
-    """Confirmed face detections whose embedding scores below threshold against their
-    identity's representative. Returns dicts with similarity, sorted ascending (worst first)."""
+    """Confirmed face detections that are outliers relative to their identity's
+    embedding centroid.  Per-identity adaptive threshold: mean − 2σ of cosine
+    similarities within the identity.  Falls back to the global threshold for
+    identities with fewer than 3 confirmed faces.  Returns dicts sorted by
+    similarity ascending (worst first)."""
+    from collections import defaultdict
+
     import numpy as np
 
     with _connect() as conn:
         env_id = _resolve_env(conn, user_id, environment_id)
+        # Fetch ALL confirmed faces — including mismatch_reviewed=1 — so centroid
+        # and σ are computed over the full confirmed population, not just the
+        # unreviewed subset.
         rows = conn.execute(
             """SELECT d.id, d.crop_path, d.detected_at, d.source_image_id,
                       d.confidence, d.bbox_x, d.bbox_y, d.bbox_w, d.bbox_h,
-                      d.identity_id,
-                      d.embedding,
+                      d.identity_id, d.embedding, d.mismatch_reviewed,
                       i.label AS current_label,
-                      i.representative_embedding,
                       si.file_path AS source_image_path
                FROM detections d
                JOIN identities i ON i.id = d.identity_id
@@ -1107,37 +1113,55 @@ def get_mismatch_detections(
                  AND d.type = 'face'
                  AND d.review_status IN ('confirmed', 'reassigned')
                  AND d.identity_id IS NOT NULL
-                 AND d.embedding IS NOT NULL
-                 AND i.representative_embedding IS NOT NULL
-                 AND d.mismatch_reviewed = 0""",
+                 AND d.embedding IS NOT NULL""",
             (user_id, env_id),
         ).fetchall()
 
-    results: list[dict] = []
+    by_identity: dict[int, list] = defaultdict(list)
     for row in rows:
-        emb = np.frombuffer(bytes(row["embedding"]), dtype=np.float32)
-        rep = np.frombuffer(bytes(row["representative_embedding"]), dtype=np.float32)
-        norm_e = float(np.linalg.norm(emb))
-        norm_r = float(np.linalg.norm(rep))
-        if norm_e == 0 or norm_r == 0:
+        by_identity[row["identity_id"]].append(row)
+
+    results: list[dict] = []
+
+    for identity_id, id_rows in by_identity.items():
+        embs = []
+        for r in id_rows:
+            e = np.frombuffer(bytes(r["embedding"]), dtype=np.float32)
+            norm = np.linalg.norm(e)
+            if norm > 0:
+                embs.append(e / norm)
+        if not embs:
             continue
-        sim = float(np.dot(emb, rep)) / (norm_e * norm_r)
-        if sim < threshold:
-            results.append({
-                "id": row["id"],
-                "crop_path": row["crop_path"],
-                "detected_at": row["detected_at"],
-                "source_image_id": row["source_image_id"],
-                "confidence": row["confidence"],
-                "bbox_x": row["bbox_x"],
-                "bbox_y": row["bbox_y"],
-                "bbox_w": row["bbox_w"],
-                "bbox_h": row["bbox_h"],
-                "identity_id": row["identity_id"],
-                "current_label": row["current_label"],
-                "source_image_path": row["source_image_path"],
-                "similarity": round(sim, 4),
-            })
+        emb_matrix = np.array(embs)  # (N, D)
+
+        centroid = emb_matrix.mean(axis=0)
+        norm_c = np.linalg.norm(centroid)
+        if norm_c == 0:
+            continue
+        centroid /= norm_c
+
+        sims = emb_matrix @ centroid  # cosine similarity — all vectors are unit-norm
+
+        n = len(sims)
+        adaptive_thr = float(sims.mean() - 2.0 * sims.std()) if n >= 3 else threshold
+
+        for row, sim in zip(id_rows, sims):
+            if row["mismatch_reviewed"] == 0 and float(sim) < adaptive_thr:
+                results.append({
+                    "id": row["id"],
+                    "crop_path": row["crop_path"],
+                    "detected_at": row["detected_at"],
+                    "source_image_id": row["source_image_id"],
+                    "confidence": row["confidence"],
+                    "bbox_x": row["bbox_x"],
+                    "bbox_y": row["bbox_y"],
+                    "bbox_w": row["bbox_w"],
+                    "bbox_h": row["bbox_h"],
+                    "identity_id": identity_id,
+                    "current_label": row["current_label"],
+                    "source_image_path": row["source_image_path"],
+                    "similarity": round(float(sim), 4),
+                })
 
     results.sort(key=lambda x: x["similarity"])
     return results
