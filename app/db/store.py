@@ -92,12 +92,6 @@ def _migrate(conn: sqlite3.Connection) -> None:
         if col not in cols:
             conn.execute(f"ALTER TABLE {tbl} ADD COLUMN {col} INTEGER NOT NULL DEFAULT 0")
 
-    # updated_at on source_images: tracks last labeling activity; backfill from uploaded_at.
-    si_cols = {r[1] for r in conn.execute("PRAGMA table_info(source_images)")}
-    if "updated_at" not in si_cols:
-        conn.execute("ALTER TABLE source_images ADD COLUMN updated_at TEXT")
-        conn.execute("UPDATE source_images SET updated_at = uploaded_at WHERE updated_at IS NULL")
-
     # Ensure every user has at least one environment — but only seed 'default' for
     # users who have NONE, so a deliberately-deleted 'default' isn't resurrected on
     # restart when the user still has other environments.
@@ -212,6 +206,12 @@ def _migrate(conn: sqlite3.Connection) -> None:
         conn.execute("ALTER TABLE identities ADD COLUMN external_ref TEXT")
     if "external_ref" not in {r[1] for r in conn.execute("PRAGMA table_info(source_images)")}:
         conn.execute("ALTER TABLE source_images ADD COLUMN external_ref TEXT")
+
+    # updated_at: tracks last labeling activity; must run after migration v1 which recreates source_images.
+    _si_cols2 = {r[1] for r in conn.execute("PRAGMA table_info(source_images)")}
+    if "updated_at" not in _si_cols2:
+        conn.execute("ALTER TABLE source_images ADD COLUMN updated_at TEXT")
+        conn.execute("UPDATE source_images SET updated_at = uploaded_at WHERE updated_at IS NULL")
 
     existing_cols = {r[1] for r in conn.execute("PRAGMA table_info(detections)")}
     if "embedding" not in existing_cols:
