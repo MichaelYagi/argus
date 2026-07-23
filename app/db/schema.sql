@@ -116,7 +116,7 @@ CREATE TABLE IF NOT EXISTS detections (
     source          TEXT    NOT NULL DEFAULT 'auto'
                             CHECK(source IN ('auto', 'manual')),
     ignored         INTEGER NOT NULL DEFAULT 0,   -- dismissed from Suggested people; row kept
-    suspect_reviewed INTEGER NOT NULL DEFAULT 0,  -- user reviewed on suspect tab and confirmed label is correct
+    mismatch_reviewed INTEGER NOT NULL DEFAULT 0,  -- user reviewed on Mismatches tab and confirmed label is correct
     reviewed_at     TEXT,
     detected_at     TEXT    NOT NULL DEFAULT (datetime('now'))
 );

@@ -220,8 +220,11 @@ def _migrate(conn: sqlite3.Connection) -> None:
         conn.execute("ALTER TABLE detections ADD COLUMN attributes TEXT")
     if "ignored" not in existing_cols:
         conn.execute("ALTER TABLE detections ADD COLUMN ignored INTEGER NOT NULL DEFAULT 0")
-    if "suspect_reviewed" not in existing_cols:
-        conn.execute("ALTER TABLE detections ADD COLUMN suspect_reviewed INTEGER NOT NULL DEFAULT 0")
+    if "mismatch_reviewed" not in existing_cols:
+        if "mismatch_reviewed" in existing_cols:
+            conn.execute("ALTER TABLE detections RENAME COLUMN mismatch_reviewed TO mismatch_reviewed")
+        else:
+            conn.execute("ALTER TABLE detections ADD COLUMN mismatch_reviewed INTEGER NOT NULL DEFAULT 0")
     if "source" not in existing_cols:
         conn.execute("ALTER TABLE detections ADD COLUMN source TEXT NOT NULL DEFAULT 'auto'")
     if "embedding_source" not in existing_cols:
@@ -1078,7 +1081,7 @@ def dismiss_detections(user_id: int, detection_ids: list[int], environment_id: i
         return cur.rowcount
 
 
-def get_suspect_detections(
+def get_mismatch_detections(
     user_id: int,
     environment_id: int | None = None,
     threshold: float = 0.5,
@@ -1106,7 +1109,7 @@ def get_suspect_detections(
                  AND d.identity_id IS NOT NULL
                  AND d.embedding IS NOT NULL
                  AND i.representative_embedding IS NOT NULL
-                 AND d.suspect_reviewed = 0""",
+                 AND d.mismatch_reviewed = 0""",
             (user_id, env_id),
         ).fetchall()
 
@@ -1140,13 +1143,13 @@ def get_suspect_detections(
     return results
 
 
-def dismiss_suspect_detection(detection_id: int, user_id: int, environment_id: int | None = None) -> bool:
-    """Mark a suspect-tab review as OK — suppresses from future suspect scans without
+def dismiss_mismatch_detection(detection_id: int, user_id: int, environment_id: int | None = None) -> bool:
+    """Mark a Mismatches-tab review as OK — suppresses from future mismatch scans without
     affecting the gallery or the labeling. Reset automatically when identity changes."""
     with _connect() as conn:
         env_id = _resolve_env(conn, user_id, environment_id)
         conn.execute(
-            "UPDATE detections SET suspect_reviewed = 1 WHERE id = ? AND user_id = ? AND environment_id = ?",
+            "UPDATE detections SET mismatch_reviewed = 1 WHERE id = ? AND user_id = ? AND environment_id = ?",
             (detection_id, user_id, env_id),
         )
         return conn.execute("SELECT changes()").fetchone()[0] > 0
@@ -2423,7 +2426,7 @@ def reassign_detection(detection_id: int, user_id: int, identity_id: int, enviro
         old_id = _detach_old_reference(conn, detection_id, user_id, identity_id)
         conn.execute(
             """UPDATE detections SET review_status = 'reassigned', identity_id = ?,
-               reviewed_at = datetime('now'), suspect_reviewed = 0
+               reviewed_at = datetime('now'), mismatch_reviewed = 0
                WHERE id = ? AND user_id = ? AND environment_id = ?""",
             (identity_id, detection_id, user_id, env_id),
         )
@@ -2516,7 +2519,7 @@ def label_detection(detection_id: int, user_id: int, identity_id: int, environme
         old_id = _detach_old_reference(conn, detection_id, user_id, identity_id)
         conn.execute(
             """UPDATE detections SET identity_id = ?, review_status = 'confirmed',
-               reviewed_at = datetime('now'), ignored = 0, suspect_reviewed = 0
+               reviewed_at = datetime('now'), ignored = 0, mismatch_reviewed = 0
                WHERE id = ? AND user_id = ? AND environment_id = ?""",
             (identity_id, detection_id, user_id, env_id),
         )

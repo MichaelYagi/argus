@@ -64,7 +64,7 @@ router = APIRouter()
 # ---------------------------------------------------------------------------
 
 @router.get(
-    "/api/review/suspect",
+    "/api/review/mismatches",
     responses={
         **ok({
             "items": [
@@ -86,35 +86,35 @@ router = APIRouter()
         **ERR_401,
     },
 )
-async def get_suspect_queue(
+async def get_mismatch_queue(
     threshold: float | None = Query(None, ge=0.0, le=1.0),
     user_id: int = Depends(require_auth),
     environment_id: int = Depends(require_env_id),
 ):
     """Confirmed face detections whose embedding scores poorly against their
-    identity's representative — possible mislabels, sorted worst-first."""
+    identity's representative — possible mislabels, sorted worst-first. See Mismatches tab."""
     import asyncio
     thr = threshold if threshold is not None else settings_cache.cache.get_or("face.recognition_threshold", 0.5)
-    rows = await asyncio.to_thread(store.get_suspect_detections, user_id, environment_id, float(thr))
-    items = [_fmt_suspect_item(r) for r in rows]
+    rows = await asyncio.to_thread(store.get_mismatch_detections, user_id, environment_id, float(thr))
+    items = [_fmt_mismatch_item(r) for r in rows]
     return {"items": items, "count": len(items), "threshold": round(float(thr), 4)}
 
 
 @router.post(
-    "/api/review/suspect/{detection_id}/dismiss",
+    "/api/review/mismatches/{detection_id}/dismiss",
     status_code=200,
-    responses={**ok({"detection_id": 42, "suspect_reviewed": True}), **ERR_401, **ERR_404},
+    responses={**ok({"detection_id": 42, "mismatch_reviewed": True}), **ERR_401, **ERR_404},
 )
-async def dismiss_suspect(
+async def dismiss_mismatch(
     detection_id: int,
     user_id: int = Depends(require_auth),
     environment_id: int = Depends(require_env_id),
 ):
-    """Mark a suspect-tab detection as reviewed-and-correct. Suppresses it from
-    future suspect scans without affecting its gallery presence or label."""
-    if not store.dismiss_suspect_detection(detection_id, user_id, environment_id):
+    """Mark a Mismatches-tab detection as reviewed-and-correct. Suppresses it from
+    future mismatch scans without affecting its gallery presence or label."""
+    if not store.dismiss_mismatch_detection(detection_id, user_id, environment_id):
         raise HTTPException(404, "Detection not found")
-    return {"detection_id": detection_id, "suspect_reviewed": True}
+    return {"detection_id": detection_id, "mismatch_reviewed": True}
 
 
 @router.get(
@@ -770,7 +770,7 @@ async def delete_detections(
 # Internal
 # ---------------------------------------------------------------------------
 
-def _fmt_suspect_item(row: dict) -> dict:
+def _fmt_mismatch_item(row: dict) -> dict:
     src_path = row.get("source_image_path")
     return {
         "detection_id": row["id"],

@@ -2,7 +2,7 @@
 (() => {
   const suggestedList = document.getElementById('suggested-list');
   const nomatchList   = document.getElementById('nomatch-list');
-  const suspectList   = document.getElementById('suspect-list');
+  const mismatchList   = document.getElementById('mismatch-list');
   if (!suggestedList || !nomatchList) return;
 
   const selSg = new Set();
@@ -17,10 +17,10 @@
   window.switchTab = tab => {
     document.getElementById('panel-sg').style.display = tab === 'sg' ? '' : 'none';
     document.getElementById('panel-nm').style.display = tab === 'nm' ? '' : 'none';
-    document.getElementById('panel-sp').style.display = tab === 'sp' ? '' : 'none';
+    document.getElementById('panel-mm').style.display = tab === 'mm' ? '' : 'none';
     document.getElementById('tab-sg').classList.toggle('active', tab === 'sg');
     document.getElementById('tab-nm').classList.toggle('active', tab === 'nm');
-    document.getElementById('tab-sp').classList.toggle('active', tab === 'sp');
+    document.getElementById('tab-mm').classList.toggle('active', tab === 'mm');
     window.scrollTo({ top: 0, behavior: 'instant' });
   };
 
@@ -54,7 +54,7 @@
   }
 
   // Tab badge totals — fetched upfront, decremented as items are reviewed.
-  const tabCounts = { sg: 0, nm: 0, sp: 0 };
+  const tabCounts = { sg: 0, nm: 0, mm: 0 };
 
   function updateTabBadge(tab, delta) {
     tabCounts[tab] = Math.max(0, tabCounts[tab] + delta);
@@ -324,33 +324,33 @@
     nmLoader.checkEmpty();
   }
 
-  function removeSuspectCard(id) {
-    const card = document.getElementById('rc-sp-' + id);
+  function removeMismatchCard(id) {
+    const card = document.getElementById('rc-mm-' + id);
     if (card) card.remove();
-    updateTabBadge('sp', -1);
-    if (suspectList && !suspectList.querySelector('.rc-card')) {
-      let msg = suspectList.querySelector('.rc-empty');
+    updateTabBadge('mm', -1);
+    if (mismatchList && !mismatchList.querySelector('.rc-card')) {
+      let msg = mismatchList.querySelector('.rc-empty');
       if (!msg) {
         msg = document.createElement('p');
         msg.className = 'muted rc-empty';
         msg.style.cssText = 'text-align:center;padding:28px;font-size:13px';
-        msg.textContent = 'No suspects found.';
-        suspectList.appendChild(msg);
+        msg.textContent = 'No mismatches found.';
+        mismatchList.appendChild(msg);
       }
     }
   }
 
   // ---------------------------------------------------------------------------
-  // Suspect tab — load, render, actions
+  // Mismatches tab — load, render, actions
   // ---------------------------------------------------------------------------
-  function renderSuspectItem(item) {
+  function renderMismatchItem(item) {
     const name = esc(item.current_identity.label);
     const simPct = Math.round(item.similarity * 100);
     const dateStr = typeof formatDate !== 'undefined' ? formatDate(item.detected_at) : item.detected_at;
 
     const card = document.createElement('div');
     card.className = 'review-card rc-card';
-    card.id = 'rc-sp-' + item.detection_id;
+    card.id = 'rc-mm-' + item.detection_id;
     card.innerHTML = `
       <div style="display:flex;width:100%;align-items:flex-start;gap:12px">
         <img src="${esc(item.crop_url)}" alt="" class="rc-crop-img"
@@ -366,7 +366,7 @@
           </div>
 
           <div style="display:flex;gap:6px;margin-bottom:10px;align-items:center;flex-wrap:wrap">
-            <button class="btn btn-ghost" onclick="doSuspectOk(${item.detection_id})">Looks correct</button>
+            <button class="btn btn-ghost" onclick="doMismatchOk(${item.detection_id})">Looks correct</button>
             ${item.source_image_id
               ? `<a class="rc-tag-link" href="/tag/${item.source_image_id}?focus=${item.detection_id}" style="font-size:12px;white-space:nowrap">View in image</a>`
               : ''}
@@ -375,9 +375,9 @@
           <div style="display:flex;align-items:center;gap:6px">
             <span class="muted" style="font-size:11px;white-space:nowrap">Reassign to:</span>
             <span class="ra-wrap" style="display:inline-flex;gap:4px;position:relative;flex:1">
-              <input type="text" id="ra-sp-${item.detection_id}" placeholder="Type a name…"
+              <input type="text" id="ra-mm-${item.detection_id}" placeholder="Type a name…"
                      style="width:100%;max-width:180px" autocomplete="off">
-              <button class="btn btn-ghost" onclick="doSuspectReassignLabel(${item.detection_id})">Assign</button>
+              <button class="btn btn-ghost" onclick="doMismatchReassignLabel(${item.detection_id})">Assign</button>
             </span>
           </div>
 
@@ -398,44 +398,44 @@
         sessionStorage.setItem('argus_nav_depth', '0');
       });
     }
-    const raInput = card.querySelector('#ra-sp-' + item.detection_id);
-    suspectList.appendChild(card);
+    const raInput = card.querySelector('#ra-mm-' + item.detection_id);
+    mismatchList.appendChild(card);
     if (window.makeAutocomplete) makeAutocomplete(raInput);
   }
 
-  async function loadSuspects() {
-    if (!suspectList) return;
-    suspectList.innerHTML = '';
-    const resp = await fetch('/api/review/suspect');
+  async function loadMismatches() {
+    if (!mismatchList) return;
+    mismatchList.innerHTML = '';
+    const resp = await fetch('/api/review/mismatches');
     if (!resp.ok) {
-      suspectList.innerHTML = '<p class="muted" style="text-align:center;padding:28px;font-size:13px">Failed to load.</p>';
+      mismatchList.innerHTML = '<p class="muted" style="text-align:center;padding:28px;font-size:13px">Failed to load.</p>';
       return;
     }
     const data = await resp.json();
-    setTabBadge('sp', data.count);
+    setTabBadge('mm', data.count);
     if (!data.items.length) {
-      suspectList.innerHTML = '<p class="muted rc-empty" style="text-align:center;padding:28px;font-size:13px">No suspects found.</p>';
+      mismatchList.innerHTML = '<p class="muted rc-empty" style="text-align:center;padding:28px;font-size:13px">No mismatches found.</p>';
       return;
     }
-    data.items.forEach(renderSuspectItem);
+    data.items.forEach(renderMismatchItem);
   }
 
-  window.doSuspectOk = async id => {
-    const ok = await sendReview('/api/review/suspect/' + id + '/dismiss', { method: 'POST' });
+  window.doMismatchOk = async id => {
+    const ok = await sendReview('/api/review/mismatches/' + id + '/dismiss', { method: 'POST' });
     if (ok) {
-      removeSuspectCard(id);
+      removeMismatchCard(id);
       if (window.showToast) showToast('Marked as correct', 'success');
     }
   };
 
-  window.doSuspectReassignLabel = async id => {
-    const label = document.getElementById('ra-sp-' + id)?.value.trim();
+  window.doMismatchReassignLabel = async id => {
+    const label = document.getElementById('ra-mm-' + id)?.value.trim();
     if (!label) return;
     const ok = await sendReview('/api/review/' + id + '/reassign', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ label }),
     });
-    if (ok) { addFaceLabel(label); removeSuspectCard(id); }
+    if (ok) { addFaceLabel(label); removeMismatchCard(id); }
   };
 
   window.doConfirm = async id => {
@@ -477,13 +477,13 @@
   fetchTabCounts();
   sgLoader.loadPage();
   nmLoader.loadPage();
-  loadSuspects();
+  loadMismatches();
 
   window.addEventListener('pageshow', e => {
     if (!e.persisted) return;
     fetchTabCounts();
     sgLoader.reset();
     nmLoader.reset();
-    loadSuspects();
+    loadMismatches();
   });
 })();
