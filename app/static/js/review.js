@@ -15,14 +15,14 @@
   window.addEventListener('scroll', updateToTop, { passive: true });
   if (toTop) toTop.addEventListener('click', () => window.scrollTo({ top: 0, behavior: 'smooth' }));
 
-  window.switchTab = tab => {
+  window.switchTab = (tab, scroll = true) => {
     document.getElementById('panel-sg').style.display = tab === 'sg' ? '' : 'none';
     document.getElementById('panel-nm').style.display = tab === 'nm' ? '' : 'none';
     document.getElementById('panel-mm').style.display = tab === 'mm' ? '' : 'none';
     document.getElementById('tab-sg').classList.toggle('active', tab === 'sg');
     document.getElementById('tab-nm').classList.toggle('active', tab === 'nm');
     document.getElementById('tab-mm').classList.toggle('active', tab === 'mm');
-    window.scrollTo({ top: 0, behavior: 'instant' });
+    if (scroll) window.scrollTo({ top: 0, behavior: 'instant' });
   };
 
   function esc(s) {
@@ -319,6 +319,8 @@
       sessionStorage.removeItem('argus_nav_ids');
       sessionStorage.setItem('argus_nav_back', location.href);
       sessionStorage.setItem('argus_nav_depth', '0');
+      sessionStorage.setItem('argus_nav_tab', loader.hasSuggestion ? 'sg' : 'nm');
+      sessionStorage.setItem('argus_nav_scroll', String(window.scrollY));
     });
     if (item.source_image_url) {
       card.querySelector('.rc-crop-img').addEventListener('click', e => {
@@ -421,6 +423,8 @@
         sessionStorage.removeItem('argus_nav_ids');
         sessionStorage.setItem('argus_nav_back', location.href);
         sessionStorage.setItem('argus_nav_depth', '0');
+        sessionStorage.setItem('argus_nav_tab', 'mm');
+        sessionStorage.setItem('argus_nav_scroll', String(window.scrollY));
       });
     }
     card.querySelector('.rc-check').addEventListener('change', e => {
@@ -504,16 +508,39 @@
   const sgLoader = makeLoader(suggestedList, true,  selSg);
   const nmLoader = makeLoader(nomatchList,   false, selNm);
 
+  const _initTab = sessionStorage.getItem('argus_nav_tab');
+  const _initScroll = _initTab ? parseInt(sessionStorage.getItem('argus_nav_scroll') || '0', 10) : null;
+  if (_initTab) {
+    sessionStorage.removeItem('argus_nav_tab');
+    sessionStorage.removeItem('argus_nav_scroll');
+    switchTab(_initTab, false);
+  }
+
   fetchTabCounts();
   sgLoader.loadPage();
   nmLoader.loadPage();
-  loadMismatches();
+  if (_initScroll != null) {
+    loadMismatches().then(() => window.scrollTo({ top: _initScroll, behavior: 'instant' }));
+  } else {
+    loadMismatches();
+  }
 
   window.addEventListener('pageshow', e => {
     if (!e.persisted) return;
+    const savedTab = sessionStorage.getItem('argus_nav_tab');
+    const savedScroll = savedTab ? parseInt(sessionStorage.getItem('argus_nav_scroll') || '0', 10) : null;
+    if (savedTab) {
+      sessionStorage.removeItem('argus_nav_tab');
+      sessionStorage.removeItem('argus_nav_scroll');
+      switchTab(savedTab, false);
+    }
     fetchTabCounts();
     sgLoader.reset();
     nmLoader.reset();
-    loadMismatches();
+    if (savedScroll != null) {
+      loadMismatches().then(() => window.scrollTo({ top: savedScroll, behavior: 'instant' }));
+    } else {
+      loadMismatches();
+    }
   });
 })();

@@ -238,7 +238,8 @@
       "Bash(python3.11 -m ruff check .)",
       "Bash(docker exec *)",
       "Bash(./.venv/bin/ruff check *)",
-      "Bash(~/.local/bin/pytest tests/test_images_api.py tests/test_review_api.py -v)"
+      "Bash(~/.local/bin/pytest tests/test_images_api.py tests/test_review_api.py -v)",
+      "Bash(/home/michael/.local/bin/ruff check *)"
     ]
   }
 }
