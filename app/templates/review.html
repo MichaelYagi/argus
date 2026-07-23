@@ -27,6 +27,7 @@
     </label>
     <span class="muted" style="font-size:13px"><span id="sg-count">0</span> selected</span>
     <button id="sg-confirm-btn" class="btn btn-success" onclick="sgConfirm()" disabled>Confirm selected</button>
+    <button id="sg-dismiss-btn" class="btn btn-danger" onclick="sgDismiss()" disabled>Dismiss selected</button>
   </div>
   <div id="suggested-list"></div>
 </div>
@@ -71,6 +72,14 @@
 {% block head %}
 <style>
   .rc-card.rc-focused { outline: 2px solid var(--accent); outline-offset: 1px; }
+  .sg-group { border: 1px solid var(--border); border-radius: 6px; margin-bottom: 12px; overflow: hidden; }
+  .sg-group-hd { display: flex; align-items: center; gap: 10px; padding: 10px 14px; background: var(--surface-2); cursor: pointer; user-select: none; }
+  .sg-group-nm { font-weight: 600; font-size: 14px; }
+  .sg-group-ct { font-size: 12px; }
+  .sg-group-acts { margin-left: auto; display: flex; gap: 6px; flex-shrink: 0; }
+  .sg-chev { font-size: 11px; opacity: 0.5; transition: transform 0.15s; display: inline-block; flex-shrink: 0; }
+  .sg-group.collapsed .sg-chev { transform: rotate(-90deg); }
+  .sg-group.collapsed .sg-group-bd { display: none; }
 </style>
 {% endblock %}
 

@@ -58,9 +58,10 @@
   // ---------------------------------------------------------------------------
   // Per-section bulk bars
   // ---------------------------------------------------------------------------
-  const sgCount = document.getElementById('sg-count');
-  const sgBtn   = document.getElementById('sg-confirm-btn');
-  const sgAll   = document.getElementById('sg-select-all');
+  const sgCount      = document.getElementById('sg-count');
+  const sgBtn        = document.getElementById('sg-confirm-btn');
+  const sgDismissBtn = document.getElementById('sg-dismiss-btn');
+  const sgAll        = document.getElementById('sg-select-all');
   const nmCount = document.getElementById('nm-count');
   const nmBtn   = document.getElementById('nm-dismiss-btn');
   const nmAll   = document.getElementById('nm-select-all');
@@ -70,8 +71,9 @@
   const mmAll        = document.getElementById('mm-select-all');
 
   function updateBars() {
-    if (sgCount) sgCount.textContent = selSg.size;
-    if (sgBtn)   sgBtn.disabled = selSg.size === 0;
+    if (sgCount)      sgCount.textContent = selSg.size;
+    if (sgBtn)        sgBtn.disabled = selSg.size === 0;
+    if (sgDismissBtn) sgDismissBtn.disabled = selSg.size === 0;
     if (nmCount) nmCount.textContent = selNm.size;
     if (nmBtn)   nmBtn.disabled = selNm.size === 0;
     if (mmCount)      mmCount.textContent = selMm.size;
@@ -140,23 +142,57 @@
       if (card) {
         const tab = card.closest('#suggested-list') ? 'sg' : 'nm';
         updateTabBadge(tab, -1);
+        if (card === focusedCard) setFocusedCard(null);
         card.remove();
       }
       sel.delete(id);
     });
+    // Remove any groups that are now empty; update counts for the rest.
+    suggestedList.querySelectorAll('.sg-group').forEach(group => {
+      const remaining = group.querySelectorAll('.rc-card').length;
+      if (remaining === 0) { group.remove(); return; }
+      const ct = group.querySelector('.sg-group-ct');
+      if (ct) ct.textContent = remaining + (remaining === 1 ? ' face' : ' faces');
+    });
     decrementBadge(ids.length);
     if (allCb) allCb.checked = false;
     updateBars();
-    sgLoader.checkEmpty();
+    checkSgEmpty();
     nmLoader.checkEmpty();
     if (window.showToast) {
-      const verb = action === 'confirm' ? ' confirmed' : ' dismissed';
+      const verb = action === 'confirm' ? ' confirmed' : action === 'reject' ? ' rejected' : ' dismissed';
       showToast(ids.length + verb, 'success');
     }
   }
 
-  window.sgConfirm = () => bulkAction([...selSg], 'confirm',     selSg, sgAll);
-  window.nmDismiss = () => bulkAction([...selNm], 'unidentify',  selNm, nmAll);
+  window.sgConfirm = () => bulkAction([...selSg], 'confirm', selSg, sgAll);
+  window.sgDismiss = () => bulkAction([...selSg], 'reject',  selSg, sgAll);
+  window.nmDismiss = () => bulkAction([...selNm], 'unidentify', selNm, nmAll);
+
+  function getActiveTab() {
+    if (document.getElementById('panel-sg').style.display !== 'none') return 'sg';
+    if (document.getElementById('panel-nm').style.display !== 'none') return 'nm';
+    return 'mm';
+  }
+
+  function getFocusedId() {
+    if (!focusedCard) return null;
+    const id = parseInt(focusedCard.id.replace('rc-mm-', '').replace('rc-', ''));
+    return isNaN(id) ? null : id;
+  }
+
+  function checkSgEmpty() {
+    if (!suggestedList.querySelector('.sg-group')) {
+      let msg = suggestedList.querySelector('.rc-empty');
+      if (!msg) {
+        msg = document.createElement('p');
+        msg.className = 'muted rc-empty';
+        msg.style.cssText = 'text-align:center;padding:28px;font-size:13px';
+        msg.textContent = 'No suggested matches.';
+        suggestedList.appendChild(msg);
+      }
+    }
+  }
 
   window.sgSelectAll = cb => toggleAll(suggestedList, selSg, cb.checked);
   window.nmSelectAll = cb => toggleAll(nomatchList, selNm, cb.checked);
@@ -387,12 +423,21 @@
       }
       const tab = card.closest('#suggested-list') ? 'sg' : 'nm';
       updateTabBadge(tab, -1);
+      const group = card.closest('.sg-group');
       card.remove();
+      if (group) {
+        const remaining = group.querySelectorAll('.rc-card').length;
+        if (remaining === 0) { group.remove(); }
+        else {
+          const ct = group.querySelector('.sg-group-ct');
+          if (ct) ct.textContent = remaining + (remaining === 1 ? ' face' : ' faces');
+        }
+      }
     }
     selSg.delete(id); selNm.delete(id);
     decrementBadge(1);
     updateBars();
-    sgLoader.checkEmpty();
+    checkSgEmpty();
     nmLoader.checkEmpty();
   }
 
@@ -566,28 +611,193 @@
   };
 
   // ---------------------------------------------------------------------------
+  // Suggested matches — grouped by identity
+  // ---------------------------------------------------------------------------
+  async function loadSgGroups() {
+    suggestedList.innerHTML = '<p class="muted" style="text-align:center;padding:28px;font-size:13px">Loading…</p>';
+    let cursor = null, hasMore = true;
+    const allItems = [];
+    while (hasMore) {
+      const params = new URLSearchParams({ limit: 100, has_suggestion: true });
+      if (cursor) params.set('cursor', cursor);
+      const resp = await fetch('/api/review?' + params);
+      if (!resp.ok) {
+        suggestedList.innerHTML = '<p class="muted" style="text-align:center;padding:28px;font-size:13px">Failed to load.</p>';
+        return;
+      }
+      const data = await resp.json();
+      allItems.push(...data.items);
+      hasMore = data.has_more;
+      cursor = data.next_cursor;
+    }
+    renderSgGroups(allItems);
+  }
+
+  function renderSgGroups(items) {
+    suggestedList.innerHTML = '';
+    selSg.clear();
+    if (!items.length) {
+      suggestedList.innerHTML = '<p class="muted rc-empty" style="text-align:center;padding:28px;font-size:13px">No suggested matches.</p>';
+      return;
+    }
+    const groups = new Map();
+    for (const item of items) {
+      itemCache.set(item.detection_id, item);
+      const top = item.suggested_matches && item.suggested_matches[0];
+      if (!top) continue;
+      if (!groups.has(top.identity_id)) groups.set(top.identity_id, { identity_id: top.identity_id, label: top.label, items: [] });
+      groups.get(top.identity_id).items.push(item);
+    }
+    [...groups.values()].sort((a, b) => b.items.length - a.items.length).forEach(renderSgGroup);
+  }
+
+  function renderSgGroup(group) {
+    const n = group.items.length;
+    const el = document.createElement('div');
+    el.className = 'sg-group';
+    el.id = 'sg-group-' + group.identity_id;
+    el.innerHTML = `
+      <div class="sg-group-hd" onclick="toggleSgGroup(${group.identity_id})">
+        <span class="sg-chev">&#9660;</span>
+        <span class="sg-group-nm">${esc(group.label)}</span>
+        <span class="sg-group-ct muted">${n} ${n === 1 ? 'face' : 'faces'}</span>
+        <div class="sg-group-acts" onclick="event.stopPropagation()">
+          <button class="btn btn-success" style="font-size:12px;padding:4px 10px"
+                  onclick="confirmGroup(${group.identity_id})">Confirm all</button>
+          <button class="btn btn-danger" style="font-size:12px;padding:4px 10px"
+                  onclick="rejectGroup(${group.identity_id})">Reject all</button>
+        </div>
+      </div>
+      <div class="sg-group-bd" id="sg-group-bd-${group.identity_id}"></div>`;
+    suggestedList.appendChild(el);
+    const body = el.querySelector('.sg-group-bd');
+    const fakeLoader = { listEl: body, hasSuggestion: true, sel: selSg };
+    group.items.forEach(item => renderItem(item, fakeLoader));
+  }
+
+  window.toggleSgGroup = identityId => {
+    const el = document.getElementById('sg-group-' + identityId);
+    if (el) el.classList.toggle('collapsed');
+  };
+
+  window.confirmGroup = async identityId => {
+    const group = document.getElementById('sg-group-' + identityId);
+    if (!group) return;
+    const ids = [...group.querySelectorAll('.rc-card')].map(c => parseInt(c.id.replace('rc-', '')));
+    if (!ids.length) return;
+    const ok = await sendReview('/api/review/bulk', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(ids.map(id => ({ detection_id: id, action: 'confirm' }))),
+    });
+    if (!ok) return;
+    if (focusedCard && group.contains(focusedCard)) setFocusedCard(null);
+    ids.forEach(id => selSg.delete(id));
+    group.remove();
+    updateTabBadge('sg', -ids.length);
+    decrementBadge(ids.length);
+    updateBars();
+    checkSgEmpty();
+    if (window.showToast) showToast(ids.length + ' confirmed', 'success');
+  };
+
+  window.rejectGroup = async identityId => {
+    const group = document.getElementById('sg-group-' + identityId);
+    if (!group) return;
+    const ids = [...group.querySelectorAll('.rc-card')].map(c => parseInt(c.id.replace('rc-', '')));
+    if (!ids.length) return;
+    const ok = await sendReview('/api/review/bulk', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(ids.map(id => ({ detection_id: id, action: 'reject' }))),
+    });
+    if (!ok) return;
+    if (focusedCard && group.contains(focusedCard)) setFocusedCard(null);
+    ids.forEach(id => selSg.delete(id));
+    group.remove();
+    updateTabBadge('sg', -ids.length);
+    decrementBadge(ids.length);
+    updateBars();
+    checkSgEmpty();
+    if (window.showToast) showToast(ids.length + ' rejected', 'success');
+  };
+
+  // ---------------------------------------------------------------------------
   // Keyboard navigation — ↑/↓ move focus between cards in the active tab
   // ---------------------------------------------------------------------------
   document.addEventListener('keydown', e => {
-    if (e.key !== 'ArrowDown' && e.key !== 'ArrowUp') return;
     const tag = document.activeElement?.tagName;
-    if (tag === 'INPUT' || tag === 'TEXTAREA' || document.activeElement?.isContentEditable) return;
-    e.preventDefault();
-    const cards = getActivePanelCards();
-    if (!cards.length) return;
-    const idx = focusedCard ? cards.indexOf(focusedCard) : -1;
-    if (e.key === 'ArrowDown') {
-      setFocusedCard(idx < cards.length - 1 ? cards[idx + 1] : cards[Math.max(0, idx)]);
-    } else {
-      setFocusedCard(idx > 0 ? cards[idx - 1] : cards[0]);
+    const inInput = tag === 'INPUT' || tag === 'TEXTAREA' || document.activeElement?.isContentEditable;
+
+    if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+      if (inInput) return;
+      e.preventDefault();
+      const cards = getActivePanelCards();
+      if (!cards.length) return;
+      const idx = focusedCard ? cards.indexOf(focusedCard) : -1;
+      setFocusedCard(e.key === 'ArrowDown'
+        ? cards[idx < cards.length - 1 ? idx + 1 : Math.max(0, idx)]
+        : cards[idx > 0 ? idx - 1 : 0]);
+      return;
+    }
+
+    if (inInput) return;
+
+    const activeTab = getActiveTab();
+    const id = getFocusedId();
+
+    // C — confirm focused card
+    if (e.key === 'c' && !e.shiftKey && !e.ctrlKey && !e.metaKey && !e.altKey) {
+      if (!id) return;
+      e.preventDefault();
+      if (activeTab === 'sg') window.doConfirm(id);
+      else if (activeTab === 'mm') window.doMismatchOk(id);
+      return;
+    }
+
+    // D — dismiss focused card
+    if (e.key === 'd' && !e.shiftKey && !e.ctrlKey && !e.metaKey && !e.altKey) {
+      if (!id) return;
+      e.preventDefault();
+      if (activeTab === 'sg') window.doReject(id);
+      else if (activeTab === 'nm') window.doDismiss(id);
+      else if (activeTab === 'mm') window.doMismatchDismiss(id);
+      return;
+    }
+
+    // A — toggle select all on active tab
+    if (e.key === 'a' && !e.shiftKey && !e.ctrlKey && !e.metaKey && !e.altKey) {
+      e.preventDefault();
+      const listEl = activeTab === 'sg' ? suggestedList : activeTab === 'nm' ? nomatchList : mismatchList;
+      const sel    = activeTab === 'sg' ? selSg : activeTab === 'nm' ? selNm : selMm;
+      const allCb  = activeTab === 'sg' ? sgAll : activeTab === 'nm' ? nmAll : mmAll;
+      const cbs = [...listEl.querySelectorAll('.rc-check')];
+      const on = cbs.length === 0 ? false : !cbs.every(cb => cb.checked);
+      toggleAll(listEl, sel, on);
+      if (allCb) allCb.checked = on;
+      return;
+    }
+
+    // Shift+C — confirm selected
+    if (e.key === 'C' && e.shiftKey && !e.ctrlKey && !e.metaKey && !e.altKey) {
+      e.preventDefault();
+      if (activeTab === 'sg') window.sgConfirm();
+      else if (activeTab === 'mm') window.mmConfirm();
+      return;
+    }
+
+    // Shift+D — dismiss selected
+    if (e.key === 'D' && e.shiftKey && !e.ctrlKey && !e.metaKey && !e.altKey) {
+      e.preventDefault();
+      if (activeTab === 'sg') window.sgDismiss();
+      else if (activeTab === 'nm') window.nmDismiss();
+      else if (activeTab === 'mm') window.mmDismiss();
+      return;
     }
   });
 
   // ---------------------------------------------------------------------------
   // Init
   // ---------------------------------------------------------------------------
-  const sgLoader = makeLoader(suggestedList, true,  selSg);
-  const nmLoader = makeLoader(nomatchList,   false, selNm);
+  const nmLoader = makeLoader(nomatchList, false, selNm);
 
   const _initTab = sessionStorage.getItem('argus_nav_tab');
   const _initScroll = _initTab ? parseInt(sessionStorage.getItem('argus_nav_scroll') || '0', 10) : null;
@@ -598,7 +808,7 @@
   }
 
   fetchTabCounts();
-  sgLoader.loadPage();
+  loadSgGroups();
   nmLoader.loadPage();
   if (_initScroll != null) {
     loadMismatches().then(() => window.scrollTo({ top: _initScroll, behavior: 'instant' }));
@@ -616,7 +826,7 @@
       switchTab(savedTab, false);
     }
     fetchTabCounts();
-    sgLoader.reset();
+    loadSgGroups();
     nmLoader.reset();
     if (savedScroll != null) {
       loadMismatches().then(() => window.scrollTo({ top: savedScroll, behavior: 'instant' }));
