@@ -5,6 +5,20 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [0.1.0-alpha.20] — 2026-07-22
+
+### Added
+
+- **Pulsing bbox on source image modal.** Clicking a face crop in the review queue or the Suggested people magnifying glass now opens the source image with a pulsing amber dashed box highlighting exactly where that face sits in the photo. Helps locate the face in busy or large group shots. Clusters API response now includes `bbox` per crop to support this.
+- **`has_suggestion` filter on review endpoints.** `GET /api/review` and `GET /api/review/count` accept `has_suggestion=true|false` to filter to detections with or without a current identity match.
+
+### Changed
+
+- **Review queue tabs load independently.** The Suggested matches and No match tabs now each have their own paginated cursor and scroll sentinel, fetching `?has_suggestion=true` and `?has_suggestion=false` respectively. Suggested matches now populate immediately on page load rather than requiring the No match tab to be scrolled first.
+- **Review tab badges show pre-fetched totals.** Both tab badges are now populated from `GET /api/review/count` on page load and decrement as items are reviewed, rather than accumulating from rendered items as you scroll.
+
+---
+
 ## [0.1.0-alpha.19] — 2026-07-22
 
 ### Added
