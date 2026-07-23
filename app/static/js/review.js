@@ -792,6 +792,14 @@
       else if (activeTab === 'mm') window.mmDismiss();
       return;
     }
+
+    // Space — open magnified crop for focused card
+    if (e.key === ' ' && !e.shiftKey && !e.ctrlKey && !e.metaKey && !e.altKey) {
+      if (!focusedCard) return;
+      e.preventDefault();
+      focusedCard.querySelector('.rc-crop-img')?.click();
+      return;
+    }
   });
 
   // ---------------------------------------------------------------------------
