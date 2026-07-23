@@ -7,6 +7,7 @@
 
   const selSg = new Set();
   const selNm = new Set();
+  const selMm = new Set();
   const itemCache = new Map();
 
   const toTop = document.getElementById('scroll-top');
@@ -37,12 +38,17 @@
   const nmCount = document.getElementById('nm-count');
   const nmBtn   = document.getElementById('nm-dismiss-btn');
   const nmAll   = document.getElementById('nm-select-all');
+  const mmCount = document.getElementById('mm-count');
+  const mmBtn   = document.getElementById('mm-confirm-btn');
+  const mmAll   = document.getElementById('mm-select-all');
 
   function updateBars() {
     if (sgCount) sgCount.textContent = selSg.size;
     if (sgBtn)   sgBtn.disabled = selSg.size === 0;
     if (nmCount) nmCount.textContent = selNm.size;
     if (nmBtn)   nmBtn.disabled = selNm.size === 0;
+    if (mmCount) mmCount.textContent = selMm.size;
+    if (mmBtn)   mmBtn.disabled = selMm.size === 0;
   }
 
   function decrementBadge(n = 1) {
@@ -126,6 +132,22 @@
 
   window.sgSelectAll = cb => toggleAll(suggestedList, selSg, cb.checked);
   window.nmSelectAll = cb => toggleAll(nomatchList, selNm, cb.checked);
+  window.mmSelectAll = cb => toggleAll(mismatchList, selMm, cb.checked);
+
+  window.mmConfirm = async () => {
+    const ids = [...selMm];
+    if (!ids.length) return;
+    const ok = await sendReview('/api/review/mismatches/dismiss', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ detection_ids: ids }),
+    });
+    if (!ok) return;
+    ids.forEach(id => removeMismatchCard(id));
+    selMm.clear();
+    if (mmAll) mmAll.checked = false;
+    updateBars();
+    if (window.showToast) showToast(ids.length + ' confirmed', 'success');
+  };
 
   function toggleAll(listEl, sel, on) {
     listEl.querySelectorAll('.rc-check').forEach(c => {
@@ -327,6 +349,8 @@
   function removeMismatchCard(id) {
     const card = document.getElementById('rc-mm-' + id);
     if (card) card.remove();
+    selMm.delete(id);
+    updateBars();
     updateTabBadge('mm', -1);
     if (mismatchList && !mismatchList.querySelector('.rc-card')) {
       let msg = mismatchList.querySelector('.rc-empty');
@@ -353,6 +377,7 @@
     card.id = 'rc-mm-' + item.detection_id;
     card.innerHTML = `
       <div style="display:flex;width:100%;align-items:flex-start;gap:12px">
+        <input type="checkbox" class="rc-check" data-id="${item.detection_id}" style="margin-top:4px;flex-shrink:0">
         <img src="${esc(item.crop_url)}" alt="" class="rc-crop-img"
              style="width:110px;height:110px;object-fit:cover;border-radius:4px;flex-shrink:0;${item.source_image_url ? 'cursor:zoom-in' : ''}">
         <div class="rc-info" style="flex:1;min-width:0">
@@ -398,6 +423,11 @@
         sessionStorage.setItem('argus_nav_depth', '0');
       });
     }
+    card.querySelector('.rc-check').addEventListener('change', e => {
+      const id = item.detection_id;
+      if (e.target.checked) selMm.add(id); else selMm.delete(id);
+      updateBars();
+    });
     const raInput = card.querySelector('#ra-mm-' + item.detection_id);
     mismatchList.appendChild(card);
     if (window.makeAutocomplete) makeAutocomplete(raInput);

@@ -1155,6 +1155,23 @@ def dismiss_mismatch_detection(detection_id: int, user_id: int, environment_id: 
         return conn.execute("SELECT changes()").fetchone()[0] > 0
 
 
+def dismiss_mismatch_detections(
+    user_id: int, detection_ids: list[int], environment_id: int | None = None
+) -> int:
+    """Batch version of dismiss_mismatch_detection. Returns count updated."""
+    if not detection_ids:
+        return 0
+    with _connect() as conn:
+        env_id = _resolve_env(conn, user_id, environment_id)
+        placeholders = ",".join("?" * len(detection_ids))
+        cur = conn.execute(
+            f"UPDATE detections SET mismatch_reviewed = 1"
+            f" WHERE user_id = ? AND environment_id = ? AND id IN ({placeholders})",
+            (user_id, env_id, *detection_ids),
+        )
+        return cur.rowcount
+
+
 def delete_detections(
     user_id: int, detection_ids: list[int], environment_id: int | None = None
 ) -> tuple[list[int], list[str]]:

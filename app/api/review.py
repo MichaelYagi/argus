@@ -117,6 +117,26 @@ async def dismiss_mismatch(
     return {"detection_id": detection_id, "mismatch_reviewed": True}
 
 
+@router.post(
+    "/api/review/mismatches/dismiss",
+    status_code=200,
+    responses={**ok({"dismissed": 3}), **ERR_401, **ERR_400},
+)
+async def dismiss_mismatches_batch(
+    body: _IdsBody,
+    user_id: int = Depends(require_auth),
+    environment_id: int = Depends(require_env_id),
+):
+    """Batch confirm-as-correct for the Mismatches tab. Sets mismatch_reviewed on each
+    detection, suppressing them from future scans without affecting gallery or labels."""
+    if not body.detection_ids:
+        raise HTTPException(400, "detection_ids is required")
+    if len(body.detection_ids) > _BATCH_MAX:
+        raise HTTPException(400, f"Too many items (max {_BATCH_MAX})")
+    n = store.dismiss_mismatch_detections(user_id, body.detection_ids, environment_id)
+    return {"dismissed": n}
+
+
 @router.get(
     "/api/review/count",
     responses={**ok({"count": 14}), **ERR_401},

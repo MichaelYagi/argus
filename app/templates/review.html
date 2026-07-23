@@ -49,6 +49,13 @@
     Confirmed faces whose embedding scores poorly against their identity's representative — possible mislabels.
     Reassign to correct, or mark as correct to suppress.
   </p>
+  <div class="review-bulk" style="border-left-color:var(--accent)">
+    <label style="display:flex;align-items:center;gap:6px;font-size:13px;cursor:pointer">
+      <input type="checkbox" id="mm-select-all" onchange="mmSelectAll(this)"> Select all
+    </label>
+    <span class="muted" style="font-size:13px"><span id="mm-count">0</span> selected</span>
+    <button id="mm-confirm-btn" class="btn btn-success" onclick="mmConfirm()" disabled>Confirm selected</button>
+  </div>
   <div id="mismatch-list"></div>
 </div>
 
