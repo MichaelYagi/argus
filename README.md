@@ -639,29 +639,18 @@ Query the source image list with filters. All params are optional and combinable
 ```bash
 # Images containing identity 5 (face or object)
 curl -H "X-API-Key: argus_..." \
-  "http://localhost:8100/api/source-images?identity_id=5"
+  "http://localhost:8100/api/images?identity_id=5"
 
 # Face-detection images from a date range
 curl -H "X-API-Key: argus_..." \
-  "http://localhost:8100/api/source-images?type=face&since=2025-01-01T00:00:00&until=2025-12-31T23:59:59"
+  "http://localhost:8100/api/images?type=face&since=2025-01-01T00:00:00&until=2025-12-31T23:59:59"
 
 # Images with at least one manually drawn bbox, sorted by most detections
 curl -H "X-API-Key: argus_..." \
-  "http://localhost:8100/api/source-images?has_manual_detections=true&sort=most_detections"
+  "http://localhost:8100/api/images?has_manual_detections=true&sort=most_detections"
 ```
 
-Companion endpoints use the same params: `GET /api/source-images/count` returns the matching total; `GET /api/source-images/ids` returns all matching IDs (no pagination, for select-all operations).
-
-For cross-identity search with AND semantics (images that contain *all* of the listed identities), use `POST /api/images/search`:
-
-```bash
-curl -X POST \
-  -H "X-API-Key: argus_..." \
-  -H "Content-Type: application/json" \
-  -d '{"identity_ids": [3, 7], "type": "face", "since": "2025-06-01T00:00:00"}' \
-  http://localhost:8100/api/images/search
-# → images where BOTH identity 3 AND identity 7 appear
-```
+Companion endpoints use the same params: `GET /api/images/count` returns the matching total; `GET /api/images/ids` returns all matching IDs (no pagination, for select-all operations).
 
 From the UI: the **Images** page has a filter bar — search for an identity by name, pick a detection type, set a date range, choose a preset filter (no tagged faces, manually tagged faces, no crops), pick a sort order, then click Apply.
 

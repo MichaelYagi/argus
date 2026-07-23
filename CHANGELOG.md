@@ -5,6 +5,24 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [0.1.0-alpha.19] — 2026-07-22
+
+### Added
+
+- **`has_manual_detections` filter on image list.** `GET /api/images`, `GET /api/images/count`, and `GET /api/images/ids` all accept `has_manual_detections=true` to narrow results to images that contain at least one manually drawn detection. The Images page filter bar exposes this as the "Manually tagged faces" preset.
+
+### Changed
+
+- **`image_tags` renamed to `scene_tags` throughout.** The image-level keyword array produced by tagger engines (RAM++) is now called `scene_tags` in all API responses, the database column, store functions, engine attributes, and templates. The DB migration renames the existing column via `ALTER TABLE source_images RENAME COLUMN image_tags TO scene_tags` on upgrade; new installs use the correct name from schema creation.
+- **API endpoint cleanup.** Consolidated and renamed several routes for consistency:
+  - `GET /api/source-images` (and `/count`, `/ids`) → `GET /api/images` (and `/count`, `/ids`); `external_ref` lookup merged as an optional query param on the same endpoint.
+  - `POST /api/faces/scan` → `POST /api/detect/scan`.
+  - `GET|DELETE /api/face_embeddings/{id}` → `GET|DELETE /api/face-embeddings/{id}`.
+  - `POST /api/images/{id}/tag` → `POST /api/images/{id}/label`.
+  - Deleted orphaned `POST /api/images/search` (no UI or API consumers).
+
+---
+
 ## [0.1.0-alpha.18] — 2026-07-20
 
 ### Added
