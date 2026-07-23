@@ -5,6 +5,15 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [0.1.0-alpha.21] — 2026-07-23
+
+### Added
+
+- **`updated_at` on source images.** `source_images` now has an `updated_at` column, set whenever a detection on that image is labeled, confirmed, or reassigned. Exposed as `updated_at` in `GET /api/images` responses.
+- **"Last modified" sort on the Images page.** The Sort dropdown now includes a "Last modified" option (between "Oldest first" and "Most detections") that orders images by their most recent labeling activity. Backed by `COALESCE(updated_at, uploaded_at)` so existing images without labeling history fall back to upload time. The DB migration backfills `updated_at = uploaded_at` for all existing rows on upgrade.
+
+---
+
 ## [0.1.0-alpha.20] — 2026-07-22
 
 ### Added

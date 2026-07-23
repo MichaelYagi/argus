@@ -71,6 +71,7 @@ CREATE TABLE IF NOT EXISTS source_images (
     external_ref TEXT,             -- opaque caller-owned correlation id; never interpreted by Argus
     scene_tags  TEXT,              -- JSON array of image-level keyword tags; null when not produced
     uploaded_at TEXT    NOT NULL DEFAULT (datetime('now')),
+    updated_at  TEXT,              -- last time any detection on this image was labeled/confirmed/modified
     UNIQUE(user_id, environment_id, file_path)
 );
 

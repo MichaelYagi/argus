@@ -92,6 +92,12 @@ def _migrate(conn: sqlite3.Connection) -> None:
         if col not in cols:
             conn.execute(f"ALTER TABLE {tbl} ADD COLUMN {col} INTEGER NOT NULL DEFAULT 0")
 
+    # updated_at on source_images: tracks last labeling activity; backfill from uploaded_at.
+    si_cols = {r[1] for r in conn.execute("PRAGMA table_info(source_images)")}
+    if "updated_at" not in si_cols:
+        conn.execute("ALTER TABLE source_images ADD COLUMN updated_at TEXT")
+        conn.execute("UPDATE source_images SET updated_at = uploaded_at WHERE updated_at IS NULL")
+
     # Ensure every user has at least one environment — but only seed 'default' for
     # users who have NONE, so a deliberately-deleted 'default' isn't resurrected on
     # restart when the user still has other environments.
@@ -1488,6 +1494,10 @@ def insert_detection(
              review_status, attributes, source),
         )
         new_id = conn.execute("SELECT last_insert_rowid()").fetchone()[0]
+        conn.execute(
+            "UPDATE source_images SET updated_at = datetime('now') WHERE id = ?",
+            (source_image_id,),
+        )
         record_change(conn, user_id, env_id, "detection", new_id, "created", src_ref)
         return new_id
 
@@ -1879,7 +1889,7 @@ def _source_images_inner(
         )
     where = " AND ".join(conds)
     inner = (
-        f"SELECT si.id, si.file_path, si.width, si.height, si.uploaded_at,"
+        f"SELECT si.id, si.file_path, si.width, si.height, si.uploaded_at, si.updated_at,"
         f" si.scene_tags, si.external_ref,"
         f" COUNT(DISTINCT CASE WHEN d.type = 'face'   THEN d.id END) AS face_count,"
         f" COUNT(DISTINCT CASE WHEN d.type = 'object' THEN d.id END) AS object_count,"
@@ -1908,7 +1918,7 @@ def list_source_images(
     sort: str = "newest",
 ) -> list[sqlite3.Row]:
     """Processed source images with per-image detection count, using CTE for sort flexibility.
-    sort: newest | oldest | most_detections | fewest_detections."""
+    sort: newest | oldest | most_detections | fewest_detections | last_modified."""
     with _connect() as conn:
         env_id = _resolve_env(conn, user_id, environment_id)
         inner, params = _source_images_inner(
@@ -1931,6 +1941,17 @@ def list_source_images(
                 else:
                     outer.append("(detection_count > ? OR (detection_count = ? AND id > ?))")
                 params.extend([cnt_val, cnt_val, id_val])
+            elif sort == "last_modified":
+                try:
+                    c_ts, c_id = cursor.rsplit("_", 1)
+                    id_val = int(c_id)
+                except ValueError:
+                    c_ts, id_val = cursor, 0
+                outer.append(
+                    "(COALESCE(updated_at, uploaded_at) < ?"
+                    " OR (COALESCE(updated_at, uploaded_at) = ? AND id < ?))"
+                )
+                params.extend([c_ts, c_ts, id_val])
             else:
                 try:
                     c_ts, c_id = cursor.rsplit("_", 1)
@@ -1948,6 +1969,7 @@ def list_source_images(
             "oldest":            "uploaded_at ASC, id ASC",
             "most_detections":   "detection_count DESC, id DESC",
             "fewest_detections": "detection_count ASC, id ASC",
+            "last_modified":     "COALESCE(updated_at, uploaded_at) DESC, id DESC",
         }.get(sort, "uploaded_at DESC, id DESC")
         sql += f" ORDER BY {order} LIMIT ?"
         params.append(limit + 1)
@@ -2227,6 +2249,11 @@ def confirm_detection(detection_id: int, user_id: int, environment_id: int | Non
         )
         changed = conn.execute("SELECT changes()").fetchone()[0] > 0
         if changed:
+            conn.execute(
+                """UPDATE source_images SET updated_at = datetime('now')
+                   WHERE id = (SELECT source_image_id FROM detections WHERE id = ?)""",
+                (detection_id,),
+            )
             # Auto-confirm any pending siblings from the same source image for the same
             # identity so they don't accumulate in the review queue or gallery.
             conn.execute(
@@ -2325,6 +2352,11 @@ def reassign_detection(detection_id: int, user_id: int, identity_id: int, enviro
         )
         changed = conn.execute("SELECT changes()").fetchone()[0] > 0
         if changed:  # identity changed — surface as a relabel for delta-sync clients
+            conn.execute(
+                """UPDATE source_images SET updated_at = datetime('now')
+                   WHERE id = (SELECT source_image_id FROM detections WHERE id = ?)""",
+                (detection_id,),
+            )
             record_change(conn, user_id, env_id, "detection", detection_id, "relabeled")
             _purge_empty_identities(conn, user_id, env_id)
     _recompute_representative(old_id)
@@ -2413,6 +2445,11 @@ def label_detection(detection_id: int, user_id: int, identity_id: int, environme
         )
         changed = conn.execute("SELECT changes()").fetchone()[0] > 0
         if changed:
+            conn.execute(
+                """UPDATE source_images SET updated_at = datetime('now')
+                   WHERE id = (SELECT source_image_id FROM detections WHERE id = ?)""",
+                (detection_id,),
+            )
             record_change(conn, user_id, env_id, "detection", detection_id, "relabeled")
             _purge_empty_identities(conn, user_id, env_id)
     _recompute_representative(old_id)

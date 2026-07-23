@@ -21,7 +21,7 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
-_VALID_SORTS = frozenset({"newest", "oldest", "most_detections", "fewest_detections"})
+_VALID_SORTS = frozenset({"newest", "oldest", "most_detections", "fewest_detections", "last_modified"})
 
 
 @router.get(
@@ -61,14 +61,14 @@ async def list_source_images(
     no_tagged_faces: bool = Query(False, description="Only return images with no identified faces"),
     no_crops: bool = Query(False, description="Only return images with no detection crops"),
     has_manual_detections: bool = Query(False, description="Images with at least one manually drawn detection"),
-    sort: str = Query("newest", description="Sort order: newest | oldest | most_detections | fewest_detections"),
+    sort: str = Query("newest", description="newest | oldest | most_detections | fewest_detections | last_modified"),
     user_id: int = Depends(require_auth),
     environment_id: int = Depends(require_env_id),
 ):
     """Paginated list of processed source images.
     Optional filters: identity_id (repeatable, AND semantics), type (face/object),
     since, until, external_ref, no_detections, no_tagged_faces, has_manual_detections.
-    sort: newest (default), oldest, most_detections, fewest_detections."""
+    sort: newest (default), oldest, most_detections, fewest_detections, last_modified."""
     t0 = time.monotonic()
     if type and type not in ("face", "object"):
         raise HTTPException(400, "type must be 'face' or 'object'")
@@ -100,6 +100,8 @@ async def list_source_images(
     )
     if sort in ("most_detections", "fewest_detections"):
         cursor_fn = lambda r: f"{r['detection_count']}_{r['id']}"  # noqa: E731
+    elif sort == "last_modified":
+        cursor_fn = lambda r: f"{r['updated_at'] or r['uploaded_at']}_{r['id']}"  # noqa: E731
     else:
         cursor_fn = lambda r: f"{r['uploaded_at']}_{r['id']}"  # noqa: E731
     result = paginate(rows, limit, lambda r: {
@@ -112,6 +114,7 @@ async def list_source_images(
         "object_count": r["object_count"],
         "detection_count": r["detection_count"],
         "uploaded_at": r["uploaded_at"],
+        "updated_at": r["updated_at"],
         "scene_tags": json.loads(r["scene_tags"]) if r["scene_tags"] else [],
     }, cursor_fn=cursor_fn)
     logger.debug("GET /api/images: %d items sort=%s %.0fms",
