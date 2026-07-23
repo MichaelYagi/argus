@@ -169,7 +169,7 @@ Detections below the match threshold go into a review queue (`/review`). Each it
 
 - **Suggested matches** — faces with a plausible identity match below the auto-confirm threshold. Candidates are grouped by the suggested identity: each group has a header showing the name and count, plus **Confirm all** / **Reject all** buttons for one-click bulk action. Groups collapse and expand by clicking the header.
 - **No match** — faces that scored below the match threshold against all enrolled people.
-- **Mismatches** — confirmed faces whose embedding scores poorly against their identity's centroid, flagged as possible mislabels. Each card has a **Looks correct** button (suppress the flag) and a **Dismiss** button (unidentify — move back to the review queue). Mismatch detection uses a per-identity centroid (L2-normalized mean of all confirmed embeddings) and an adaptive threshold (mean − 2σ of similarity scores); identities with fewer than 3 confirmed faces fall back to the global mismatch threshold.
+- **Mismatches** — confirmed faces whose embedding scores poorly against their identity's centroid, flagged as possible mislabels. Each card has a **Looks correct** button (suppress the flag so it won't reappear) and a **Dismiss** button (unidentify — strip the assignment and move the face back to the review queue). Ignoring a card is fine: the face stays confirmed as that person and nothing changes. Mismatch detection uses a per-identity centroid (L2-normalized mean of all confirmed embeddings) and an adaptive threshold (mean − 2σ of similarity scores); identities with fewer than 3 confirmed faces fall back to the global mismatch threshold.
 
 **Keyboard shortcuts:**
 
