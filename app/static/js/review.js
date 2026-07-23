@@ -9,13 +9,39 @@
   const selNm = new Set();
   const selMm = new Set();
   const itemCache = new Map();
+  let focusedCard = null;
 
   const toTop = document.getElementById('scroll-top');
   const updateToTop = () => { if (toTop) toTop.style.display = window.scrollY > 300 ? 'flex' : 'none'; };
   window.addEventListener('scroll', updateToTop, { passive: true });
   if (toTop) toTop.addEventListener('click', () => window.scrollTo({ top: 0, behavior: 'smooth' }));
 
+  function setFocusedCard(card) {
+    if (focusedCard) focusedCard.classList.remove('rc-focused');
+    focusedCard = card || null;
+    if (focusedCard) {
+      focusedCard.classList.add('rc-focused');
+      focusedCard.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+    }
+  }
+
+  function getActivePanelCards() {
+    const panels = [
+      document.getElementById('panel-sg'),
+      document.getElementById('panel-nm'),
+      document.getElementById('panel-mm'),
+    ];
+    const lists = [suggestedList, nomatchList, mismatchList];
+    for (let i = 0; i < panels.length; i++) {
+      if (panels[i] && panels[i].style.display !== 'none') {
+        return [...lists[i].querySelectorAll('.rc-card')];
+      }
+    }
+    return [];
+  }
+
   window.switchTab = (tab, scroll = true) => {
+    setFocusedCard(null);
     document.getElementById('panel-sg').style.display = tab === 'sg' ? '' : 'none';
     document.getElementById('panel-nm').style.display = tab === 'nm' ? '' : 'none';
     document.getElementById('panel-mm').style.display = tab === 'mm' ? '' : 'none';
@@ -354,6 +380,11 @@
   function removeCard(id) {
     const card = document.getElementById('rc-' + id);
     if (card) {
+      if (card === focusedCard) {
+        const cards = getActivePanelCards();
+        const idx = cards.indexOf(card);
+        setFocusedCard(cards[idx + 1] || cards[idx - 1] || null);
+      }
       const tab = card.closest('#suggested-list') ? 'sg' : 'nm';
       updateTabBadge(tab, -1);
       card.remove();
@@ -367,7 +398,14 @@
 
   function removeMismatchCard(id) {
     const card = document.getElementById('rc-mm-' + id);
-    if (card) card.remove();
+    if (card) {
+      if (card === focusedCard) {
+        const cards = getActivePanelCards();
+        const idx = cards.indexOf(card);
+        setFocusedCard(cards[idx + 1] || cards[idx - 1] || null);
+      }
+      card.remove();
+    }
     selMm.delete(id);
     updateBars();
     updateTabBadge('mm', -1);
@@ -526,6 +564,24 @@
     });
     if (ok) { addFaceLabel(label); removeCard(id); }
   };
+
+  // ---------------------------------------------------------------------------
+  // Keyboard navigation — ↑/↓ move focus between cards in the active tab
+  // ---------------------------------------------------------------------------
+  document.addEventListener('keydown', e => {
+    if (e.key !== 'ArrowDown' && e.key !== 'ArrowUp') return;
+    const tag = document.activeElement?.tagName;
+    if (tag === 'INPUT' || tag === 'TEXTAREA' || document.activeElement?.isContentEditable) return;
+    e.preventDefault();
+    const cards = getActivePanelCards();
+    if (!cards.length) return;
+    const idx = focusedCard ? cards.indexOf(focusedCard) : -1;
+    if (e.key === 'ArrowDown') {
+      setFocusedCard(idx < cards.length - 1 ? cards[idx + 1] : cards[Math.max(0, idx)]);
+    } else {
+      setFocusedCard(idx > 0 ? cards[idx - 1] : cards[0]);
+    }
+  });
 
   // ---------------------------------------------------------------------------
   // Init
