@@ -793,10 +793,12 @@
       return;
     }
 
-    // Space — open magnified crop for focused card
+    // Space — toggle magnified crop for focused card
     if (e.key === ' ' && !e.shiftKey && !e.ctrlKey && !e.metaKey && !e.altKey) {
-      if (!focusedCard) return;
       e.preventDefault();
+      const existing = document.querySelector('.src-modal');
+      if (existing) { existing.remove(); return; }
+      if (!focusedCard) return;
       focusedCard.querySelector('.rc-crop-img')?.click();
       return;
     }
