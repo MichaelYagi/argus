@@ -64,10 +64,11 @@ router = APIRouter()
 
 @router.get("/api/review/count")
 async def review_count(
+    has_suggestion: bool | None = Query(None),
     user_id: int = Depends(require_auth),
     environment_id: int = Depends(require_env_id),
 ):
-    return {"count": store.count_pending_review(user_id, environment_id)}
+    return {"count": store.count_pending_review(user_id, environment_id, has_suggestion=has_suggestion)}
 
 
 @router.get("/api/review")

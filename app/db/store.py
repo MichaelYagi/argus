@@ -2033,16 +2033,26 @@ def count_unidentified(user_id: int, environment_id: int | None = None) -> int:
         ).fetchone()[0]
 
 
-def count_pending_review(user_id: int, environment_id: int | None = None) -> int:
+def count_pending_review(
+    user_id: int,
+    environment_id: int | None = None,
+    has_suggestion: bool | None = None,
+) -> int:
+    if has_suggestion is True:
+        suggestion_clause = " AND identity_id IS NOT NULL"
+    elif has_suggestion is False:
+        suggestion_clause = " AND identity_id IS NULL"
+    else:
+        suggestion_clause = ""
     with _connect() as conn:
         env_id = _resolve_env(conn, user_id, environment_id)
         return conn.execute(
-            """SELECT COUNT(*) FROM detections
+            f"""SELECT COUNT(*) FROM detections
                WHERE user_id = ? AND environment_id = ?
                  AND (review_status = 'rejected'
                       OR (review_status = 'pending'
                           AND (identity_id IS NOT NULL OR reviewed_at IS NULL)))
-                 AND type = 'face' AND ignored = 0""",
+                 AND type = 'face' AND ignored = 0{suggestion_clause}""",
             (user_id, env_id),
         ).fetchone()[0]
 

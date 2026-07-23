@@ -50,12 +50,35 @@
     badge.style.display = next === 0 ? 'none' : 'inline';
   }
 
-  function updateTabBadge(listEl, count) {
-    const id = listEl === suggestedList ? 'sg-tab-badge' : 'nm-tab-badge';
-    const badge = document.getElementById(id);
+  // Tab badge totals — fetched upfront, decremented as items are reviewed.
+  const tabCounts = { sg: 0, nm: 0 };
+
+  function updateTabBadge(tab, delta) {
+    tabCounts[tab] = Math.max(0, tabCounts[tab] + delta);
+    const badge = document.getElementById(tab + '-tab-badge');
     if (!badge) return;
-    badge.textContent = count || '';
-    badge.style.display = count ? '' : 'none';
+    const n = tabCounts[tab];
+    badge.textContent = n || '';
+    badge.style.display = n ? '' : 'none';
+  }
+
+  async function fetchTabCounts() {
+    const [sgResp, nmResp] = await Promise.all([
+      fetch('/api/review/count?has_suggestion=true'),
+      fetch('/api/review/count?has_suggestion=false'),
+    ]);
+    if (sgResp.ok) {
+      const d = await sgResp.json();
+      tabCounts.sg = d.count;
+      const badge = document.getElementById('sg-tab-badge');
+      if (badge) { badge.textContent = d.count || ''; badge.style.display = d.count ? '' : 'none'; }
+    }
+    if (nmResp.ok) {
+      const d = await nmResp.json();
+      tabCounts.nm = d.count;
+      const badge = document.getElementById('nm-tab-badge');
+      if (badge) { badge.textContent = d.count || ''; badge.style.display = d.count ? '' : 'none'; }
+    }
   }
 
   async function sendReview(url, opts) {
@@ -82,9 +105,8 @@
     ids.forEach(id => {
       const card = document.getElementById('rc-' + id);
       if (card) {
-        const loader = card.closest('#suggested-list') ? sgLoader : nmLoader;
-        loader.count = Math.max(0, loader.count - 1);
-        updateTabBadge(loader.listEl, loader.count);
+        const tab = card.closest('#suggested-list') ? 'sg' : 'nm';
+        updateTabBadge(tab, -1);
         card.remove();
       }
       sel.delete(id);
@@ -126,7 +148,6 @@
       cursor: null,
       hasMore: true,
       loading: false,
-      count: 0,
       sentinel: null,
     };
 
@@ -168,8 +189,6 @@
       loader.cursor = null;
       loader.hasMore = true;
       loader.loading = false;
-      loader.count = 0;
-      updateTabBadge(listEl, 0);
       listEl.innerHTML = '';
       if (loader.sentinel && !loader.sentinel.parentNode) {
         listEl.after(loader.sentinel);
@@ -197,8 +216,6 @@
     const name = matched ? esc(matched.label) : null;
     const currentId = matched ? matched.identity_id : null;
     const { listEl, sel } = loader;
-    loader.count++;
-    updateTabBadge(listEl, loader.count);
 
     const currentMatchData = item.suggested_matches.find(m => m.identity_id === currentId);
     const currentSimPct = currentMatchData ? `${(currentMatchData.similarity*100).toFixed(0)}%` : null;
@@ -293,9 +310,8 @@
   function removeCard(id) {
     const card = document.getElementById('rc-' + id);
     if (card) {
-      const loader = card.closest('#suggested-list') ? sgLoader : nmLoader;
-      loader.count = Math.max(0, loader.count - 1);
-      updateTabBadge(loader.listEl, loader.count);
+      const tab = card.closest('#suggested-list') ? 'sg' : 'nm';
+      updateTabBadge(tab, -1);
       card.remove();
     }
     selSg.delete(id); selNm.delete(id);
@@ -341,11 +357,13 @@
   const sgLoader = makeLoader(suggestedList, true,  selSg);
   const nmLoader = makeLoader(nomatchList,   false, selNm);
 
+  fetchTabCounts();
   sgLoader.loadPage();
   nmLoader.loadPage();
 
   window.addEventListener('pageshow', e => {
     if (!e.persisted) return;
+    fetchTabCounts();
     sgLoader.reset();
     nmLoader.reset();
   });
