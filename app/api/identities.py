@@ -453,67 +453,6 @@ async def query_detections(
     }
 
 
-class _SearchBody(BaseModel):
-    identity_ids: list[int] | None = None
-    type: str | None = None
-    since: str | None = None
-    until: str | None = None
-    confidence_min: float | None = None
-    cursor: str | None = None
-    limit: int = 40
-
-
-@router.post("/api/images/search", status_code=200)
-async def search_images(
-    body: _SearchBody,
-    user_id: int = Depends(require_auth),
-    environment_id: int = Depends(require_env_id),
-):
-    """Find source images matching all supplied filters.
-
-    identity_ids uses AND semantics — every listed identity must appear in the image.
-    type filters by detection type (face/object). since/until are ISO timestamps.
-    confidence_min filters by minimum detection confidence.
-    """
-    if body.type and body.type not in ("face", "object"):
-        raise HTTPException(400, "type must be 'face' or 'object'")
-    if body.limit < 1 or body.limit > 200:
-        raise HTTPException(400, "limit must be 1–200")
-    rows = store.search_source_images(
-        user_id,
-        environment_id=environment_id,
-        identity_ids=body.identity_ids or None,
-        detection_type=body.type,
-        since=body.since,
-        until=body.until,
-        confidence_min=body.confidence_min,
-        cursor=body.cursor,
-        limit=body.limit,
-    )
-    has_more = len(rows) > body.limit
-    items = rows[:body.limit]
-    next_cursor = (
-        f"{items[-1]['uploaded_at']}_{items[-1]['source_image_id']}"
-        if items and has_more else None
-    )
-    return {
-        "items": [
-            {
-                "source_image_id": r["source_image_id"],
-                "source_image_url": f"/media/sources/{r['file_path']}",
-                "external_ref": r["external_ref"],
-                "width": r["width"],
-                "height": r["height"],
-                "uploaded_at": r["uploaded_at"],
-                "image_tags": json.loads(r["image_tags"]) if r["image_tags"] else [],
-            }
-            for r in items
-        ],
-        "next_cursor": next_cursor,
-        "has_more": has_more,
-    }
-
-
 @router.get("/api/detections/unknown")
 async def unknown_detections(
     type: str | None = Query(None),

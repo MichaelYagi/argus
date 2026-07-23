@@ -121,7 +121,7 @@ async def unenroll_detection(
             "removed": removed, "enrolled": False}
 
 
-@router.delete("/api/face_embeddings/{embedding_id}", status_code=204)
+@router.delete("/api/face-embeddings/{embedding_id}", status_code=204)
 async def delete_embedding(
     embedding_id: int,
     user_id: int = Depends(require_auth),
@@ -141,7 +141,7 @@ async def delete_embedding(
     })
 
 
-@router.get("/api/face_embeddings")
+@router.get("/api/face-embeddings")
 async def list_embeddings(
     identity_id: int,
     user_id: int = Depends(require_auth),
@@ -153,7 +153,7 @@ async def list_embeddings(
     return [dict(r) for r in store.list_face_embeddings(identity_id)]
 
 
-@router.get("/api/face_embeddings/{embedding_id}")
+@router.get("/api/face-embeddings/{embedding_id}")
 async def get_embedding(
     embedding_id: int,
     user_id: int = Depends(require_auth),
@@ -165,7 +165,7 @@ async def get_embedding(
     return dict(row)
 
 
-@router.get("/api/face_embeddings/{embedding_id}/img")
+@router.get("/api/face-embeddings/{embedding_id}/img")
 async def get_embedding_img(
     embedding_id: int,
     user_id: int = Depends(require_auth),

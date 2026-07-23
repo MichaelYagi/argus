@@ -196,7 +196,7 @@ function localDateToUTC(dateStr, endOfDay) {
       else if (window.filterType)                        params.set('type', window.filterType);
       if (window.filterSince) params.set('since', localDateToUTC(window.filterSince, false));
       if (window.filterUntil) params.set('until', localDateToUTC(window.filterUntil, true));
-      const resp = await fetch('/api/source-images/ids?' + params);
+      const resp = await fetch('/api/images/ids?' + params);
       if (!resp.ok) return;
       const data = await resp.json();
       data.ids.forEach(id => selected.add(id));
@@ -354,7 +354,7 @@ function localDateToUTC(dateStr, endOfDay) {
       if (window.filterSince) params.set('since', localDateToUTC(window.filterSince, false));
       if (window.filterUntil) params.set('until', localDateToUTC(window.filterUntil, true));
       if (window.filterSort && window.filterSort !== 'newest') params.set('sort', window.filterSort);
-      const resp = await fetch('/api/source-images?' + params);
+      const resp = await fetch('/api/images?' + params);
       if (!resp.ok) throw new Error('fetch failed');
       const d = await resp.json();
       loadedItems.push(...d.items);
@@ -471,7 +471,7 @@ function localDateToUTC(dateStr, endOfDay) {
     if (window.filterSince) params.set('since', localDateToUTC(window.filterSince, false));
     if (window.filterUntil) params.set('until', localDateToUTC(window.filterUntil, true));
     try {
-      const resp = await fetch('/api/source-images/count?' + params);
+      const resp = await fetch('/api/images/count?' + params);
       if (!resp.ok) return;
       const { count } = await resp.json();
       countEl.textContent = count > 0 ? count.toLocaleString() : '';

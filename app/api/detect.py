@@ -1575,7 +1575,7 @@ def scan_unidentified(user_id: int, environment_id: int) -> dict:
     return {"scanned": len(rows), "confirmed": confirmed, "pending": pending, "dismissed": dismissed}
 
 
-@router.post("/api/faces/scan", status_code=200)
+@router.post("/api/detect/scan", status_code=200)
 async def scan_faces_endpoint(
     user_id: int = Depends(require_auth),
     environment_id: int = Depends(require_env_id),

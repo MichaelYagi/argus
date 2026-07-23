@@ -20,35 +20,10 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
-@router.get("/api/images")
-async def list_images_by_ref(
-    external_ref: str = Query(..., description="Opaque caller-owned correlation id"),
-    user_id: int = Depends(require_auth),
-    environment_id: int = Depends(require_env_id),
-):
-    """Resolve a caller's external_ref to Argus source image(s). Lets a client map its
-    own id back to source_image_id without tracking it at upload time."""
-    rows = store.list_source_images_by_ref(user_id, external_ref, environment_id)
-    return {
-        "items": [
-            {
-                "source_image_id": r["id"],
-                "external_ref": r["external_ref"],
-                "width": r["width"],
-                "height": r["height"],
-                "source_image_url": f"/media/sources/{r['file_path']}",
-                "uploaded_at": r["uploaded_at"],
-                "image_tags": json.loads(r["image_tags"]) if r["image_tags"] else [],
-            }
-            for r in rows
-        ],
-    }
-
-
 _VALID_SORTS = frozenset({"newest", "oldest", "most_detections", "fewest_detections"})
 
 
-@router.get("/api/source-images")
+@router.get("/api/images")
 async def list_source_images(
     cursor: str | None = Query(None),
     limit: int = Query(40, ge=1, le=200),
@@ -56,6 +31,7 @@ async def list_source_images(
     type: str | None = Query(None, description="Filter by detection type: face or object"),
     since: str | None = Query(None, description="ISO timestamp — images uploaded at or after"),
     until: str | None = Query(None, description="ISO timestamp — images uploaded at or before"),
+    external_ref: str | None = Query(None, description="Resolve images by caller-owned correlation id"),
     no_detections: bool = Query(False, description="Only return images with zero detections"),
     no_tagged_faces: bool = Query(False, description="Only return images with no identified faces"),
     no_crops: bool = Query(False, description="Only return images with no detection crops"),
@@ -64,9 +40,9 @@ async def list_source_images(
     user_id: int = Depends(require_auth),
     environment_id: int = Depends(require_env_id),
 ):
-    """Paginated list of all processed source images (one row per image).
+    """Paginated list of processed source images.
     Optional filters: identity_id (repeatable, AND semantics), type (face/object),
-    since, until, no_detections, no_tagged_faces, has_manual_detections.
+    since, until, external_ref, no_detections, no_tagged_faces, has_manual_detections.
     sort: newest (default), oldest, most_detections, fewest_detections."""
     t0 = time.monotonic()
     if type and type not in ("face", "object"):
@@ -74,6 +50,22 @@ async def list_source_images(
     if sort not in _VALID_SORTS:
         raise HTTPException(400, f"sort must be one of: {', '.join(sorted(_VALID_SORTS))}")
     import asyncio
+    if external_ref is not None:
+        rows = store.list_source_images_by_ref(user_id, external_ref, environment_id)
+        return {
+            "items": [
+                {
+                    "source_image_id": r["id"],
+                    "external_ref": r["external_ref"],
+                    "width": r["width"],
+                    "height": r["height"],
+                    "source_image_url": f"/media/sources/{r['file_path']}",
+                    "uploaded_at": r["uploaded_at"],
+                    "image_tags": json.loads(r["image_tags"]) if r["image_tags"] else [],
+                }
+                for r in rows
+            ],
+        }
     rows = await asyncio.to_thread(
         store.list_source_images,
         user_id, cursor=cursor, limit=limit, environment_id=environment_id,
@@ -97,12 +89,12 @@ async def list_source_images(
         "uploaded_at": r["uploaded_at"],
         "image_tags": json.loads(r["image_tags"]) if r["image_tags"] else [],
     }, cursor_fn=cursor_fn)
-    logger.debug("GET /api/source-images: %d items sort=%s %.0fms",
+    logger.debug("GET /api/images: %d items sort=%s %.0fms",
                  len(result.get("items", [])), sort, (time.monotonic() - t0) * 1000)
     return result
 
 
-@router.get("/api/source-images/count")
+@router.get("/api/images/count")
 async def count_source_images(
     identity_id: list[int] = Query(default=[]),
     type: str | None = Query(None),
@@ -130,7 +122,7 @@ async def count_source_images(
     return {"count": count}
 
 
-@router.get("/api/source-images/ids")
+@router.get("/api/images/ids")
 async def list_source_image_ids(
     identity_id: list[int] = Query(default=[]),
     type: str | None = Query(None),
@@ -475,7 +467,7 @@ class _TagItem(BaseModel):
     label: str | None = None
 
 
-@router.post("/api/images/{source_image_id}/tag", status_code=200)
+@router.post("/api/images/{source_image_id}/label", status_code=200)
 async def tag_image(
     source_image_id: int,
     items: list[_TagItem],

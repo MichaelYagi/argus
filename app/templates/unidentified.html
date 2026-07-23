@@ -129,7 +129,7 @@ const gallery = ArgusGallery({
   },
 
   async preInit() {
-    try { await fetch('/api/faces/scan', { method: 'POST' }); } catch (_) {}
+    try { await fetch('/api/detect/scan', { method: 'POST' }); } catch (_) {}
   },
 
   filterRestored(items) {

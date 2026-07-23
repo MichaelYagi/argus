@@ -1,4 +1,4 @@
-"""Tests for GET /api/images/{id}/faces, POST /api/images/{id}/tag, manual detection endpoints."""
+"""Tests for GET /api/images/{id}/faces, POST /api/images/{id}/label, manual detection endpoints."""
 
 from __future__ import annotations
 
@@ -45,7 +45,7 @@ def _insert_source(user_id: int, filename: str = "photo.jpg") -> int:
 
 
 # ---------------------------------------------------------------------------
-# GET /api/source-images — justified Images page backend
+# GET /api/images — justified Images page backend
 # ---------------------------------------------------------------------------
 
 def test_source_images_lists_with_shape(client):
@@ -53,7 +53,7 @@ def test_source_images_lists_with_shape(client):
     _insert_source(user_id, "a.jpg")
     _insert_source(user_id, "b.jpg")
 
-    r = client.get("/api/source-images", headers=h)
+    r = client.get("/api/images", headers=h)
     assert r.status_code == 200
     data = r.json()
     assert {"items", "next_cursor", "has_more"} <= data.keys()
@@ -71,7 +71,7 @@ def test_source_images_no_duplicates_on_reprocess(client):
     id2 = store.get_or_create_source_image(user_id, "dup.jpg", 800, 600)
     assert id1 == id2
 
-    items = client.get("/api/source-images", headers=h).json()["items"]
+    items = client.get("/api/images", headers=h).json()["items"]
     assert len(items) == 1
 
 
@@ -80,17 +80,17 @@ def test_source_images_pagination_no_overlap(client):
     for i in range(5):
         _insert_source(user_id, f"img{i}.jpg")
 
-    p1 = client.get("/api/source-images?limit=2", headers=h).json()
+    p1 = client.get("/api/images?limit=2", headers=h).json()
     assert p1["has_more"] is True and len(p1["items"]) == 2
 
-    p2 = client.get(f"/api/source-images?limit=2&cursor={p1['next_cursor']}", headers=h).json()
+    p2 = client.get(f"/api/images?limit=2&cursor={p1['next_cursor']}", headers=h).json()
     ids1 = {it["source_image_id"] for it in p1["items"]}
     ids2 = {it["source_image_id"] for it in p2["items"]}
     assert ids1.isdisjoint(ids2)  # no repeats across pages despite uploaded_at ties
 
 
 def test_source_images_requires_auth(client):
-    r = client.get("/api/source-images")
+    r = client.get("/api/images")
     assert r.status_code in (401, 403)
 
 
@@ -234,7 +234,7 @@ def test_delete_source_image_not_accessible_by_other_user(client):
 
 
 # ---------------------------------------------------------------------------
-# POST /api/images/{id}/tag
+# POST /api/images/{id}/label
 # ---------------------------------------------------------------------------
 
 def test_tag_labels_faces(client):
@@ -244,7 +244,7 @@ def test_tag_labels_faces(client):
     d2 = _insert_face(user_id, src_id)
     iid, _ = store.get_or_create_identity(user_id, "face", "Noah")
 
-    r = client.post(f"/api/images/{src_id}/tag", json=[
+    r = client.post(f"/api/images/{src_id}/label", json=[
         {"detection_id": d1, "identity_id": iid},
         {"detection_id": d2, "label": "Sarah"},
     ], headers=h)
@@ -261,7 +261,7 @@ def test_tag_creates_identity_from_label(client):
     src_id = _insert_source(user_id)
     d1 = _insert_face(user_id, src_id)
 
-    client.post(f"/api/images/{src_id}/tag", json=[
+    client.post(f"/api/images/{src_id}/label", json=[
         {"detection_id": d1, "label": "BrandNew"},
     ], headers=h)
 
@@ -275,7 +275,7 @@ def test_tag_wrong_image_detection_returns_not_found(client):
     src2 = _insert_source(user_id, "photo2.jpg")
     d_on_src2 = _insert_face(user_id, src2)
 
-    r = client.post(f"/api/images/{src1}/tag", json=[
+    r = client.post(f"/api/images/{src1}/label", json=[
         {"detection_id": d_on_src2, "label": "X"},
     ], headers=h)
 
@@ -583,7 +583,7 @@ def test_has_manual_detections_filter_returns_only_manual_images(client):
     _insert_manual_detection(user_id, src_manual)
     _insert_face(user_id, src_auto, label="Alice")
 
-    r = client.get("/api/source-images?has_manual_detections=true", headers=h)
+    r = client.get("/api/images?has_manual_detections=true", headers=h)
     assert r.status_code == 200
     ids = [it["source_image_id"] for it in r.json()["items"]]
     assert src_manual in ids
@@ -598,7 +598,7 @@ def test_has_manual_detections_filter_includes_mixed_images(client):
     _insert_face(user_id, src_mixed, label="Alice")
     _insert_manual_detection(user_id, src_mixed)
 
-    r = client.get("/api/source-images?has_manual_detections=true", headers=h)
+    r = client.get("/api/images?has_manual_detections=true", headers=h)
     assert r.status_code == 200
     ids = [it["source_image_id"] for it in r.json()["items"]]
     assert src_mixed in ids
@@ -609,7 +609,7 @@ def test_has_manual_detections_filter_excludes_auto_only_images(client):
     src_auto = _insert_source(user_id, "auto.jpg")
     _insert_face(user_id, src_auto, label="Alice")
 
-    r = client.get("/api/source-images?has_manual_detections=true", headers=h)
+    r = client.get("/api/images?has_manual_detections=true", headers=h)
     assert r.status_code == 200
     ids = [it["source_image_id"] for it in r.json()["items"]]
     assert src_auto not in ids
@@ -623,7 +623,7 @@ def test_has_manual_detections_count(client):
     _insert_manual_detection(user_id, src_manual)
     _insert_face(user_id, src_auto, label="Alice")
 
-    r = client.get("/api/source-images/count?has_manual_detections=true", headers=h)
+    r = client.get("/api/images/count?has_manual_detections=true", headers=h)
     assert r.status_code == 200
     assert r.json()["count"] == 1
 
@@ -636,7 +636,7 @@ def test_has_manual_detections_ids(client):
     _insert_manual_detection(user_id, src_manual)
     _insert_face(user_id, src_auto, label="Alice")
 
-    r = client.get("/api/source-images/ids?has_manual_detections=true", headers=h)
+    r = client.get("/api/images/ids?has_manual_detections=true", headers=h)
     assert r.status_code == 200
     ids = r.json()["ids"]
     assert src_manual in ids
@@ -665,11 +665,11 @@ def test_has_manual_detections_isolated_per_user(client):
     _insert_face(user1, src1, label="Alice")
     _insert_manual_detection(user2, src2)
 
-    r1 = client.get("/api/source-images?has_manual_detections=true", headers=h1)
+    r1 = client.get("/api/images?has_manual_detections=true", headers=h1)
     assert r1.status_code == 200
     assert r1.json()["items"] == []
 
-    r2 = client.get("/api/source-images?has_manual_detections=true", headers=h2)
+    r2 = client.get("/api/images?has_manual_detections=true", headers=h2)
     assert r2.status_code == 200
     ids2 = [it["source_image_id"] for it in r2.json()["items"]]
     assert src2 in ids2
