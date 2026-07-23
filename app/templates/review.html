@@ -17,6 +17,15 @@
   <button class="tab-btn" id="tab-mm" onclick="switchTab('mm')">
     Mismatches <span id="mm-tab-badge" class="tab-count"></span>
   </button>
+  <div class="rq-shortcuts">
+    <span><kbd>↑</kbd><kbd>↓</kbd> navigate</span>
+    <span><kbd>Space</kbd> magnify</span>
+    <span><kbd>C</kbd> confirm</span>
+    <span><kbd>D</kbd> dismiss</span>
+    <span><kbd>A</kbd> select all</span>
+    <span><kbd>⇧C</kbd> confirm sel.</span>
+    <span><kbd>⇧D</kbd> dismiss sel.</span>
+  </div>
 </div>
 
 <!-- Suggested matches panel -->
@@ -71,6 +80,17 @@
 
 {% block head %}
 <style>
+  .rq-shortcuts { display: none; }
+  @media (min-width: 900px) {
+    .rq-shortcuts {
+      display: flex; align-items: center; flex-wrap: wrap; gap: 4px 10px;
+      margin-left: auto; padding: 0 4px 6px; font-size: 11px; color: var(--muted);
+    }
+    .rq-shortcuts kbd {
+      display: inline-block; padding: 1px 4px; border: 1px solid var(--border);
+      border-radius: 3px; font-size: 10px; line-height: 1.5; font-family: inherit;
+    }
+  }
   .rc-card.rc-focused { outline: 2px solid var(--accent); outline-offset: 1px; }
   .sg-group { border: 1px solid var(--border); border-radius: 6px; margin-bottom: 12px; overflow: hidden; }
   .sg-group-hd { display: flex; align-items: center; gap: 10px; padding: 10px 14px; background: var(--surface-2); cursor: pointer; user-select: none; }
