@@ -677,9 +677,9 @@
         <span class="sg-group-ct muted">${n} ${n === 1 ? 'face' : 'faces'}</span>
         <div class="sg-group-acts" onclick="event.stopPropagation()">
           <button class="btn btn-success" style="font-size:12px;padding:4px 10px"
-                  onclick="confirmGroup(${group.identity_id})">Confirm all</button>
+                  onclick="confirmGroup(${group.identity_id})">Confirm group</button>
           <button class="btn btn-danger" style="font-size:12px;padding:4px 10px"
-                  onclick="dismissGroup(${group.identity_id})">Dismiss all</button>
+                  onclick="dismissGroup(${group.identity_id})">Dismiss group</button>
         </div>
       </div>
       <div class="sg-group-bd" id="sg-group-bd-${group.identity_id}"></div>`;
