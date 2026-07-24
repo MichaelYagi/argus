@@ -1352,6 +1352,19 @@ def get_source_image(source_image_id: int, user_id: int, environment_id: int | N
         ).fetchone()
 
 
+def get_source_image_with_counts(source_image_id: int, user_id: int, environment_id: int | None = None) -> sqlite3.Row | None:
+    """Single source image row with face_count / object_count / detection_count."""
+    with _connect() as conn:
+        env_id = _resolve_env(conn, user_id, environment_id)
+        inner, params = _source_images_inner(
+            user_id, env_id, None, None, None, None, False, False, False,
+        )
+        params.append(source_image_id)
+        return conn.execute(
+            f"WITH base AS ({inner}) SELECT * FROM base WHERE id = ?", params
+        ).fetchone()
+
+
 def list_source_images_by_ref(
     user_id: int, external_ref: str, environment_id: int | None = None
 ) -> list[sqlite3.Row]:

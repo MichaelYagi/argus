@@ -284,6 +284,46 @@ async def get_source_image_url(
     return {"image_url": f"/media/sources/{src['file_path']}"}
 
 
+@router.get(
+    "/api/images/{source_image_id}",
+    responses={
+        **ok({
+            "source_image_id": 7,
+            "face_count": 2,
+            "object_count": 1,
+            "detection_count": 3,
+        }),
+        **ERR_401,
+        **ERR_404,
+    },
+)
+async def get_source_image(
+    source_image_id: int,
+    user_id: int = Depends(require_auth),
+    environment_id: int = Depends(require_env_id),
+):
+    """Single source image with current face_count / object_count / detection_count."""
+    import asyncio
+    row = await asyncio.to_thread(
+        store.get_source_image_with_counts, source_image_id, user_id, environment_id
+    )
+    if row is None:
+        raise HTTPException(404, "Image not found")
+    return {
+        "source_image_id": row["id"],
+        "external_ref": row["external_ref"],
+        "source_image_url": f"/media/sources/{row['file_path']}?h=300",
+        "width": row["width"],
+        "height": row["height"],
+        "face_count": row["face_count"],
+        "object_count": row["object_count"],
+        "detection_count": row["detection_count"],
+        "uploaded_at": row["uploaded_at"],
+        "updated_at": row["updated_at"],
+        "scene_tags": json.loads(row["scene_tags"]) if row["scene_tags"] else [],
+    }
+
+
 @router.delete(
     "/api/images/{source_image_id}",
     status_code=200,
