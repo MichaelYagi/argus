@@ -21,12 +21,12 @@
     <span><kbd>↑</kbd><kbd>↓</kbd><kbd>W</kbd><kbd>S</kbd> navigate</span>
     <span><kbd>Space</kbd> magnify</span>
     <span><kbd>C</kbd> confirm</span>
-    <span><kbd>D</kbd> dismiss</span>
-    <span><kbd>F</kbd> confirm group</span>
-    <span><kbd>V</kbd> reject group</span>
+    <span><kbd>D</kbd> dismiss / remove</span>
+    <span><kbd>V</kbd> confirm group</span>
+    <span><kbd>F</kbd> dismiss group</span>
     <span><kbd>A</kbd> select all</span>
     <span><kbd>⇧C</kbd> confirm sel.</span>
-    <span><kbd>⇧D</kbd> dismiss sel.</span>
+    <span><kbd>⇧D</kbd> dismiss / remove sel.</span>
   </div>
 </div>
 
@@ -50,7 +50,7 @@
       <input type="checkbox" id="nm-select-all" onchange="nmSelectAll(this)"> Select all
     </label>
     <span class="muted" style="font-size:13px"><span id="nm-count">0</span> selected</span>
-    <button id="nm-dismiss-btn" class="btn btn-danger" onclick="nmDismiss()" disabled>Dismiss selected</button>
+    <button id="nm-dismiss-btn" class="btn btn-danger" onclick="nmDismiss()" disabled>Remove selected</button>
   </div>
   <div id="nomatch-list"></div>
 </div>
@@ -59,7 +59,7 @@
 <div id="panel-mm" style="display:none">
   <p class="muted" style="font-size:13px;margin-bottom:12px">
     Confirmed faces that score poorly against their identity's centroid — possible mislabels.
-    Ignoring a card is fine: the assignment stays. Use <strong>Looks correct</strong> to suppress the flag, or <strong>Dismiss</strong> to unidentify and return to the review queue.
+    Ignoring a card is fine: the assignment stays. Use <strong>Looks correct</strong> to suppress the flag, or <strong>Remove</strong> to unidentify and return to the review queue.
   </p>
   <div class="review-bulk" style="border-left-color:var(--accent)">
     <label style="display:flex;align-items:center;gap:6px;font-size:13px;cursor:pointer">
@@ -67,7 +67,7 @@
     </label>
     <span class="muted" style="font-size:13px"><span id="mm-count">0</span> selected</span>
     <button id="mm-confirm-btn" class="btn btn-success" onclick="mmConfirm()" disabled>Confirm selected</button>
-    <button id="mm-dismiss-btn" class="btn btn-danger" onclick="mmDismiss()" disabled>Dismiss selected</button>
+    <button id="mm-dismiss-btn" class="btn btn-danger" onclick="mmDismiss()" disabled>Remove selected</button>
   </div>
   <div id="mismatch-list"></div>
 </div>

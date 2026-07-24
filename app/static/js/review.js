@@ -169,7 +169,7 @@
       nmLoader.checkEmpty();
     }
     if (window.showToast) {
-      const verb = action === 'confirm' ? ' confirmed' : action === 'reject' ? ' rejected' : ' dismissed';
+      const verb = action === 'confirm' ? ' confirmed' : action === 'reject' ? ' dismissed' : ' removed';
       showToast(ids.length + verb, 'success');
     }
   }
@@ -234,7 +234,7 @@
     selMm.clear();
     if (mmAll) mmAll.checked = false;
     updateBars();
-    if (window.showToast) showToast(ids.length + ' dismissed', 'success');
+    if (window.showToast) showToast(ids.length + ' removed', 'success');
   };
 
   function toggleAll(listEl, sel, on) {
@@ -374,7 +374,7 @@
             <a class="rc-tag-link" href="/tag/${item.source_image_id}?focus=${item.detection_id}" style="font-size:12px;margin-left:4px;white-space:nowrap">View in image</a>
           </div>` : `
           <div style="margin-bottom:10px;display:flex;align-items:center;gap:8px">
-            <button class="btn btn-ghost" onclick="doDismiss(${item.detection_id})">Dismiss</button>
+            <button class="btn btn-ghost" onclick="doDismiss(${item.detection_id})">Remove</button>
             <a class="rc-tag-link" href="/tag/${item.source_image_id}?focus=${item.detection_id}" style="font-size:12px;white-space:nowrap">View in image</a>
           </div>`}
 
@@ -507,7 +507,7 @@
 
           <div style="display:flex;gap:6px;margin-bottom:10px;align-items:center;flex-wrap:wrap">
             <button class="btn btn-ghost" onclick="doMismatchOk(${item.detection_id})">Looks correct</button>
-            <button class="btn btn-ghost" onclick="doMismatchDismiss(${item.detection_id})">Dismiss</button>
+            <button class="btn btn-ghost" onclick="doMismatchDismiss(${item.detection_id})">Remove</button>
             ${item.source_image_id
               ? `<a class="rc-tag-link" href="/tag/${item.source_image_id}?focus=${item.detection_id}" style="font-size:12px;white-space:nowrap">View in image</a>`
               : ''}
@@ -579,7 +579,7 @@
   window.doMismatchDismiss = async id => {
     if (await sendReview('/api/review/' + id + '/unidentify', { method: 'POST' })) {
       removeMismatchCard(id);
-      if (window.showToast) showToast('Dismissed', 'success');
+      if (window.showToast) showToast('Removed', 'success');
     }
   };
 
@@ -679,7 +679,7 @@
           <button class="btn btn-success" style="font-size:12px;padding:4px 10px"
                   onclick="confirmGroup(${group.identity_id})">Confirm all</button>
           <button class="btn btn-danger" style="font-size:12px;padding:4px 10px"
-                  onclick="rejectGroup(${group.identity_id})">Reject all</button>
+                  onclick="dismissGroup(${group.identity_id})">Dismiss all</button>
         </div>
       </div>
       <div class="sg-group-bd" id="sg-group-bd-${group.identity_id}"></div>`;
@@ -715,7 +715,7 @@
     if (window.showToast) showToast(ids.length + ' confirmed', 'success');
   };
 
-  window.rejectGroup = async identityId => {
+  window.dismissGroup = async identityId => {
     const group = document.getElementById('sg-group-' + identityId);
     if (!group) return;
     const ids = [...group.querySelectorAll('.rc-card')].map(c => parseInt(c.id.replace('rc-', '')));
@@ -738,7 +738,7 @@
       if (item) renderItem({ ...item, current_identity: null, suggested_matches: [] }, nmLoader);
     });
     nmLoader.checkEmpty();
-    if (window.showToast) showToast(ids.length + ' rejected', 'success');
+    if (window.showToast) showToast(ids.length + ' dismissed', 'success');
   };
 
   // ---------------------------------------------------------------------------
@@ -800,8 +800,8 @@
       return;
     }
 
-    // F — confirm group of focused card (sg only)
-    if (e.key === 'f' && !e.shiftKey && !e.ctrlKey && !e.metaKey && !e.altKey) {
+    // V — confirm group of focused card (sg only)
+    if (e.key === 'v' && !e.shiftKey && !e.ctrlKey && !e.metaKey && !e.altKey) {
       if (activeTab !== 'sg' || !focusedCard) return;
       const group = focusedCard.closest('.sg-group');
       if (!group) return;
@@ -810,13 +810,13 @@
       return;
     }
 
-    // V — reject group of focused card (sg only)
-    if (e.key === 'v' && !e.shiftKey && !e.ctrlKey && !e.metaKey && !e.altKey) {
+    // F — dismiss group of focused card (sg only)
+    if (e.key === 'f' && !e.shiftKey && !e.ctrlKey && !e.metaKey && !e.altKey) {
       if (activeTab !== 'sg' || !focusedCard) return;
       const group = focusedCard.closest('.sg-group');
       if (!group) return;
       e.preventDefault();
-      window.rejectGroup(parseInt(group.id.replace('sg-group-', '')));
+      window.dismissGroup(parseInt(group.id.replace('sg-group-', '')));
       return;
     }
 
