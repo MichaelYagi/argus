@@ -280,7 +280,9 @@ async function deleteDetection(div) {
     if (fi !== -1) FACES.splice(fi, 1);
     renderDetList();
     setStatus('Detection deleted.');
-    sessionStorage.setItem('argus_dirty_image', '{{ source_image_id }}');
+    sessionStorage.setItem('argus_dirty_image', JSON.stringify(
+      { id: {{ source_image_id }}, face_count: FACES.length, object_count: OBJECTS.length }
+    ));
   } else {
     setStatus('Error deleting detection.');
   }
@@ -874,7 +876,9 @@ if (FACES.length && OBJECTS.length) {
       age: null, gender: null, pose: null,
     };
     FACES.push(newFace);
-    sessionStorage.setItem('argus_dirty_image', '{{ source_image_id }}');
+    sessionStorage.setItem('argus_dirty_image', JSON.stringify(
+      { id: {{ source_image_id }}, face_count: FACES.length, object_count: OBJECTS.length }
+    ));
 
     const img = document.getElementById('tag-photo');
     const sx  = img.clientWidth  / NAT_W;
