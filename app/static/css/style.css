@@ -593,9 +593,9 @@ input[type=range] { width: 150px; cursor: pointer; }
 #tag-wrap.hide-objects .t-box.object { display: none; }
 #tag-wrap.draw-mode { cursor: crosshair; user-select: none; touch-action: none; overflow: hidden; }
 #tag-wrap.draw-mode .t-box { pointer-events: none; }
-#tag-wrap.bboxes-hidden .t-box { opacity: 0.2; pointer-events: none; }
+#tag-wrap.bboxes-hidden .t-box { opacity: 0.35; pointer-events: none; }
 #tag-wrap.bboxes-hidden .t-box .t-tip,
-#tag-wrap.bboxes-hidden .t-box .t-chip { display: none; }
+#tag-wrap.bboxes-hidden .t-box .t-chip { visibility: hidden; }
 #zoom-layer { position: relative; transform-origin: 0 0; }
 .draw-rect { position: absolute; border: 2px dashed #ff0; pointer-events: none; box-sizing: border-box; z-index: 20; }
 .tag-nav { display: flex; align-items: center; justify-content: center;
