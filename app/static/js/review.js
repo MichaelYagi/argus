@@ -419,6 +419,7 @@
     const card = document.getElementById('rc-' + id);
     if (card) {
       const wasFocused = card === focusedCard;
+      const prevIdx = wasFocused ? Array.from(getActivePanelCards()).indexOf(card) : -1;
       if (wasFocused) setFocusedCard(null);
       const tab = card.closest('#suggested-list') ? 'sg' : 'nm';
       updateTabBadge(tab, -1);
@@ -432,7 +433,10 @@
           if (ct) ct.textContent = remaining + (remaining === 1 ? ' face' : ' faces');
         }
       }
-      if (wasFocused) setFocusedCard(getActivePanelCards()[0] || null);
+      if (wasFocused) {
+        const rem = getActivePanelCards();
+        setFocusedCard(rem[prevIdx] || rem[prevIdx - 1] || null);
+      }
     }
     selSg.delete(id); selNm.delete(id);
     decrementBadge(1);
@@ -445,9 +449,13 @@
     const card = document.getElementById('rc-mm-' + id);
     if (card) {
       const wasFocused = card === focusedCard;
+      const prevIdx = wasFocused ? Array.from(getActivePanelCards()).indexOf(card) : -1;
       if (wasFocused) setFocusedCard(null);
       card.remove();
-      if (wasFocused) setFocusedCard(getActivePanelCards()[0] || null);
+      if (wasFocused) {
+        const rem = getActivePanelCards();
+        setFocusedCard(rem[prevIdx] || rem[prevIdx - 1] || null);
+      }
     }
     selMm.delete(id);
     updateBars();
