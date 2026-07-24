@@ -566,6 +566,7 @@ if (FACES.length && OBJECTS.length) {
   function enterDrawMode() {
     drawMode = true;
     wrap.classList.add('draw-mode');
+    wrap.classList.add('bboxes-hidden');
     drawBtn.textContent = 'Cancel draw';
     drawBtn.style.borderColor = 'var(--accent)';
     drawBtn.style.color = 'var(--accent)';
@@ -575,6 +576,7 @@ if (FACES.length && OBJECTS.length) {
   function exitDrawMode() {
     drawMode = false;
     wrap.classList.remove('draw-mode');
+    wrap.classList.remove('bboxes-hidden');
     drawBtn.textContent = 'Draw box';
     drawBtn.style.borderColor = '';
     drawBtn.style.color = '';
@@ -616,7 +618,12 @@ if (FACES.length && OBJECTS.length) {
     drawBtn.style.borderColor = '';
     drawBtn.style.color = '';
 
-    if (pw < 10 || ph < 10) { if (anchor) anchor.remove(); setStatus(''); return; }
+    if (pw < 10 || ph < 10) {
+      if (anchor) anchor.remove();
+      wrap.classList.remove('bboxes-hidden');
+      setStatus('');
+      return;
+    }
 
     const img = document.getElementById('tag-photo');
     const sx  = img.clientWidth  / NAT_W;
@@ -628,7 +635,14 @@ if (FACES.length && OBJECTS.length) {
 
     // Watch for popup close via backdrop/cancel (onConfirm not called in those cases).
     let done = false;
-    const cleanup = () => { if (!done) { done = true; if (anchor) anchor.remove(); setStatus(''); } };
+    const cleanup = () => {
+      if (!done) {
+        done = true;
+        if (anchor) anchor.remove();
+        wrap.classList.remove('bboxes-hidden');
+        setStatus('');
+      }
+    };
     const obs = new MutationObserver(() => {
       if (!document.querySelector('.label-backdrop')) { obs.disconnect(); cleanup(); }
     });
