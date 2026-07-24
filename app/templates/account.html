@@ -61,10 +61,7 @@
         <td style="padding:8px 0;text-align:right;display:flex;gap:4px;justify-content:flex-end">
           <button class="btn btn-ghost" style="padding:3px 10px;font-size:12px"
                   onclick="openKeyRename({{ k.id }}, '{{ (k.label or '') | replace("'", "\\'") }}')">Rename</button>
-          <form method="post" action="/account/key/{{ k.id }}/revoke" style="display:inline">
-            <button class="btn btn-ghost" style="padding:3px 10px;font-size:12px"
-                    title="Disable this key (keeps it in history)">Revoke</button>
-          </form>
+
           <button class="btn btn-danger" style="padding:3px 10px;font-size:12px"
                   onclick="showConfirm('Delete key &quot;{{ k.label or 'Unnamed' }}&quot;? This cannot be undone.',
                     () => document.getElementById('del-{{ k.id }}').submit(),
