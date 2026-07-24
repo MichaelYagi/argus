@@ -727,13 +727,16 @@
     const tag = document.activeElement?.tagName;
     const inInput = tag === 'INPUT' || tag === 'TEXTAREA' || document.activeElement?.isContentEditable;
 
-    if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+    if (e.key === 'ArrowDown' || e.key === 'ArrowUp' ||
+        (e.key === 's' && !e.shiftKey && !e.ctrlKey && !e.metaKey && !e.altKey) ||
+        (e.key === 'w' && !e.shiftKey && !e.ctrlKey && !e.metaKey && !e.altKey)) {
       if (inInput) return;
       e.preventDefault();
       const cards = getActivePanelCards();
       if (!cards.length) return;
       const idx = focusedCard ? cards.indexOf(focusedCard) : -1;
-      setFocusedCard(e.key === 'ArrowDown'
+      const down = e.key === 'ArrowDown' || e.key === 's';
+      setFocusedCard(down
         ? cards[idx < cards.length - 1 ? idx + 1 : Math.max(0, idx)]
         : cards[idx > 0 ? idx - 1 : 0]);
       return;
