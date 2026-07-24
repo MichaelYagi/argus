@@ -779,6 +779,26 @@
       return;
     }
 
+    // F — confirm group of focused card (sg only)
+    if (e.key === 'f' && !e.shiftKey && !e.ctrlKey && !e.metaKey && !e.altKey) {
+      if (activeTab !== 'sg' || !focusedCard) return;
+      const group = focusedCard.closest('.sg-group');
+      if (!group) return;
+      e.preventDefault();
+      window.confirmGroup(parseInt(group.id.replace('sg-group-', '')));
+      return;
+    }
+
+    // V — reject group of focused card (sg only)
+    if (e.key === 'v' && !e.shiftKey && !e.ctrlKey && !e.metaKey && !e.altKey) {
+      if (activeTab !== 'sg' || !focusedCard) return;
+      const group = focusedCard.closest('.sg-group');
+      if (!group) return;
+      e.preventDefault();
+      window.rejectGroup(parseInt(group.id.replace('sg-group-', '')));
+      return;
+    }
+
     // Shift+C — confirm selected
     if (e.key === 'C' && e.shiftKey && !e.ctrlKey && !e.metaKey && !e.altKey) {
       e.preventDefault();
