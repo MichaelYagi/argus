@@ -650,7 +650,9 @@ if (FACES.length && OBJECTS.length) {
     if (pw < 10 || ph < 10) {
       if (anchor) anchor.remove();
       wrap.classList.remove('bboxes-hidden');
+      resetZoom();
       setStatus('');
+      showToast('Draw cancelled — selection was too small');
       return;
     }
 
