@@ -61,9 +61,11 @@
 <div style="display:flex;align-items:center">
   <a id="prev-nav" class="tag-nav" href="#" style="display:none" aria-label="Previous image">&#8249;</a>
   <div id="tag-wrap">
-    <img id="tag-photo" src="{{ image_url }}" alt=""
-         onload="renderBoxes(); scrollWrapIntoView()"
-         onerror="this.style.display='none'; document.getElementById('tag-missing').style.display='flex'">
+    <div id="zoom-layer">
+      <img id="tag-photo" src="{{ image_url }}" alt=""
+           onload="renderBoxes(); scrollWrapIntoView()"
+           onerror="this.style.display='none'; document.getElementById('tag-missing').style.display='flex'">
+    </div>
     <div id="tag-missing" style="display:none;align-items:center;justify-content:center;min-height:200px;color:var(--muted);font-size:14px">
       Source image no longer on disk — detections below are still valid.
     </div>
@@ -106,6 +108,7 @@ function renderBoxes() {
   const sx = img.clientWidth / NAT_W;
   const sy = img.clientHeight / NAT_H;
   const wrap = document.getElementById('tag-wrap');
+  const zoomLayer = document.getElementById('zoom-layer');
   // Guard against duplicate renders: img onload and the window.load handler
   // can both call renderBoxes() when a cached image races CSS loading.
   if (wrap.querySelector('.t-box')) return;
@@ -171,7 +174,7 @@ function renderBoxes() {
       if (row) row.style.background = '';
     });
     div.appendChild(tip);
-    wrap.appendChild(div);
+    zoomLayer.appendChild(div);
   });
 
   if (focusEl) {
@@ -557,11 +560,34 @@ if (FACES.length && OBJECTS.length) {
 // ---- Manual bbox drawing ----
 (function() {
   let drawMode = false;
-  let drawRect = null;   // in-progress rubber-band div (absolute inside #tag-wrap)
-  let drawStart = null;  // {x, y} in px relative to #tag-wrap
+  let drawRect = null;   // in-progress rubber-band div (absolute inside zoom-layer)
+  let drawStart = null;  // {x, y} in local (zoom-layer) px
 
-  const drawBtn = document.getElementById('draw-bbox-btn');
-  const wrap    = document.getElementById('tag-wrap');
+  const drawBtn  = document.getElementById('draw-bbox-btn');
+  const wrap     = document.getElementById('tag-wrap');
+  const zoomLayer = document.getElementById('zoom-layer');
+
+  // Zoom/pan state — active only while in draw mode.
+  let zoom = 1, panX = 0, panY = 0;
+  let isPanning = false, panStart = null;
+  let pinching = false, touchInitState = null;
+
+  function applyTransform() {
+    zoomLayer.style.transform = `translate(${panX}px,${panY}px) scale(${zoom})`;
+  }
+
+  function clampPan() {
+    const img = document.getElementById('tag-photo');
+    const mxX = 0, mnX = Math.min(0, wrap.clientWidth  - img.clientWidth  * zoom);
+    const mxY = 0, mnY = Math.min(0, wrap.clientHeight - img.clientHeight * zoom);
+    panX = Math.min(mxX, Math.max(mnX, panX));
+    panY = Math.min(mxY, Math.max(mnY, panY));
+  }
+
+  function resetZoom() {
+    zoom = 1; panX = 0; panY = 0;
+    applyTransform();
+  }
 
   function enterDrawMode() {
     drawMode = true;
@@ -570,7 +596,7 @@ if (FACES.length && OBJECTS.length) {
     drawBtn.textContent = 'Cancel draw';
     drawBtn.style.borderColor = 'var(--accent)';
     drawBtn.style.color = 'var(--accent)';
-    setStatus('Click and drag to draw a bounding box. Press Esc to cancel.');
+    setStatus('Click and drag to draw a bounding box. Scroll or pinch to zoom. Right-click drag to pan. Double-click to reset zoom.');
   }
 
   function exitDrawMode() {
@@ -582,6 +608,9 @@ if (FACES.length && OBJECTS.length) {
     drawBtn.style.color = '';
     if (drawRect) { drawRect.remove(); drawRect = null; }
     drawStart = null;
+    pinching = false;
+    touchInitState = null;
+    resetZoom();
     setStatus('');
   }
 
@@ -597,7 +626,7 @@ if (FACES.length && OBJECTS.length) {
   function makeRubberBand() {
     const el = document.createElement('div');
     el.className = 'draw-rect';
-    wrap.appendChild(el);
+    zoomLayer.appendChild(el);
     return el;
   }
 
@@ -640,6 +669,7 @@ if (FACES.length && OBJECTS.length) {
         done = true;
         if (anchor) anchor.remove();
         wrap.classList.remove('bboxes-hidden');
+        resetZoom();
         setStatus('');
       }
     };
@@ -658,6 +688,18 @@ if (FACES.length && OBJECTS.length) {
   let lpTimer = null;
   let lpStart  = null;
 
+  // Convert a clientX/Y event coord to zoom-layer local coords.
+  function toLocal(clientX, clientY) {
+    const r = wrap.getBoundingClientRect();
+    return { x: (clientX - r.left - panX) / zoom, y: (clientY - r.top - panY) / zoom };
+  }
+
+  // Clamp local coords to image bounds.
+  function clampLocal(lx, ly) {
+    const img = document.getElementById('tag-photo');
+    return { x: Math.min(Math.max(0, lx), img.clientWidth), y: Math.min(Math.max(0, ly), img.clientHeight) };
+  }
+
   wrap.addEventListener('pointerdown', e => {
     if (e.pointerType === 'touch' && !drawMode) {
       if (e.target.closest('.t-box')) return;
@@ -665,10 +707,10 @@ if (FACES.length && OBJECTS.length) {
       lpTimer = setTimeout(() => { lpTimer = null; enterDrawMode(); }, 500);
       return;
     }
-    if (!drawMode) return;
+    if (!drawMode || pinching || e.button !== 0) return;
     wrap.setPointerCapture(e.pointerId);
-    const r = wrap.getBoundingClientRect();
-    drawStart = { x: e.clientX - r.left, y: e.clientY - r.top };
+    const local = toLocal(e.clientX, e.clientY);
+    drawStart = clampLocal(local.x, local.y);
     drawRect = makeRubberBand();
     updateRect(drawRect, drawStart.x, drawStart.y, 0, 0);
   });
@@ -680,23 +722,19 @@ if (FACES.length && OBJECTS.length) {
       }
     }
     if (!drawMode || !drawStart || !drawRect) return;
-    const r = wrap.getBoundingClientRect();
-    const cx = Math.min(Math.max(0, e.clientX - r.left), r.width);
-    const cy = Math.min(Math.max(0, e.clientY - r.top),  r.height);
+    const c = clampLocal(toLocal(e.clientX, e.clientY).x, toLocal(e.clientX, e.clientY).y);
     updateRect(drawRect,
-      Math.min(drawStart.x, cx), Math.min(drawStart.y, cy),
-      Math.abs(cx - drawStart.x), Math.abs(cy - drawStart.y));
+      Math.min(drawStart.x, c.x), Math.min(drawStart.y, c.y),
+      Math.abs(c.x - drawStart.x), Math.abs(c.y - drawStart.y));
   });
 
   wrap.addEventListener('pointerup', e => {
     clearTimeout(lpTimer); lpTimer = null; lpStart = null;
     if (!drawMode || !drawStart || !drawRect) return;
-    const r  = wrap.getBoundingClientRect();
-    const cx = Math.min(Math.max(0, e.clientX - r.left), r.width);
-    const cy = Math.min(Math.max(0, e.clientY - r.top),  r.height);
-    const px = Math.min(drawStart.x, cx);
-    const py = Math.min(drawStart.y, cy);
-    finishDraw(px, py, Math.abs(cx - drawStart.x), Math.abs(cy - drawStart.y));
+    const c  = clampLocal(toLocal(e.clientX, e.clientY).x, toLocal(e.clientX, e.clientY).y);
+    const px = Math.min(drawStart.x, c.x);
+    const py = Math.min(drawStart.y, c.y);
+    finishDraw(px, py, Math.abs(c.x - drawStart.x), Math.abs(c.y - drawStart.y));
   });
 
   wrap.addEventListener('pointercancel', () => {
@@ -707,6 +745,84 @@ if (FACES.length && OBJECTS.length) {
   // Prevent browser image-drag on desktop when drawing. dragstart never fires
   // on Android/touch so this listener has zero effect on mobile.
   document.addEventListener('dragstart', e => { if (drawMode) e.preventDefault(); });
+
+  // ---- Zoom: scroll wheel ----
+  wrap.addEventListener('wheel', e => {
+    if (!drawMode) return;
+    e.preventDefault();
+    const r = wrap.getBoundingClientRect();
+    const mx = e.clientX - r.left;
+    const my = e.clientY - r.top;
+    const factor = e.deltaY < 0 ? 1.15 : 1 / 1.15;
+    const newZoom = Math.min(Math.max(1, zoom * factor), 8);
+    panX = mx - (mx - panX) * newZoom / zoom;
+    panY = my - (my - panY) * newZoom / zoom;
+    zoom = newZoom;
+    clampPan();
+    applyTransform();
+  }, { passive: false });
+
+  // ---- Zoom: double-click to reset ----
+  wrap.addEventListener('dblclick', e => {
+    if (!drawMode) return;
+    e.preventDefault();
+    resetZoom();
+  });
+
+  // ---- Pan: right-click drag ----
+  wrap.addEventListener('contextmenu', e => { if (drawMode) e.preventDefault(); });
+  wrap.addEventListener('mousedown', e => {
+    if (!drawMode || e.button !== 2) return;
+    e.preventDefault();
+    isPanning = true;
+    panStart = { x: e.clientX, y: e.clientY, panX, panY };
+  });
+  document.addEventListener('mousemove', e => {
+    if (!isPanning) return;
+    panX = panStart.panX + (e.clientX - panStart.x);
+    panY = panStart.panY + (e.clientY - panStart.y);
+    clampPan();
+    applyTransform();
+  });
+  document.addEventListener('mouseup', e => { if (e.button === 2) isPanning = false; });
+
+  // ---- Zoom + pan: two-finger touch ----
+  function touchDist(t1, t2) { return Math.hypot(t1.clientX - t2.clientX, t1.clientY - t2.clientY); }
+  function touchCenter(t1, t2, r) {
+    return { x: (t1.clientX + t2.clientX) / 2 - r.left, y: (t1.clientY + t2.clientY) / 2 - r.top };
+  }
+  // touch-action:none (set by .draw-mode CSS) prevents native gestures so
+  // preventDefault() is not needed here and passive listeners are safe.
+  wrap.addEventListener('touchstart', e => {
+    if (!drawMode || e.touches.length < 2) return;
+    pinching = true;
+    clearTimeout(lpTimer); lpTimer = null;
+    if (drawRect) { drawRect.remove(); drawRect = null; drawStart = null; }
+    const r = wrap.getBoundingClientRect();
+    touchInitState = {
+      dist: touchDist(e.touches[0], e.touches[1]),
+      center: touchCenter(e.touches[0], e.touches[1], r),
+      zoom, panX, panY,
+    };
+  });
+  wrap.addEventListener('touchmove', e => {
+    if (!drawMode || !pinching || e.touches.length < 2) return;
+    const r = wrap.getBoundingClientRect();
+    const s = touchInitState;
+    const newDist = touchDist(e.touches[0], e.touches[1]);
+    const newCenter = touchCenter(e.touches[0], e.touches[1], r);
+    const newZoom = Math.min(Math.max(1, s.zoom * newDist / s.dist), 8);
+    const imgX = (s.center.x - s.panX) / s.zoom;
+    const imgY = (s.center.y - s.panY) / s.zoom;
+    panX = newCenter.x - imgX * newZoom;
+    panY = newCenter.y - imgY * newZoom;
+    zoom = newZoom;
+    clampPan();
+    applyTransform();
+  });
+  wrap.addEventListener('touchend', e => {
+    if (e.touches.length < 2) { pinching = false; touchInitState = null; }
+  });
 
   // Submit the drawn box to the server and add the new bbox div to the page.
   async function submitManualBox(bbox, label) {
@@ -777,7 +893,7 @@ if (FACES.length && OBJECTS.length) {
     tip.textContent = newFace.label || 'Unknown';
     div.addEventListener('click', () => labelBox(div, tip, chip));
     div.appendChild(tip);
-    wrap.appendChild(div);
+    zoomLayer.appendChild(div);
 
     renderDetList();
   }

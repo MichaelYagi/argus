@@ -88,12 +88,22 @@ def test_no_passive_false_touch_listener_in_tag_html():
     """{ passive: false } touch/pointer listeners on #tag-wrap break Android compositor.
 
     This was the original root cause of invisible bboxes on Android. Must not return.
+    Wheel events are not touch/pointer events and are not affected by the compositor issue.
     """
     tag = _tag_html()
-    assert "passive: false" not in tag, (
-        "tag.html contains '{ passive: false }' — this breaks the Android GPU compositor "
-        "for absolutely-positioned children of #tag-wrap"
+    touch_pointer_events = (
+        'touchstart', 'touchmove', 'touchend',
+        'pointerdown', 'pointermove', 'pointerup', 'pointercancel',
     )
+    # For each occurrence of { passive: false }, inspect up to 300 chars before it
+    # to see if it belongs to a touch/pointer addEventListener call.
+    for m in re.finditer(r'\{\s*passive\s*:\s*false\s*\}', tag):
+        context = tag[max(0, m.start() - 300):m.start()]
+        for event in touch_pointer_events:
+            assert event not in context, (
+                f"tag.html has a '{event}' listener with {{ passive: false }} — "
+                f"this breaks the Android GPU compositor for absolutely-positioned children of #tag-wrap"
+            )
 
 
 def test_no_draggable_false_on_tag_photo():
