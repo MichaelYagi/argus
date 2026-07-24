@@ -1352,7 +1352,9 @@ def get_source_image(source_image_id: int, user_id: int, environment_id: int | N
         ).fetchone()
 
 
-def get_source_image_with_counts(source_image_id: int, user_id: int, environment_id: int | None = None) -> sqlite3.Row | None:
+def get_source_image_with_counts(
+    source_image_id: int, user_id: int, environment_id: int | None = None
+) -> sqlite3.Row | None:
     """Single source image row with face_count / object_count / detection_count."""
     with _connect() as conn:
         env_id = _resolve_env(conn, user_id, environment_id)

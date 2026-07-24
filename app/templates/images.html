@@ -652,39 +652,48 @@ window.addEventListener('pageshow', async () => {
 
   const resp = await fetch('/api/images/' + id).catch(() => null);
   if (!resp || !resp.ok) return;
-  const item = await resp.json();
+  const freshItem = await resp.json();
 
-  const container = window._imagesContainer;
-  const card = container?.querySelector('[data-id="' + id + '"]');
-  if (card) {
-    const existing = card.querySelector('.g-det-counts');
-    if (existing) existing.remove();
-    if (item.face_count || item.object_count) {
-      const wrap = document.createElement('div');
-      wrap.className = 'g-det-counts';
-      wrap.style.cssText = 'position:absolute;bottom:6px;right:6px;z-index:2;display:flex;gap:3px;flex-wrap:wrap;justify-content:flex-end';
-      if (item.face_count) {
-        const b = document.createElement('span');
-        b.textContent = item.face_count + (item.face_count === 1 ? ' face' : ' faces');
-        b.style.cssText = 'background:#f93;color:#000;border-radius:99px;padding:1px 7px;font-size:11px;font-weight:600;line-height:16px;white-space:nowrap';
-        wrap.appendChild(b);
-      }
-      if (item.object_count) {
-        const b = document.createElement('span');
-        b.textContent = item.object_count + (item.object_count === 1 ? ' object' : ' objects');
-        b.style.cssText = 'background:#39f;color:#fff;border-radius:99px;padding:1px 7px;font-size:11px;font-weight:600;line-height:16px;white-space:nowrap';
-        wrap.appendChild(b);
-      }
-      card.appendChild(wrap);
+  function buildCounts() {
+    const wrap = document.createElement('div');
+    wrap.className = 'g-det-counts';
+    wrap.style.cssText = 'position:absolute;bottom:6px;right:6px;z-index:2;display:flex;gap:3px;flex-wrap:wrap;justify-content:flex-end';
+    if (freshItem.face_count) {
+      const b = document.createElement('span');
+      b.textContent = freshItem.face_count + (freshItem.face_count === 1 ? ' face' : ' faces');
+      b.style.cssText = 'background:#f93;color:#000;border-radius:99px;padding:1px 7px;font-size:11px;font-weight:600;line-height:16px;white-space:nowrap';
+      wrap.appendChild(b);
     }
+    if (freshItem.object_count) {
+      const b = document.createElement('span');
+      b.textContent = freshItem.object_count + (freshItem.object_count === 1 ? ' object' : ' objects');
+      b.style.cssText = 'background:#39f;color:#fff;border-radius:99px;padding:1px 7px;font-size:11px;font-weight:600;line-height:16px;white-space:nowrap';
+      wrap.appendChild(b);
+    }
+    return wrap;
   }
 
-  // Keep history.state in sync so a second bfcache restore shows the right counts.
+  function applyUpdate() {
+    const c = window._imagesContainer;
+    const card = c?.querySelector('[data-id="' + id + '"]');
+    if (!card) return false;
+    const existing = card.querySelector('.g-det-counts');
+    if (existing) existing.remove();
+    if (freshItem.face_count || freshItem.object_count) card.appendChild(buildCounts());
+    return true;
+  }
+
+  // Try immediately (bfcache: cards already in DOM).
+  // Retry after next frame (history-state restore: cards render in a rAF that may not have
+  // fired yet when the fetch returns on a fast local connection).
+  if (!applyUpdate()) requestAnimationFrame(applyUpdate);
+
+  // Keep history.state in sync so a second bfcache restore shows fresh counts.
   const st = history.state?.['_argus_images'];
   if (st?.items) {
     st.items = st.items.map(i =>
       i.source_image_id === id
-        ? { ...i, face_count: item.face_count, object_count: item.object_count, detection_count: item.detection_count }
+        ? { ...i, face_count: freshItem.face_count, object_count: freshItem.object_count, detection_count: freshItem.detection_count }
         : i
     );
     history.replaceState({ '_argus_images': st }, '');
