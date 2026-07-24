@@ -161,6 +161,13 @@
     checkSgEmpty();
     nmLoader.checkEmpty();
     setFocusedCard(getActivePanelCards()[0] || null);
+    if (action === 'reject') {
+      ids.forEach(id => {
+        const item = itemCache.get(id);
+        if (item) renderItem({ ...item, current_identity: null, suggested_matches: [] }, nmLoader);
+      });
+      nmLoader.checkEmpty();
+    }
     if (window.showToast) {
       const verb = action === 'confirm' ? ' confirmed' : action === 'reject' ? ' rejected' : ' dismissed';
       showToast(ids.length + verb, 'success');
@@ -726,6 +733,11 @@
     updateBars();
     checkSgEmpty();
     setFocusedCard(getActivePanelCards()[0] || null);
+    ids.forEach(id => {
+      const item = itemCache.get(id);
+      if (item) renderItem({ ...item, current_identity: null, suggested_matches: [] }, nmLoader);
+    });
+    nmLoader.checkEmpty();
     if (window.showToast) showToast(ids.length + ' rejected', 'success');
   };
 
