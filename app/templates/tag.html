@@ -748,18 +748,25 @@ if (FACES.length && OBJECTS.length) {
   // on Android/touch so this listener has zero effect on mobile.
   document.addEventListener('dragstart', e => { if (drawMode) e.preventDefault(); });
 
-  // ---- Zoom: scroll wheel ----
+  // ---- Zoom + pan: scroll wheel / trackpad ----
+  // ctrlKey=true  → trackpad pinch or ctrl+wheel → zoom
+  // ctrlKey=false → trackpad two-finger scroll   → pan
   wrap.addEventListener('wheel', e => {
     if (!drawMode) return;
     e.preventDefault();
-    const r = wrap.getBoundingClientRect();
-    const mx = e.clientX - r.left;
-    const my = e.clientY - r.top;
-    const factor = e.deltaY < 0 ? 1.15 : 1 / 1.15;
-    const newZoom = Math.min(Math.max(1, zoom * factor), 8);
-    panX = mx - (mx - panX) * newZoom / zoom;
-    panY = my - (my - panY) * newZoom / zoom;
-    zoom = newZoom;
+    if (e.ctrlKey) {
+      const r = wrap.getBoundingClientRect();
+      const mx = e.clientX - r.left;
+      const my = e.clientY - r.top;
+      const factor = e.deltaY < 0 ? 1.07 : 1 / 1.07;
+      const newZoom = Math.min(Math.max(1, zoom * factor), 8);
+      panX = mx - (mx - panX) * newZoom / zoom;
+      panY = my - (my - panY) * newZoom / zoom;
+      zoom = newZoom;
+    } else {
+      panX -= e.deltaX;
+      panY -= e.deltaY;
+    }
     clampPan();
     applyTransform();
   }, { passive: false });
