@@ -49,6 +49,7 @@
     document.getElementById('tab-nm').classList.toggle('active', tab === 'nm');
     document.getElementById('tab-mm').classList.toggle('active', tab === 'mm');
     if (scroll) window.scrollTo({ top: 0, behavior: 'instant' });
+    setFocusedCard(getActivePanelCards()[0] || null);
   };
 
   function esc(s) {
@@ -159,6 +160,7 @@
     updateBars();
     checkSgEmpty();
     nmLoader.checkEmpty();
+    setFocusedCard(getActivePanelCards()[0] || null);
     if (window.showToast) {
       const verb = action === 'confirm' ? ' confirmed' : action === 'reject' ? ' rejected' : ' dismissed';
       showToast(ids.length + verb, 'success');
@@ -416,11 +418,8 @@
   function removeCard(id) {
     const card = document.getElementById('rc-' + id);
     if (card) {
-      if (card === focusedCard) {
-        const cards = getActivePanelCards();
-        const idx = cards.indexOf(card);
-        setFocusedCard(cards[idx + 1] || cards[idx - 1] || null);
-      }
+      const wasFocused = card === focusedCard;
+      if (wasFocused) setFocusedCard(null);
       const tab = card.closest('#suggested-list') ? 'sg' : 'nm';
       updateTabBadge(tab, -1);
       const group = card.closest('.sg-group');
@@ -433,6 +432,7 @@
           if (ct) ct.textContent = remaining + (remaining === 1 ? ' face' : ' faces');
         }
       }
+      if (wasFocused) setFocusedCard(getActivePanelCards()[0] || null);
     }
     selSg.delete(id); selNm.delete(id);
     decrementBadge(1);
@@ -444,12 +444,10 @@
   function removeMismatchCard(id) {
     const card = document.getElementById('rc-mm-' + id);
     if (card) {
-      if (card === focusedCard) {
-        const cards = getActivePanelCards();
-        const idx = cards.indexOf(card);
-        setFocusedCard(cards[idx + 1] || cards[idx - 1] || null);
-      }
+      const wasFocused = card === focusedCard;
+      if (wasFocused) setFocusedCard(null);
       card.remove();
+      if (wasFocused) setFocusedCard(getActivePanelCards()[0] || null);
     }
     selMm.delete(id);
     updateBars();
@@ -631,6 +629,7 @@
       cursor = data.next_cursor;
     }
     renderSgGroups(allItems);
+    setFocusedCard(getActivePanelCards()[0] || null);
   }
 
   function renderSgGroups(items) {
@@ -697,6 +696,7 @@
     decrementBadge(ids.length);
     updateBars();
     checkSgEmpty();
+    setFocusedCard(getActivePanelCards()[0] || null);
     if (window.showToast) showToast(ids.length + ' confirmed', 'success');
   };
 
@@ -717,6 +717,7 @@
     decrementBadge(ids.length);
     updateBars();
     checkSgEmpty();
+    setFocusedCard(getActivePanelCards()[0] || null);
     if (window.showToast) showToast(ids.length + ' rejected', 'success');
   };
 
