@@ -1,6 +1,7 @@
 :root {
   --bg: #f0f2f5;
   --surface: #fff;
+  --surface-2: #f8f9fb;
   --nav-bg: #111;
   --nav-text: #aaa;
   --accent: #3a8ef6;
@@ -20,6 +21,7 @@
 [data-theme="dark"] {
   --bg: #0d1117;
   --surface: #161b22;
+  --surface-2: #11161e;
   --nav-bg: #010409;
   --nav-text: #8b949e;
   --accent: #58a6ff;
@@ -38,6 +40,7 @@
 [data-theme="chocolate"] {
   --bg:          #1a0e08;   /* 85% dark chocolate */
   --surface:     #2c1a10;   /* dark truffle */
+  --surface-2:   #211209;   /* between bg and surface */
   --nav-bg:      #100805;   /* espresso */
   --nav-text:    #b8825a;   /* milk chocolate */
   --accent:      #d4922a;   /* caramel drizzle */
@@ -58,6 +61,7 @@
 [data-theme="garbagefire"] {
   --bg: #ffff00;
   --surface: #7fff00;
+  --surface-2: #ccff00;
   --nav-bg: #ff1493;
   --nav-text: #ffff00;
   --accent: #ff4500;

@@ -1001,6 +1001,14 @@ def set_identity_cover(identity_id: int, user_id: int, detection_id: int, enviro
         return conn.execute("SELECT changes()").fetchone()[0] > 0
 
 
+def _auto_cover(conn: sqlite3.Connection, identity_id: int, detection_id: int) -> None:
+    """Set cover_detection_id on identity if not already set (first-detection auto-cover)."""
+    conn.execute(
+        "UPDATE identities SET cover_detection_id = ? WHERE id = ? AND cover_detection_id IS NULL",
+        (detection_id, identity_id),
+    )
+
+
 def get_identity_gallery(
     identity_id: int, user_id: int, cursor: str | None = None, limit: int = 30,
     environment_id: int | None = None, enrolled: bool | None = None,
@@ -1633,6 +1641,8 @@ def insert_detection(
             "UPDATE source_images SET updated_at = datetime('now') WHERE id = ?",
             (source_image_id,),
         )
+        if identity_id is not None:
+            _auto_cover(conn, identity_id, new_id)
         record_change(conn, user_id, env_id, "detection", new_id, "created", src_ref)
         return new_id
 
@@ -2563,6 +2573,7 @@ def suggest_detection(detection_id: int, user_id: int, identity_id: int, environ
         )
         changed = conn.execute("SELECT changes()").fetchone()[0] > 0
         if changed:
+            _auto_cover(conn, identity_id, detection_id)
             record_change(conn, user_id, env_id, "detection", detection_id, "relabeled")
         return changed
 
@@ -2586,6 +2597,7 @@ def label_detection(detection_id: int, user_id: int, identity_id: int, environme
                    WHERE id = (SELECT source_image_id FROM detections WHERE id = ?)""",
                 (detection_id,),
             )
+            _auto_cover(conn, identity_id, detection_id)
             record_change(conn, user_id, env_id, "detection", detection_id, "relabeled")
             _purge_empty_identities(conn, user_id, env_id)
     _recompute_representative(old_id)
