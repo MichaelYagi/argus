@@ -517,10 +517,11 @@ window.openSourceModal = function openSourceModal(url, bbox) {
   overlay.appendChild(wrap);
   overlay.appendChild(closeBtn);
   document.body.appendChild(overlay);
-  const close = () => overlay.remove();
+  document.body.style.overflow = 'hidden';
+  const close = () => { overlay.remove(); document.body.style.overflow = ''; document.removeEventListener('keydown', onKey); };
   closeBtn.addEventListener('click', close);
   overlay.addEventListener('click', e => { if (e.target === overlay) close(); });
-  const onKey = e => { if (e.key === 'Escape') { close(); document.removeEventListener('keydown', onKey); } };
+  const onKey = e => { if (e.key === 'Escape') close(); };
   document.addEventListener('keydown', onKey);
 };
 
