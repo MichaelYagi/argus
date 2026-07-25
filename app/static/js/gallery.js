@@ -170,7 +170,7 @@
         if (selected.size > 0) {
           toggleItem();
         } else {
-          openSourceModal(item.source_image_url);
+          openSourceModal(item.source_image_url, item.bbox);
         }
       });
     }
