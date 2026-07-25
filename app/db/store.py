@@ -1002,10 +1002,18 @@ def set_identity_cover(identity_id: int, user_id: int, detection_id: int, enviro
 
 
 def _auto_cover(conn: sqlite3.Connection, identity_id: int, detection_id: int) -> None:
-    """Set cover_detection_id on identity if not already set (first-detection auto-cover)."""
+    """Set cover_detection_id on identity if not already set (first confirmed detection auto-cover)."""
     conn.execute(
         "UPDATE identities SET cover_detection_id = ? WHERE id = ? AND cover_detection_id IS NULL",
         (detection_id, identity_id),
+    )
+
+
+def _clear_cover_if_set(conn: sqlite3.Connection, detection_id: int) -> None:
+    """Clear cover_detection_id on any identity whose cover points to this detection."""
+    conn.execute(
+        "UPDATE identities SET cover_detection_id = NULL WHERE cover_detection_id = ?",
+        (detection_id,),
     )
 
 
@@ -1641,7 +1649,7 @@ def insert_detection(
             "UPDATE source_images SET updated_at = datetime('now') WHERE id = ?",
             (source_image_id,),
         )
-        if identity_id is not None:
+        if identity_id is not None and review_status == 'confirmed':
             _auto_cover(conn, identity_id, new_id)
         record_change(conn, user_id, env_id, "detection", new_id, "created", src_ref)
         return new_id
@@ -2399,6 +2407,11 @@ def confirm_detection(detection_id: int, user_id: int, environment_id: int | Non
                    WHERE id = (SELECT source_image_id FROM detections WHERE id = ?)""",
                 (detection_id,),
             )
+            identity_row = conn.execute(
+                "SELECT identity_id FROM detections WHERE id = ?", (detection_id,)
+            ).fetchone()
+            if identity_row and identity_row[0]:
+                _auto_cover(conn, identity_row[0], detection_id)
             # Auto-confirm any pending siblings from the same source image for the same
             # identity so they don't accumulate in the review queue or gallery.
             conn.execute(
@@ -2427,6 +2440,7 @@ def unidentify_detection(detection_id: int, user_id: int, environment_id: int | 
         )
         changed = conn.execute("SELECT changes()").fetchone()[0] > 0
         if changed:
+            _clear_cover_if_set(conn, detection_id)
             record_change(conn, user_id, env_id, "detection", detection_id, "relabeled")
             _purge_empty_identities(conn, user_id, env_id)
     _recompute_representative(old_id)
@@ -2446,6 +2460,7 @@ def reject_detection(detection_id: int, user_id: int, environment_id: int | None
         )
         changed = conn.execute("SELECT changes()").fetchone()[0] > 0
         if changed:
+            _clear_cover_if_set(conn, detection_id)
             record_change(conn, user_id, env_id, "detection", detection_id, "relabeled")
             _purge_empty_identities(conn, user_id, env_id)
     _recompute_representative(old_id)
@@ -2573,7 +2588,6 @@ def suggest_detection(detection_id: int, user_id: int, identity_id: int, environ
         )
         changed = conn.execute("SELECT changes()").fetchone()[0] > 0
         if changed:
-            _auto_cover(conn, identity_id, detection_id)
             record_change(conn, user_id, env_id, "detection", detection_id, "relabeled")
         return changed
 

@@ -242,7 +242,8 @@
       "Bash(/home/michael/.local/bin/ruff check *)",
       "Bash(~/.local/bin/pytest tests/test_templates.py -v)",
       "Read(//root/**)",
-      "Bash(env)"
+      "Bash(env)",
+      "Bash(/home/michael/.venvs/mcp-platform/bin/ruff check *)"
     ]
   }
 }
