@@ -259,7 +259,7 @@ function labelObjectBox(div, tip, chip) {
     } else {
       setStatus('Error saving label.');
     }
-  }, 'Assign label', onUnidentify, div.dataset.label || '');
+  }, 'Assign label', onUnidentify, div.dataset.label || '', () => deleteDetection(div));
 }
 
 async function unidentifyBox(div, tip, chip) {
