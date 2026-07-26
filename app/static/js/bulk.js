@@ -255,7 +255,7 @@ async function _pool(items, concurrency, fn) {
         </div>
         ${discarded
           ? `<div class="alert alert-warning" style="margin:0">No detections — image was not saved.</div>`
-          : (allDets.length ? `<div id="thumb-row-${i}" style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px;align-items:flex-start"></div>` : '') +
+          : (faces.length ? `<div id="thumb-row-${i}" style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px;align-items:flex-start"></div>` : '') +
             (allDets.length ? `<div id="overlay-wrap-${i}" style="position:relative;display:inline-block;max-width:100%"></div>` : '') +
             (faces.length && objects.length ? `<div style="display:flex;gap:8px;margin-top:8px">
               <button class="btn btn-ghost tag-toggle active" data-kind="face">Faces</button>
@@ -308,13 +308,6 @@ async function _pool(items, concurrency, fn) {
           }, 'Name', null, face.label || '');
         });
         thumbRow.appendChild(wrap);
-      });
-      objects.forEach(obj => {
-        const img = document.createElement('img');
-        img.src = obj.crop_url;
-        img.title = obj.class_name || 'Unknown';
-        img.style.cssText = 'width:52px;height:52px;object-fit:cover;border-radius:3px';
-        thumbRow.appendChild(img);
       });
     }
 
