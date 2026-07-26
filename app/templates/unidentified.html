@@ -6,6 +6,12 @@
   <h1>Unidentified</h1>
 </div>
 
+<button id="scroll-top" class="scroll-top-btn" aria-label="Back to top" title="Back to top">
+  <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor"
+       stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+    <path d="M12 19V5M5 12l7-7 7 7"/>
+  </svg>
+</button>
 <p class="muted" id="up-empty" hidden style="text-align:center;padding:48px 0">
   No unidentified faces. All detected faces have been assigned to a person.
 </p>
@@ -152,5 +158,10 @@ window.addEventListener('pageshow', e => {
   sessionStorage.removeItem('argus_labeled');
   labeled.forEach(id => gallery.removeItem(i => i.detection_id === id));
 });
+
+const toTop = document.getElementById('scroll-top');
+const updateToTop = () => { toTop.style.display = window.scrollY > 300 ? 'flex' : 'none'; };
+window.addEventListener('scroll', updateToTop, { passive: true });
+toTop.addEventListener('click', () => window.scrollTo({ top: 0, behavior: 'smooth' }));
 </script>
 {% endblock %}
