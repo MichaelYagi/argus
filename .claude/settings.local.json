@@ -246,7 +246,10 @@
       "Bash(/home/michael/.venvs/mcp-platform/bin/ruff check *)",
       "Bash(gh api *)",
       "WebFetch(domain:api.github.com)",
-      "WebFetch(domain:raw.githubusercontent.com)"
+      "WebFetch(domain:raw.githubusercontent.com)",
+      "Bash(xargs ls -lh)",
+      "Bash(curl -L --progress-bar -o /mnt/c/Users/Michael/Documents/development/argus/models/fairface/fairface.onnx \"https://github.com/yakhyo/fairface-onnx/releases/download/weights/fairface.onnx\")",
+      "Bash(echo \"Download started in background \\(PID $!\\)\")"
     ]
   }
 }

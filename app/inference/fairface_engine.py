@@ -102,7 +102,7 @@ def download_model(model_path: Path) -> None:
     logger.info("Downloading FairFace model from %s …", _MODEL_URL)
     t0 = time.monotonic()
     try:
-        with httpx.stream("GET", _MODEL_URL, timeout=180.0, follow_redirects=True) as resp:
+        with httpx.stream("GET", _MODEL_URL, timeout=httpx.Timeout(connect=30.0, read=300.0, write=None, pool=None), follow_redirects=True) as resp:
             resp.raise_for_status()
             with open(tmp, "wb") as f:
                 for chunk in resp.iter_bytes(chunk_size=1 << 16):
