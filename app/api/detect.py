@@ -753,12 +753,14 @@ def _stateless_detect(
             from app.core import face_index
             match_ms = 0.0
             db_ms = 0.0
+            padding = settings_cache.cache.get_or("system.crop_padding", 0.2)
             for det in raw_faces:
                 face = {
                     "bbox": {"x": det.bbox[0], "y": det.bbox[1],
                              "w": det.bbox[2], "h": det.bbox[3]},
                     "confidence": round(float(det.confidence), 4),
                     "identity_id": None, "label": None, "similarity": None,
+                    "crop_url": _crop_data_uri(img, det.bbox, padding),
                     **_face_attrs(det),
                 }
                 # Read-only identification — top match regardless of threshold. No writes.
@@ -1649,6 +1651,33 @@ def _save_source_image(
         user_id, filename, stored_w, stored_h, environment_id, external_ref,
     )
     return filename, source_id, source_scale
+
+
+def _crop_data_uri(img: Any, bbox: tuple[int, int, int, int], padding: float) -> str | None:
+    """Return an in-memory base64 JPEG data URI for a face crop. Used by the stateless test endpoint."""
+    import base64
+    import io as _io
+    try:
+        x, y, w, h = bbox
+        pad_x = int(w * padding)
+        pad_y = int(h * padding)
+        x1 = max(0, x - pad_x)
+        y1 = max(0, y - pad_y)
+        x2 = min(img.width, x + w + pad_x)
+        y2 = min(img.height, y + h + pad_y)
+        if x2 <= x1:
+            x1, x2 = max(0, img.width - 2), img.width
+        if y2 <= y1:
+            y1, y2 = max(0, img.height - 2), img.height
+        crop = img.crop((x1, y1, x2, y2))
+        if crop.mode != "RGB":
+            crop = crop.convert("RGB")
+        buf = _io.BytesIO()
+        quality = max(1, min(95, int(settings_cache.cache.get_or("system.crop_jpeg_quality", 75))))
+        crop.save(buf, "JPEG", quality=quality)
+        return "data:image/jpeg;base64," + base64.b64encode(buf.getvalue()).decode()
+    except Exception:
+        return None
 
 
 def _save_crop(img: Any, bbox: tuple[int, int, int, int], padding: float) -> str:
