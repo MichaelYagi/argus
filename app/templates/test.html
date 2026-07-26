@@ -344,6 +344,12 @@
 
     const wrap = card.querySelector('.img-wrap');
     const img  = card.querySelector('.test-img');
+
+    // Clicking anywhere in the image outside a bbox clears the selection.
+    wrap.addEventListener('click', e => {
+      if (!e.target.closest('.test-overlay')) selectFace(card, card._selIdx);
+    });
+
     wrap._hiddenNames = new Set();
     card.querySelectorAll('[data-name-chip]').forEach(btn => {
       btn.addEventListener('click', function() {
