@@ -58,6 +58,14 @@
   </div>
 </div>
 
+<!-- Crop lightbox -->
+<div id="crop-lightbox" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.82);
+     z-index:600;align-items:center;justify-content:center;cursor:zoom-out"
+     onclick="closeCropLightbox()">
+  <img id="crop-lightbox-img" src="" alt="" style="max-width:90vw;max-height:90vh;
+       border-radius:6px;box-shadow:0 8px 40px rgba(0,0,0,.6);object-fit:contain">
+</div>
+
 <div style="display:flex;align-items:center">
   <a id="prev-nav" class="tag-nav" href="#" style="display:none" aria-label="Previous image">&#8249;</a>
   <div id="tag-wrap">
@@ -328,6 +336,23 @@ function closeReprocessOverlay() {
   unlockScroll();
   document.getElementById('reprocess-overlay').style.display = 'none';
 }
+// Crop lightbox
+function openCropLightbox(url) {
+  document.getElementById('crop-lightbox-img').src = url;
+  lockScroll();
+  document.getElementById('crop-lightbox').style.display = 'flex';
+}
+function closeCropLightbox() {
+  unlockScroll();
+  document.getElementById('crop-lightbox').style.display = 'none';
+  document.getElementById('crop-lightbox-img').src = '';
+}
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape' && document.getElementById('crop-lightbox').style.display === 'flex') {
+    closeCropLightbox();
+  }
+});
+
 document.getElementById('reprocess-btn').addEventListener('click', () => {
   document.getElementById('reprocess-error').style.display = 'none';
   lockScroll();
@@ -433,12 +458,14 @@ function renderDetList() {
 
   let html = '<table style="width:100%;border-collapse:collapse;font-size:13px"><thead><tr>';
   html += '<th ' + TH + '>#</th>';
+  html += '<th ' + TH + '>Crop</th>';
   html += '<th ' + TH + '>Type</th>';
   html += '<th ' + TH + '>Identity</th>';
   html += '<th ' + TH + '>Confidence</th>';
   html += '<th ' + TH + '>Embedding</th>';
   html += '<th ' + TH + '>Age</th>';
   html += '<th ' + TH + '>Gender</th>';
+  html += '<th ' + TH + '>Ethnicity</th>';
   html += '</tr></thead><tbody>';
 
   all.forEach((det, i) => {
@@ -460,17 +487,25 @@ function renderDetList() {
     } else {
       emb = simPct || '—';
     }
-    const age   = isFace && det.age   != null ? det.age : '—';
-    const gen   = isFace && det.gender ? det.gender[0].toUpperCase() : '—';
+    const age   = isFace && det.age       != null ? det.age : '—';
+    const gen   = isFace && det.gender    ? det.gender[0].toUpperCase() : '—';
+    const eth   = isFace && det.ethnicity ? det.ethnicity : '—';
     const numColor = isFace ? 'color:var(--accent)' : 'color:#39f';
+    const cropThumb = det.crop_url
+      ? '<img src="' + det.crop_url + '" alt="" style="height:36px;width:36px;object-fit:cover;' +
+        'border-radius:3px;cursor:zoom-in;display:block" ' +
+        'onclick="event.stopPropagation();openCropLightbox(' + "'" + det.crop_url + "'" + ')">'
+      : '—';
     html += '<tr style="cursor:pointer" data-id="' + det.id + '" data-kind="' + det.kind + '">';
     html += '<td style="' + TD + ';' + numColor + ';font-weight:500">' + (i + 1) + '</td>';
+    html += '<td style="' + TD + ';padding-right:8px">' + cropThumb + '</td>';
     html += '<td style="' + TD + '">' + det.kind + '</td>';
     html += '<td style="' + TD + '">' + identity + '</td>';
     html += '<td style="' + TD + '">' + conf + '</td>';
     html += '<td style="' + TD + '">' + emb + '</td>';
     html += '<td style="' + TD + '">' + age + '</td>';
     html += '<td style="' + TD + '">' + gen + '</td>';
+    html += '<td style="' + TD + '">' + eth + '</td>';
     html += '</tr>';
   });
 
@@ -873,7 +908,7 @@ if (FACES.length && OBJECTS.length) {
       review_status: 'confirmed',
       source: 'manual',
       embedding_source: embSrc || null,
-      age: null, gender: null, pose: null,
+      age: null, gender: null, ethnicity: null, pose: null, crop_url: null,
     };
     FACES.push(newFace);
     sessionStorage.setItem('argus_dirty_image', JSON.stringify(

@@ -58,6 +58,14 @@
 </div>
 
 <div id="results" style="max-width:680px;margin-top:16px"></div>
+
+<!-- Crop lightbox -->
+<div id="crop-lightbox" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.82);
+     z-index:600;align-items:center;justify-content:center;cursor:zoom-out"
+     onclick="closeCropLightbox()">
+  <img id="crop-lightbox-img" src="" alt="" style="max-width:90vw;max-height:90vh;
+       border-radius:6px;box-shadow:0 8px 40px rgba(0,0,0,.6);object-fit:contain">
+</div>
 {% endblock %}
 
 {% block scripts %}
@@ -288,14 +296,19 @@
     if (r.faces.length) {
       html += `<table style="width:100%;font-size:12px;border-collapse:collapse;margin-top:8px">
         <thead><tr style="border-bottom:1px solid var(--border);text-align:left">
-          <th style="padding:4px 0">Face</th><th>Looks like</th><th>Confidence</th><th>Age</th><th>Gender</th><th>Ethnicity</th>
+          <th style="padding:4px 0">Face</th><th style="padding-right:8px">Crop</th><th>Looks like</th><th>Confidence</th><th>Age</th><th>Gender</th><th>Ethnicity</th>
         </tr></thead><tbody>`;
       r.faces.forEach((f, i) => {
         const match = f.label
           ? `${esc(f.label)} <span class="muted">${Math.max(0, f.similarity * 100).toFixed(0)}%</span>`
           : '<span class="muted">—</span>';
+        const thumb = f.crop_url
+          ? `<img src="${f.crop_url}" alt="" style="height:36px;width:36px;object-fit:cover;border-radius:3px;cursor:zoom-in;display:block"
+               onclick="event.stopPropagation();openCropLightbox('${f.crop_url}')">`
+          : '—';
         html += `<tr data-face-row="${i}" data-name="${esc(f.label || 'Unknown')}" style="border-bottom:1px solid var(--border);cursor:default">
           <td style="padding:4px 0">#${i + 1}</td>
+          <td style="padding-right:8px;vertical-align:middle">${thumb}</td>
           <td>${match}</td>
           <td>${(f.confidence * 100).toFixed(0)}%</td>
           <td>${f.age != null ? f.age : '-'}</td>
@@ -411,5 +424,21 @@
     rendered.forEach(x => { if (x.img.naturalWidth) { drawOverlays(x.wrap, x.img, x.data); applyNameFilter(x.wrap); } });
   });
 })();
+
+function openCropLightbox(url) {
+  document.getElementById('crop-lightbox-img').src = url;
+  lockScroll();
+  document.getElementById('crop-lightbox').style.display = 'flex';
+}
+function closeCropLightbox() {
+  unlockScroll();
+  document.getElementById('crop-lightbox').style.display = 'none';
+  document.getElementById('crop-lightbox-img').src = '';
+}
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape' && document.getElementById('crop-lightbox').style.display === 'flex') {
+    closeCropLightbox();
+  }
+});
 </script>
 {% endblock %}

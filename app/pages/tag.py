@@ -55,11 +55,11 @@ async def tag_page(source_image_id: int, request: Request):
                 data = json.loads(raw) or {}
             except (ValueError, TypeError):
                 data = {}
-        return data.get("age"), data.get("gender"), data.get("pose")
+        return data.get("age"), data.get("gender"), data.get("ethnicity"), data.get("pose")
 
     face_data = []
     for r in faces:
-        age, gender, pose = _attrs(r)
+        age, gender, ethnicity, pose = _attrs(r)
         det_source = r["source"] if "source" in r.keys() else "auto"
         emb_src = r["embedding_source"] if "embedding_source" in r.keys() else None
         face_data.append({
@@ -72,7 +72,8 @@ async def tag_page(source_image_id: int, request: Request):
             "similarity": _similarity(r),
             "source": det_source,
             "embedding_source": emb_src,
-            "age": age, "gender": gender, "pose": pose,
+            "age": age, "gender": gender, "ethnicity": ethnicity, "pose": pose,
+            "crop_url": f"/media/crops/{r['crop_path']}" if r["crop_path"] else None,
         })
 
     objects = store.get_image_detections(source_image_id, user_id, det_type="object", environment_id=env_id)
