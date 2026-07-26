@@ -334,6 +334,12 @@
       const idx = +row.dataset.faceRow;
       row.addEventListener('mouseenter', () => setHilite(card, idx, true));
       row.addEventListener('mouseleave', () => setHilite(card, idx, false));
+      row.addEventListener('click', e => {
+        if (e.target.closest('img')) return; // let thumbnail click open lightbox
+        selectFace(card, idx);
+        const box = card.querySelector(`.test-overlay[data-face-index="${idx}"]`);
+        if (box) box.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      });
     });
 
     const wrap = card.querySelector('.img-wrap');
@@ -392,12 +398,19 @@
       const card = wrap.parentElement;
       d.addEventListener('mouseenter', () => setHilite(card, faceIndex, true));
       d.addEventListener('mouseleave', () => setHilite(card, faceIndex, false));
+      d.addEventListener('click', () => {
+        selectFace(card, faceIndex);
+        const row = card.querySelector(`tr[data-face-row="${faceIndex}"]`);
+        if (row) row.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+      });
     }
     wrap.appendChild(d);
   }
 
   // Toggle the shared highlight on a face's box (border + label) and its table row.
+  // Respects per-card selection: hover-off never clears a selected face.
   function setHilite(card, index, on) {
+    if (!on && card._selIdx === index) return;
     const box = card.querySelector(`.test-overlay[data-face-index="${index}"]`);
     if (box) {
       const color = on ? HILITE : FACE_COLOR;
@@ -408,6 +421,26 @@
     }
     const row = card.querySelector(`tr[data-face-row="${index}"]`);
     if (row) row.style.background = on ? 'rgba(249,115,22,0.15)' : '';
+  }
+
+  // Select (or deselect) a face — persists the orange highlight until another is chosen.
+  function selectFace(card, index) {
+    const prev = card._selIdx;
+    if (prev !== undefined) {
+      // Force-clear previous selection regardless of setHilite guard
+      const prevBox = card.querySelector(`.test-overlay[data-face-index="${prev}"]`);
+      if (prevBox) {
+        prevBox.style.borderColor = FACE_COLOR;
+        prevBox.style.zIndex = '';
+        const prevTag = prevBox.querySelector('.test-overlay-tag');
+        if (prevTag) prevTag.style.background = FACE_COLOR;
+      }
+      const prevRow = card.querySelector(`tr[data-face-row="${prev}"]`);
+      if (prevRow) prevRow.style.background = '';
+    }
+    if (prev === index) { card._selIdx = undefined; return; }  // toggle off
+    card._selIdx = index;
+    setHilite(card, index, true);
   }
 
   function drawOverlays(wrap, img, r) {

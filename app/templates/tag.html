@@ -167,11 +167,11 @@ function renderBoxes() {
     if (isFace) {
       tip.textContent = (displayLabel || 'Unknown')
         + (det.similarity != null ? ' (' + Math.max(0, det.similarity * 100).toFixed(0) + '% match)' : '');
-      div.addEventListener('click', () => labelBox(div, tip, chip));
+      div.addEventListener('click', () => { labelBox(div, tip, chip); flashRow(det.id); });
     } else {
       tip.textContent = (displayLabel || 'object')
         + (det.confidence != null ? ' (' + (det.confidence * 100).toFixed(0) + '%)' : '');
-      div.addEventListener('click', () => labelObjectBox(div, tip, chip));
+      div.addEventListener('click', () => { labelObjectBox(div, tip, chip); flashRow(det.id); });
     }
     div.addEventListener('mouseenter', () => {
       const row = document.querySelector('#det-list tr[data-id="' + det.id + '"]');
@@ -336,6 +336,22 @@ function closeReprocessOverlay() {
   unlockScroll();
   document.getElementById('reprocess-overlay').style.display = 'none';
 }
+// Cross-link helpers: briefly orange-highlight the bbox or table row when navigating between them.
+function flashRow(detId) {
+  const row = document.querySelector('#det-list tr[data-id="' + detId + '"]');
+  if (!row) return;
+  row.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  row.style.background = 'rgba(249,115,22,0.2)';
+  setTimeout(() => { row.style.background = ''; }, 1200);
+}
+function flashBox(detId) {
+  const box = document.querySelector('.t-box[data-id="' + detId + '"]');
+  if (!box) return;
+  const prev = box.style.outline;
+  box.style.outline = '3px solid rgba(249,115,22,0.9)';
+  setTimeout(() => { box.style.outline = prev; }, 1200);
+}
+
 // Crop lightbox
 function openCropLightbox(url) {
   document.getElementById('crop-lightbox-img').src = url;
@@ -516,7 +532,7 @@ function renderDetList() {
     const id = row.dataset.id;
     row.addEventListener('click', () => {
       const box = document.querySelector('.t-box[data-id="' + id + '"]');
-      if (box) { box.scrollIntoView({ behavior: 'smooth', block: 'center' }); box.click(); }
+      if (box) { box.scrollIntoView({ behavior: 'smooth', block: 'center' }); flashBox(id); box.click(); }
     });
     row.addEventListener('mouseenter', () => {
       row.style.background = 'rgba(255,255,255,.07)';

@@ -372,7 +372,7 @@ def test_detect_faces_includes_and_stores_attributes(client):
     det = store.get_detection(face["detection_id"], user_id)
     stored = json.loads(det["attributes"])
     assert stored == {
-        "age": 30, "gender": "M", "pose": [1.0, 2.0, 3.0],
+        "age": 30, "gender": "M", "ethnicity": None, "pose": [1.0, 2.0, 3.0],
         "mask": None, "kps": None, "landmark_2d_106": None, "landmark_3d_68": None,
     }
 
@@ -400,7 +400,7 @@ def test_detect_faces_attributes_default_null(client):
     assert face["age"] is None and face["gender"] is None and face["pose"] is None
     det = store.get_detection(face["detection_id"], user_id)
     assert json.loads(det["attributes"]) == {
-        "age": None, "gender": None, "pose": None,
+        "age": None, "gender": None, "ethnicity": None, "pose": None,
         "mask": None, "kps": None, "landmark_2d_106": None, "landmark_3d_68": None,
     }
 
