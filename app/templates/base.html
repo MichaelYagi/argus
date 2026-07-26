@@ -478,9 +478,6 @@ setInterval(_updateSuggestedDot, 30000);
   <a href="/images" class="sidebar-sub {% if active == 'images' %}active{% endif %}">Images</a>
   <div class="sidebar-divider"></div>
   <a href="/detect" class="{% if active == 'detect' %}active{% endif %}">Detect</a>
-  {% if face_active %}
-  <a href="/enroll" class="sidebar-sub {% if active == 'enroll' %}active{% endif %}">Enroll</a>
-  {% endif %}
   <a href="/test" class="sidebar-sub {% if active == 'test' %}active{% endif %}">Test</a>
   {% if face_active %}
   <a href="/compare" class="sidebar-sub {% if active == 'compare' %}active{% endif %}">Compare</a>
@@ -527,9 +524,6 @@ setInterval(_updateSuggestedDot, 30000);
   <a href="/images" class="mobile-sub {% if active == 'images' %}active{% endif %}">Images</a>
   <div style="border-top:1px solid rgba(255,255,255,.12);margin:4px 0"></div>
   <a href="/detect" class="{% if active == 'detect' %}active{% endif %}">Detect</a>
-  {% if face_active %}
-  <a href="/enroll" class="mobile-sub {% if active == 'enroll' %}active{% endif %}">Enroll</a>
-  {% endif %}
   <a href="/test" class="mobile-sub {% if active == 'test' %}active{% endif %}">Test</a>
   {% if face_active %}
   <a href="/compare" class="mobile-sub {% if active == 'compare' %}active{% endif %}">Compare</a>
