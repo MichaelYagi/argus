@@ -474,8 +474,9 @@
     makeAutocomplete(input);
     if (prefill) { input.value = prefill; input.select(); }
     input.focus();
+    if (window.lockScroll) lockScroll();
 
-    const close = () => { popup.remove(); backdrop.remove(); };
+    const close = () => { popup.remove(); backdrop.remove(); if (window.unlockScroll) unlockScroll(); };
 
     backdrop.addEventListener('click', close);
     applyBtn.addEventListener('click', () => { close(); onConfirm(input.value.trim()); });

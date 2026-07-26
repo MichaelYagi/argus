@@ -152,10 +152,10 @@ def _enrich_fairface(img_array: Any, faces: list[Any]) -> None:
 
     from app.inference.fairface_engine import aligned_crop
 
-    h, w = img_array.shape[:2]
     for det in faces:
         # Prefer similarity-transform alignment when keypoints are available;
-        # fall back to padded rect crop otherwise.
+        # fall back to padded rect crop otherwise. numpy slicing clips to
+        # array bounds, so no explicit w/h clamping is needed.
         crop = None
         if det.kps is not None:
             crop = aligned_crop(img_array, det.kps)
@@ -165,9 +165,7 @@ def _enrich_fairface(img_array: Any, faces: list[Any]) -> None:
             pad_y = max(1, int(bh * 0.25))
             x1 = max(0, x - pad_x)
             y1 = max(0, y - pad_y)
-            x2 = min(w, x + bw + pad_x)
-            y2 = min(h, y + bh + pad_y)
-            crop = img_array[y1:y2, x1:x2]
+            crop = img_array[y1:y + bh + pad_y, x1:x + bw + pad_x]
         if crop is None or crop.size == 0:
             continue
         result = ff.analyze(crop)

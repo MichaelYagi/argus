@@ -175,11 +175,11 @@ function renderBoxes() {
     }
     div.addEventListener('mouseenter', () => {
       const row = document.querySelector('#det-list tr[data-id="' + det.id + '"]');
-      if (row) row.style.background = 'rgba(255,255,255,.07)';
+      if (row && String(_selRowId) !== String(det.id)) row.style.background = 'rgba(255,255,255,.07)';
     });
     div.addEventListener('mouseleave', () => {
       const row = document.querySelector('#det-list tr[data-id="' + det.id + '"]');
-      if (row) row.style.background = '';
+      if (row) row.style.background = String(_selRowId) === String(det.id) ? 'rgba(249,115,22,0.15)' : '';
     });
     div.appendChild(tip);
     zoomLayer.appendChild(div);
