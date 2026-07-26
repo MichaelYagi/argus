@@ -299,7 +299,7 @@ async function deleteDetection(div) {
 function labelBox(div, tip, chip) {
   const isManual = div.dataset.source === 'manual';
   const onUnidentify = (!isManual && div.dataset.label) ? () => unidentifyBox(div, tip, chip) : null;
-  const onDelete = isManual ? () => deleteDetection(div) : null;
+  const onDelete = () => deleteDetection(div);
   showLabelPopup(div, async label => {
     if (!label) {
       if (!isManual) await unidentifyBox(div, tip, chip);
