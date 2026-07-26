@@ -146,8 +146,6 @@ def infer_faces(img_array: Any) -> tuple[list[Any], Any]:
 
 def _enrich_fairface(img_array: Any, faces: list[Any]) -> None:
     """Overwrite age/gender and set ethnicity on each FaceDetection using FairFace."""
-    import numpy as np
-
     ff = registry.get_fairface_engine()
     if ff is None:
         return

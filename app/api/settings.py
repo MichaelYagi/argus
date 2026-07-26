@@ -2,8 +2,15 @@
 
 from __future__ import annotations
 
+import logging
+
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
+
+logger = logging.getLogger(__name__)
+
+# Strong references to background tasks so they are not GC'd before completing.
+_bg_tasks: set = set()
 
 from app.api._responses import ERR_400, ERR_401, ERR_404, ok
 from app.core import settings_cache
@@ -118,11 +125,15 @@ async def update_setting(key: str, body: _UpdateBody, user_id: int = Depends(req
     # FairFace: load when enabled, unload when disabled.
     if key == "face.use_fairface":
         import asyncio
+
         from app.inference.registry import registry
         if value_str == "true":
-            asyncio.create_task(_ensure_fairface_bg())
+            task = asyncio.create_task(_ensure_fairface_bg())
+            _bg_tasks.add(task)
+            task.add_done_callback(_bg_tasks.discard)
         else:
             registry.swap_fairface_engine(None)
+            logger.info("FairFace unloaded.")
 
     from app.core import activity_buffer as _ab
     _ab.emit("settings", f"Setting changed: {key} → {value_str}")
@@ -256,20 +267,23 @@ def _apply_reset(key: str, default_value: str) -> None:
 async def _ensure_fairface_bg() -> None:
     """Download (if needed) and load FairFace into the registry."""
     import asyncio
-    import logging
-    logger = logging.getLogger(__name__)
     from app.core.paths import models_dir
     from app.inference.registry import registry
     model_path = models_dir() / "fairface" / "fairface.onnx"
+    logger.info("FairFace: checking model at %s", model_path.resolve())
     try:
         if not model_path.exists():
+            logger.info("FairFace: model not found, downloading (~85 MB)...")
             from app.inference.fairface_engine import download_model
             await asyncio.to_thread(download_model, model_path)
+        else:
+            logger.info("FairFace: model file found, loading...")
         from app.inference.fairface_engine import FairFaceEngine
-        registry.swap_fairface_engine(FairFaceEngine(model_path))
-        logger.info("FairFace model loaded.")
+        engine = await asyncio.to_thread(FairFaceEngine, model_path)
+        registry.swap_fairface_engine(engine)
+        logger.info("FairFace: loaded and ready.")
     except Exception as exc:
-        logger.warning("FairFace load failed: %s", exc)
+        logger.warning("FairFace load failed: %s", exc, exc_info=True)
 
 
 def _fmt(row) -> dict:

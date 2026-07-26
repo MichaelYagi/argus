@@ -38,6 +38,7 @@ def _softmax(x: np.ndarray) -> np.ndarray:
 class FairFaceEngine:
     def __init__(self, model_path: Path) -> None:
         import onnxruntime as ort
+
         from app.core import settings_cache
 
         providers = ["CPUExecutionProvider"]
@@ -101,8 +102,9 @@ def download_model(model_path: Path) -> None:
     tmp = model_path.with_suffix(".tmp")
     logger.info("Downloading FairFace model from %s …", _MODEL_URL)
     t0 = time.monotonic()
+    timeout = httpx.Timeout(connect=30.0, read=300.0, write=None, pool=None)
     try:
-        with httpx.stream("GET", _MODEL_URL, timeout=httpx.Timeout(connect=30.0, read=300.0, write=None, pool=None), follow_redirects=True) as resp:
+        with httpx.stream("GET", _MODEL_URL, timeout=timeout, follow_redirects=True) as resp:
             resp.raise_for_status()
             with open(tmp, "wb") as f:
                 for chunk in resp.iter_bytes(chunk_size=1 << 16):

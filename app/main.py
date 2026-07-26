@@ -171,14 +171,16 @@ async def _fairface_download_if_needed() -> None:
     from app.inference.registry import registry
     model_path = models_dir() / "fairface" / "fairface.onnx"
     if model_path.exists():
-        return  # already handled by _load_fairface_if_ready()
+        return  # already handled synchronously by _load_fairface_if_ready()
+    log.info("FairFace: model not found, downloading (~85 MB)...")
     try:
         from app.inference.fairface_engine import FairFaceEngine, download_model
         await asyncio.to_thread(download_model, model_path)
-        registry.swap_fairface_engine(FairFaceEngine(model_path))
-        log.info("FairFace model downloaded and loaded.")
+        engine = await asyncio.to_thread(FairFaceEngine, model_path)
+        registry.swap_fairface_engine(engine)
+        log.info("FairFace: downloaded and loaded.")
     except Exception as exc:
-        log.warning("FairFace background download failed: %s", exc)
+        log.warning("FairFace background download failed: %s", exc, exc_info=True)
 
 
 def _load_fairface_if_ready() -> None:
