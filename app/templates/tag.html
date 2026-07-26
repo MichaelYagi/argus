@@ -342,19 +342,16 @@ function selectRow(detId) {
   if (_selRowId !== null) {
     const prev = document.querySelector('#det-list tr[data-id="' + _selRowId + '"]');
     if (prev) prev.style.background = '';
+    const prevBox = document.querySelector('.t-box[data-id="' + _selRowId + '"]');
+    if (prevBox) prevBox.style.outline = '';
   }
   _selRowId = (_selRowId === detId) ? null : detId;
   if (_selRowId !== null) {
     const row = document.querySelector('#det-list tr[data-id="' + _selRowId + '"]');
     if (row) row.style.background = 'rgba(249,115,22,0.15)';
+    const box = document.querySelector('.t-box[data-id="' + _selRowId + '"]');
+    if (box) box.style.outline = '3px solid rgba(249,115,22,0.9)';
   }
-}
-function flashBox(detId) {
-  const box = document.querySelector('.t-box[data-id="' + detId + '"]');
-  if (!box) return;
-  const prev = box.style.outline;
-  box.style.outline = '3px solid rgba(249,115,22,0.9)';
-  setTimeout(() => { box.style.outline = prev; }, 1200);
 }
 
 // Crop lightbox
@@ -537,7 +534,7 @@ function renderDetList() {
     const id = row.dataset.id;
     row.addEventListener('click', () => {
       const box = document.querySelector('.t-box[data-id="' + id + '"]');
-      if (box) { box.scrollIntoView({ behavior: 'smooth', block: 'center' }); flashBox(id); }
+      if (box) box.scrollIntoView({ behavior: 'smooth', block: 'center' });
       selectRow(parseInt(id, 10));
     });
     row.addEventListener('mouseenter', () => {
@@ -560,6 +557,11 @@ function renderDetList() {
 }
 
 renderDetList();
+
+// Clicking anywhere in the image that isn't a face/object bbox clears the selection.
+document.getElementById('tag-wrap').addEventListener('click', e => {
+  if (!e.target.closest('.t-box')) selectRow(null);
+});
 
 // Correct bbox positions after all resources (including CSS) have loaded.
 // Fixes a race where a cached image fires img.onload before style.css is
