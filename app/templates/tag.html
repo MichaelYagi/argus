@@ -537,7 +537,8 @@ function renderDetList() {
     const id = row.dataset.id;
     row.addEventListener('click', () => {
       const box = document.querySelector('.t-box[data-id="' + id + '"]');
-      if (box) { box.scrollIntoView({ behavior: 'smooth', block: 'center' }); flashBox(id); box.click(); }
+      if (box) { box.scrollIntoView({ behavior: 'smooth', block: 'center' }); flashBox(id); }
+      selectRow(parseInt(id, 10));
     });
     row.addEventListener('mouseenter', () => {
       if (String(_selRowId) !== id) row.style.background = 'rgba(255,255,255,.07)';
