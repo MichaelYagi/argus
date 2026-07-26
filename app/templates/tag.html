@@ -179,7 +179,7 @@ function renderBoxes() {
     });
     div.addEventListener('mouseleave', () => {
       const row = document.querySelector('#det-list tr[data-id="' + det.id + '"]');
-      if (row) row.style.background = String(_selRowId) === String(det.id) ? 'rgba(249,115,22,0.15)' : '';
+      if (row && String(_selRowId) !== String(det.id)) row.style.background = '';
     });
     div.appendChild(tip);
     zoomLayer.appendChild(div);
@@ -341,16 +341,16 @@ let _selRowId = null;
 function selectRow(detId) {
   if (_selRowId !== null) {
     const prev = document.querySelector('#det-list tr[data-id="' + _selRowId + '"]');
-    if (prev) prev.style.background = '';
+    if (prev) prev.classList.remove('sel-row');
     const prevBox = document.querySelector('.t-box[data-id="' + _selRowId + '"]');
-    if (prevBox) prevBox.style.outline = '';
+    if (prevBox) prevBox.classList.remove('sel-box');
   }
   _selRowId = (_selRowId === detId) ? null : detId;
   if (_selRowId !== null) {
     const row = document.querySelector('#det-list tr[data-id="' + _selRowId + '"]');
-    if (row) row.style.background = 'rgba(249,115,22,0.15)';
+    if (row) row.classList.add('sel-row');
     const box = document.querySelector('.t-box[data-id="' + _selRowId + '"]');
-    if (box) box.style.outline = '3px solid rgba(249,115,22,0.9)';
+    if (box) box.classList.add('sel-box');
   }
 }
 
@@ -543,7 +543,7 @@ function renderDetList() {
       if (box) { box.style.borderColor = '#fff'; box.style.zIndex = '10'; }
     });
     row.addEventListener('mouseleave', () => {
-      row.style.background = String(_selRowId) === id ? 'rgba(249,115,22,0.15)' : '';
+      if (String(_selRowId) !== id) row.style.background = '';
       const box = document.querySelector('.t-box[data-id="' + id + '"]');
       if (box) { box.style.borderColor = ''; box.style.zIndex = ''; }
     });
@@ -552,7 +552,7 @@ function renderDetList() {
   // Re-apply persistent selection highlight after DOM rebuild
   if (_selRowId !== null) {
     const sel = el.querySelector('tr[data-id="' + _selRowId + '"]');
-    if (sel) sel.style.background = 'rgba(249,115,22,0.15)';
+    if (sel) sel.classList.add('sel-row');
   }
 }
 

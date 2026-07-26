@@ -631,3 +631,15 @@ input[type=range] { width: 150px; cursor: pointer; }
 
 /* Prevent the page from scrolling or receiving interaction while a modal is open */
 body.modal-open { overflow: hidden; }
+
+/* ---------- Detection selection pulse ---------- */
+@keyframes _sel-row-pulse {
+  0%,100% { background: rgba(249,115,22,0.08); }
+  50%      { background: rgba(249,115,22,0.22); }
+}
+@keyframes _sel-box-pulse {
+  0%,100% { outline-color: rgba(249,115,22,0.5); }
+  50%      { outline-color: rgba(249,115,22,1.0); }
+}
+.sel-row { animation: _sel-row-pulse 2s ease-in-out infinite; }
+.sel-box { outline: 3px solid rgba(249,115,22,0.9); animation: _sel-box-pulse 2s ease-in-out infinite; }

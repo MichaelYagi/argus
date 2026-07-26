@@ -410,7 +410,7 @@
   // Toggle the shared highlight on a face's box (border + label) and its table row.
   // Respects per-card selection: hover-off never clears a selected face.
   function setHilite(card, index, on) {
-    if (!on && card._selIdx === index) return;
+    const isSelected = card._selIdx === index;
     const box = card.querySelector(`.test-overlay[data-face-index="${index}"]`);
     if (box) {
       const color = on ? HILITE : FACE_COLOR;
@@ -420,27 +420,30 @@
       if (tag) tag.style.background = color;
     }
     const row = card.querySelector(`tr[data-face-row="${index}"]`);
-    if (row) row.style.background = on ? 'rgba(249,115,22,0.15)' : '';
+    if (row && !isSelected) row.style.background = on ? 'rgba(255,255,255,0.07)' : '';
   }
 
-  // Select (or deselect) a face — persists the orange highlight until another is chosen.
+  // Select (or deselect) a face — persists the pulsing highlight until another is chosen.
   function selectFace(card, index) {
     const prev = card._selIdx;
     if (prev !== undefined) {
-      // Force-clear previous selection regardless of setHilite guard
       const prevBox = card.querySelector(`.test-overlay[data-face-index="${prev}"]`);
       if (prevBox) {
+        prevBox.classList.remove('sel-box');
         prevBox.style.borderColor = FACE_COLOR;
         prevBox.style.zIndex = '';
         const prevTag = prevBox.querySelector('.test-overlay-tag');
         if (prevTag) prevTag.style.background = FACE_COLOR;
       }
       const prevRow = card.querySelector(`tr[data-face-row="${prev}"]`);
-      if (prevRow) prevRow.style.background = '';
+      if (prevRow) prevRow.classList.remove('sel-row');
     }
-    if (prev === index) { card._selIdx = undefined; return; }  // toggle off
+    if (prev === index) { card._selIdx = undefined; return; }
     card._selIdx = index;
-    setHilite(card, index, true);
+    const box = card.querySelector(`.test-overlay[data-face-index="${index}"]`);
+    if (box) box.classList.add('sel-box');
+    const row = card.querySelector(`tr[data-face-row="${index}"]`);
+    if (row) row.classList.add('sel-row');
   }
 
   function drawOverlays(wrap, img, r) {
