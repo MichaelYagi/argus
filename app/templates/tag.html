@@ -540,16 +540,22 @@ function renderDetList() {
       if (box) { box.scrollIntoView({ behavior: 'smooth', block: 'center' }); flashBox(id); box.click(); }
     });
     row.addEventListener('mouseenter', () => {
-      row.style.background = 'rgba(255,255,255,.07)';
+      if (String(_selRowId) !== id) row.style.background = 'rgba(255,255,255,.07)';
       const box = document.querySelector('.t-box[data-id="' + id + '"]');
       if (box) { box.style.borderColor = '#fff'; box.style.zIndex = '10'; }
     });
     row.addEventListener('mouseleave', () => {
-      row.style.background = '';
+      row.style.background = String(_selRowId) === id ? 'rgba(249,115,22,0.15)' : '';
       const box = document.querySelector('.t-box[data-id="' + id + '"]');
       if (box) { box.style.borderColor = ''; box.style.zIndex = ''; }
     });
   });
+
+  // Re-apply persistent selection highlight after DOM rebuild
+  if (_selRowId !== null) {
+    const sel = el.querySelector('tr[data-id="' + _selRowId + '"]');
+    if (sel) sel.style.background = 'rgba(249,115,22,0.15)';
+  }
 }
 
 renderDetList();
