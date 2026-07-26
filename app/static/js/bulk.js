@@ -299,6 +299,11 @@ async function _pool(items, concurrency, fn) {
             face.label = name;
             lbl.textContent = name;
             lbl.title = name;
+            const overlayBox = row.querySelector(`[data-det-id="${face.detection_id}"] .det-lbl`);
+            if (overlayBox) {
+              const pct = face.similarity ?? face.confidence;
+              overlayBox.textContent = name + ' ' + (pct * 100).toFixed(0) + '%';
+            }
             window.showToast('Labeled and enrolled.', 'success');
           }, 'Name', null, face.label || '');
         });
@@ -331,6 +336,7 @@ async function _pool(items, concurrency, fn) {
               const b = det.bbox;
               const box = document.createElement('div');
               box.className = 'det-box ' + (det.class_name ? 'object' : 'face');
+              if (det.detection_id) box.dataset.detId = det.detection_id;
               box.style.left   = (b.x / srcScale * sx) + 'px';
               box.style.top    = (b.y / srcScale * sy) + 'px';
               box.style.width  = (b.w / srcScale * sx) + 'px';
