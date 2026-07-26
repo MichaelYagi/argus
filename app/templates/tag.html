@@ -167,11 +167,11 @@ function renderBoxes() {
     if (isFace) {
       tip.textContent = (displayLabel || 'Unknown')
         + (det.similarity != null ? ' (' + Math.max(0, det.similarity * 100).toFixed(0) + '% match)' : '');
-      div.addEventListener('click', () => { labelBox(div, tip, chip); flashRow(det.id); });
+      div.addEventListener('click', () => { labelBox(div, tip, chip); selectRow(det.id); });
     } else {
       tip.textContent = (displayLabel || 'object')
         + (det.confidence != null ? ' (' + (det.confidence * 100).toFixed(0) + '%)' : '');
-      div.addEventListener('click', () => { labelObjectBox(div, tip, chip); flashRow(det.id); });
+      div.addEventListener('click', () => { labelObjectBox(div, tip, chip); selectRow(det.id); });
     }
     div.addEventListener('mouseenter', () => {
       const row = document.querySelector('#det-list tr[data-id="' + det.id + '"]');
@@ -337,11 +337,17 @@ function closeReprocessOverlay() {
   document.getElementById('reprocess-overlay').style.display = 'none';
 }
 // Cross-link helpers: briefly orange-highlight the bbox or table row when navigating between them.
-function flashRow(detId) {
-  const row = document.querySelector('#det-list tr[data-id="' + detId + '"]');
-  if (!row) return;
-  row.style.background = 'rgba(249,115,22,0.2)';
-  setTimeout(() => { row.style.background = ''; }, 1200);
+let _selRowId = null;
+function selectRow(detId) {
+  if (_selRowId !== null) {
+    const prev = document.querySelector('#det-list tr[data-id="' + _selRowId + '"]');
+    if (prev) prev.style.background = '';
+  }
+  _selRowId = (_selRowId === detId) ? null : detId;
+  if (_selRowId !== null) {
+    const row = document.querySelector('#det-list tr[data-id="' + _selRowId + '"]');
+    if (row) row.style.background = 'rgba(249,115,22,0.15)';
+  }
 }
 function flashBox(detId) {
   const box = document.querySelector('.t-box[data-id="' + detId + '"]');
