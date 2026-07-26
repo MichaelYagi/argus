@@ -134,8 +134,13 @@ def download_model(model_path: Path) -> None:
             with open(tmp, "wb") as f:
                 for chunk in resp.iter_bytes(chunk_size=1 << 16):
                     f.write(chunk)
+        size = tmp.stat().st_size
+        if size == 0:
+            tmp.unlink(missing_ok=True)
+            raise RuntimeError("Downloaded file is empty — URL may be invalid or network failed")
         tmp.rename(model_path)
-        logger.info("FairFace model saved to %s in %.1fs", model_path, time.monotonic() - t0)
+        logger.info("FairFace model saved to %s (%.1f MB) in %.1fs",
+                    model_path, size / 1_048_576, time.monotonic() - t0)
     except Exception:
         tmp.unlink(missing_ok=True)
         raise
