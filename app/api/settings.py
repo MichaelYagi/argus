@@ -115,6 +115,15 @@ async def update_setting(key: str, body: _UpdateBody, user_id: int = Depends(req
         log_buffer.resize(int(value_str))
         activity_buffer.resize(int(value_str))
 
+    # FairFace: load when enabled, unload when disabled.
+    if key == "face.use_fairface":
+        import asyncio
+        from app.inference.registry import registry
+        if value_str == "true":
+            asyncio.create_task(_ensure_fairface_bg())
+        else:
+            registry.swap_fairface_engine(None)
+
     from app.core import activity_buffer as _ab
     _ab.emit("settings", f"Setting changed: {key} → {value_str}")
 
@@ -238,6 +247,29 @@ def _apply_reset(key: str, default_value: str) -> None:
         from app.core import activity_buffer, log_buffer
         log_buffer.resize(int(default_value))
         activity_buffer.resize(int(default_value))
+
+    if key == "face.use_fairface" and default_value == "false":
+        from app.inference.registry import registry
+        registry.swap_fairface_engine(None)
+
+
+async def _ensure_fairface_bg() -> None:
+    """Download (if needed) and load FairFace into the registry."""
+    import asyncio
+    import logging
+    logger = logging.getLogger(__name__)
+    from app.core.paths import models_dir
+    from app.inference.registry import registry
+    model_path = models_dir() / "fairface" / "fairface.onnx"
+    try:
+        if not model_path.exists():
+            from app.inference.fairface_engine import download_model
+            await asyncio.to_thread(download_model, model_path)
+        from app.inference.fairface_engine import FairFaceEngine
+        registry.swap_fairface_engine(FairFaceEngine(model_path))
+        logger.info("FairFace model loaded.")
+    except Exception as exc:
+        logger.warning("FairFace load failed: %s", exc)
 
 
 def _fmt(row) -> dict:

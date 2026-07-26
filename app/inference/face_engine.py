@@ -23,6 +23,7 @@ class FaceDetection:
     # Optional facial attributes — None when the loaded model pack doesn't provide them.
     age: int | None = None
     gender: str | None = None                        # 'M' or 'F'
+    ethnicity: str | None = None                     # FairFace label when face.use_fairface is on
     pose: tuple[float, float, float] | None = None   # (pitch, yaw, roll), degrees
     mask: float | None = None                        # mask-wearing probability [0, 1]
     kps: list[list[float]] | None = None             # 5 keypoints [[x,y], ...]

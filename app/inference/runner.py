@@ -83,6 +83,7 @@ def _remote_infer_faces(img_array: Any, url: str) -> tuple[list[Any], Any]:
             embedding=emb,
             age=f.get("age"),
             gender=f.get("gender"),
+            ethnicity=f.get("ethnicity"),
             pose=tuple(f["pose"]) if f.get("pose") else None,
             mask=f.get("mask"),
             kps=f.get("kps"),
@@ -118,24 +119,57 @@ def _remote_infer_objects(img_array: Any, url: str) -> tuple[list[Any], list[str
 
 def infer_faces(img_array: Any) -> tuple[list[Any], Any]:
     """Detect faces. Routes to the inference sidecar when INFERENCE_URL is set."""
+    from app.core import settings_cache
+
     url = _inference_url()
     t0 = time.monotonic()
     if url:
         faces, model_row = _remote_infer_faces(img_array, url)
         logger.debug("infer_faces: remote url=%s model=%s -> %d faces in %.0fms",
                      url, model_row.get("name"), len(faces), (time.monotonic() - t0) * 1000)
-        return faces, model_row
+    else:
+        model_row = store.get_active_model("face")
+        if model_row is None:
+            raise HTTPException(503, "No active face model. Download and activate one via /api/models.")
+        engine = registry.get_face_engine()
+        if engine is None:
+            raise HTTPException(503, "Face engine not loaded. Activate a model via /api/models/{id}/activate.")
+        faces = engine.detect(img_array)
+        logger.debug("infer_faces: in-process model=%s -> %d faces in %.0fms",
+                     model_row["name"], len(faces), (time.monotonic() - t0) * 1000)
 
-    model_row = store.get_active_model("face")
-    if model_row is None:
-        raise HTTPException(503, "No active face model. Download and activate one via /api/models.")
-    engine = registry.get_face_engine()
-    if engine is None:
-        raise HTTPException(503, "Face engine not loaded. Activate a model via /api/models/{id}/activate.")
-    faces = engine.detect(img_array)
-    logger.debug("infer_faces: in-process model=%s -> %d faces in %.0fms",
-                 model_row["name"], len(faces), (time.monotonic() - t0) * 1000)
+    if faces and settings_cache.cache.get_or("face.use_fairface", False):
+        _enrich_fairface(img_array, faces)
+
     return faces, model_row
+
+
+def _enrich_fairface(img_array: Any, faces: list[Any]) -> None:
+    """Overwrite age/gender and set ethnicity on each FaceDetection using FairFace."""
+    import numpy as np
+
+    ff = registry.get_fairface_engine()
+    if ff is None:
+        return
+
+    h, w = img_array.shape[:2]
+    for det in faces:
+        x, y, bw, bh = int(det.bbox[0]), int(det.bbox[1]), int(det.bbox[2]), int(det.bbox[3])
+        # 25% padding, same as the reference implementation
+        pad_x = max(1, int(bw * 0.25))
+        pad_y = max(1, int(bh * 0.25))
+        x1 = max(0, x - pad_x)
+        y1 = max(0, y - pad_y)
+        x2 = min(w, x + bw + pad_x)
+        y2 = min(h, y + bh + pad_y)
+        crop = img_array[y1:y2, x1:x2]
+        if crop.size == 0:
+            continue
+        result = ff.analyze(crop)
+        if result:
+            det.age       = result["age"]
+            det.gender    = result["gender"]
+            det.ethnicity = result["ethnicity"]
 
 
 def infer_face_embedding(img_array: Any) -> Any | None:

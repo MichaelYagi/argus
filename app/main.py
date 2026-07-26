@@ -57,6 +57,7 @@ async def lifespan(app: FastAPI):
     _autoload_engines()
     _check_data_path_integrity()
     _purge_log_files()
+    asyncio.create_task(_fairface_download_if_needed())
     purge_task = asyncio.create_task(_midnight_purge_loop())
     yield
     purge_task.cancel()
@@ -156,6 +157,47 @@ def _autoload_engines() -> None:
             log.info("Loaded object model: %s", obj_row["name"])
         except Exception as exc:
             log.warning("Failed to load object model %s: %s", obj_row["name"], exc, exc_info=True)
+
+    # FairFace: load immediately if model file is present; download in background if setting is on.
+    _load_fairface_if_ready()
+
+
+async def _fairface_download_if_needed() -> None:
+    """Download and load the FairFace model in the background when the setting is on."""
+    from app.core import settings_cache
+    if not settings_cache.cache.get_or("face.use_fairface", False):
+        return
+    from app.core.paths import models_dir
+    from app.inference.registry import registry
+    model_path = models_dir() / "fairface" / "fairface.onnx"
+    if model_path.exists():
+        return  # already handled by _load_fairface_if_ready()
+    try:
+        from app.inference.fairface_engine import FairFaceEngine, download_model
+        await asyncio.to_thread(download_model, model_path)
+        registry.swap_fairface_engine(FairFaceEngine(model_path))
+        log.info("FairFace model downloaded and loaded.")
+    except Exception as exc:
+        log.warning("FairFace background download failed: %s", exc)
+
+
+def _load_fairface_if_ready() -> None:
+    """Load FairFace engine from disk when the model file already exists."""
+    from app.core import settings_cache
+    if not settings_cache.cache.get_or("face.use_fairface", False):
+        return
+    from app.core.paths import models_dir
+    from app.inference.registry import registry
+    model_path = models_dir() / "fairface" / "fairface.onnx"
+    if not model_path.exists():
+        log.info("FairFace enabled but model not yet downloaded — will download in background.")
+        return
+    try:
+        from app.inference.fairface_engine import FairFaceEngine
+        registry.swap_fairface_engine(FairFaceEngine(model_path))
+        log.info("FairFace model loaded.")
+    except Exception as exc:
+        log.warning("Failed to load FairFace model: %s", exc, exc_info=True)
 
 
 app = FastAPI(title="Argus", version=__version__, lifespan=lifespan, docs_url=None)

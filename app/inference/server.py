@@ -117,6 +117,7 @@ def _face_to_dict(face: Any) -> dict:
         "embedding_shape":  emb_shape,
         "age":              face.age,
         "gender":           face.gender,
+        "ethnicity":        getattr(face, "ethnicity", None),
         "pose":             list(face.pose) if face.pose is not None else None,
         "mask":             face.mask,
         "kps":              face.kps,

@@ -243,7 +243,10 @@
       "Bash(~/.local/bin/pytest tests/test_templates.py -v)",
       "Read(//root/**)",
       "Bash(env)",
-      "Bash(/home/michael/.venvs/mcp-platform/bin/ruff check *)"
+      "Bash(/home/michael/.venvs/mcp-platform/bin/ruff check *)",
+      "Bash(gh api *)",
+      "WebFetch(domain:api.github.com)",
+      "WebFetch(domain:raw.githubusercontent.com)"
     ]
   }
 }

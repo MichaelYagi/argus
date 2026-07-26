@@ -1681,13 +1681,14 @@ def _face_attrs(det: Any) -> dict:
     """Serializable facial attributes for a FaceDetection.
     Values are None when the loaded model pack didn't provide them."""
     return {
-        "age": det.age,
-        "gender": det.gender,
-        "pose": list(det.pose) if det.pose is not None else None,
-        "mask": det.mask,
-        "kps": det.kps,
-        "landmark_2d_106": det.landmark_2d_106,
-        "landmark_3d_68": det.landmark_3d_68,
+        "age":              det.age,
+        "gender":           det.gender,
+        "ethnicity":        getattr(det, "ethnicity", None),
+        "pose":             list(det.pose) if det.pose is not None else None,
+        "mask":             det.mask,
+        "kps":              det.kps,
+        "landmark_2d_106":  det.landmark_2d_106,
+        "landmark_3d_68":   det.landmark_3d_68,
     }
 
 

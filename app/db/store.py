@@ -2852,6 +2852,10 @@ _SETTINGS_SEED: list[tuple] = [
      "0.5",   "float",  "face",
      "Suggested-People Threshold | How similar two unknown faces must be (0–1) to be grouped "
      "as the same person on the Suggested People page. Higher splits more; lower merges more"),
+    ("face.use_fairface",
+     "true",  "bool",   "face",
+     "FairFace Attributes | Enrich face detections with age, gender, and ethnicity predictions "
+     "from the FairFace ResNet-34 model (~85 MB). The model is downloaded automatically on first enable."),
     ("object.detection_confidence",
      "0.5",   "float",  "object",
      "Detection Confidence | Minimum confidence for a detected object to be reported"),
