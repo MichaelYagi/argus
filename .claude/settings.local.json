@@ -249,7 +249,14 @@
       "WebFetch(domain:raw.githubusercontent.com)",
       "Bash(xargs ls -lh)",
       "Bash(curl -L --progress-bar -o /mnt/c/Users/Michael/Documents/development/argus/models/fairface/fairface.onnx \"https://github.com/yakhyo/fairface-onnx/releases/download/weights/fairface.onnx\")",
-      "Bash(echo \"Download started in background \\(PID $!\\)\")"
+      "Bash(echo \"Download started in background \\(PID $!\\)\")",
+      "WebFetch(domain:huggingface.co)",
+      "WebFetch(domain:arxiv.org)",
+      "WebFetch(domain:ar5iv.labs.arxiv.org)",
+      "WebFetch(domain:deepwiki.com)",
+      "WebFetch(domain:tessl.io)",
+      "WebFetch(domain:www.aimodels.fyi)",
+      "WebFetch(domain:wandb.ai)"
     ]
   }
 }

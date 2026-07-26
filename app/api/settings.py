@@ -7,15 +7,15 @@ import logging
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
 
-logger = logging.getLogger(__name__)
-
-# Strong references to background tasks so they are not GC'd before completing.
-_bg_tasks: set = set()
-
 from app.api._responses import ERR_400, ERR_401, ERR_404, ok
 from app.core import settings_cache
 from app.core.auth import require_admin
 from app.db import store
+
+logger = logging.getLogger(__name__)
+
+# Strong references to background tasks so they are not GC'd before completing.
+_bg_tasks: set = set()
 
 router = APIRouter()
 
@@ -267,6 +267,7 @@ def _apply_reset(key: str, default_value: str) -> None:
 async def _ensure_fairface_bg() -> None:
     """Download (if needed) and load FairFace into the registry."""
     import asyncio
+
     from app.core.paths import models_dir
     from app.inference.registry import registry
     model_path = models_dir() / "fairface" / "fairface.onnx"
