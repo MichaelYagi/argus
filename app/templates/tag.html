@@ -286,6 +286,8 @@ async function deleteDetection(div) {
     div.remove();
     const fi = FACES.findIndex(f => f.id === id);
     if (fi !== -1) FACES.splice(fi, 1);
+    const oi = OBJECTS.findIndex(o => o.id === id);
+    if (oi !== -1) OBJECTS.splice(oi, 1);
     renderDetList();
     setStatus('Detection deleted.');
     sessionStorage.setItem('argus_dirty_image', JSON.stringify(
