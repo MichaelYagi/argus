@@ -23,11 +23,37 @@ _MODEL_URL = "https://github.com/yakhyo/fairface-onnx/releases/download/weights/
 
 _RACE_LABELS   = ["White", "Black", "Latino_Hispanic", "East Asian", "Southeast Asian", "Indian", "Middle Eastern"]
 _GENDER_LABELS = ["M", "F"]
-_AGE_LABELS    = ["0-2", "3-9", "10-19", "20-29", "30-39", "40-49", "50-59", "60-69", "70+"]
-_AGE_MIDPOINTS = [1,     6,     14,      24,      34,      44,      54,      64,      70]
+_AGE_LABELS = ["0-2", "3-9", "10-19", "20-29", "30-39", "40-49", "50-59", "60-69", "70+"]
 
 _MEAN = np.array([0.485, 0.456, 0.406], dtype=np.float32)
 _STD  = np.array([0.229, 0.224, 0.225], dtype=np.float32)
+
+# Canonical 5-point landmark positions for a 224×224 aligned crop.
+# Scaled from the standard InsightFace/MTCNN 112×112 reference (×2).
+# Order: left_eye, right_eye, nose, left_mouth, right_mouth.
+_KPS_REF = np.array([
+    [76.5892, 103.3926],
+    [147.0636, 103.0028],
+    [112.0504, 143.4732],
+    [ 83.0986, 184.7310],
+    [141.4598, 184.4082],
+], dtype=np.float32)
+
+
+def aligned_crop(img_rgb: Any, kps: list) -> Any | None:
+    """Return a 224×224 similarity-transformed face crop aligned to canonical landmark positions.
+
+    Uses cv2 (available via InsightFace's deps). Returns None if alignment fails.
+    """
+    try:
+        import cv2
+        src = np.array(kps, dtype=np.float32).reshape(5, 2)
+        M, _ = cv2.estimateAffinePartial2D(src, _KPS_REF, method=cv2.LMEDS)
+        if M is None:
+            return None
+        return cv2.warpAffine(img_rgb, M, (224, 224), flags=cv2.INTER_LINEAR)
+    except Exception:
+        return None
 
 
 def _softmax(x: np.ndarray) -> np.ndarray:
@@ -87,8 +113,7 @@ class FairFaceEngine:
         age_p    = _softmax(outputs[2].flatten())
 
         return {
-            "age":       _AGE_MIDPOINTS[int(age_p.argmax())],
-            "age_group": _AGE_LABELS[int(age_p.argmax())],
+            "age":       _AGE_LABELS[int(age_p.argmax())],
             "gender":    _GENDER_LABELS[int(gender_p.argmax())],
             "ethnicity": _RACE_LABELS[int(race_p.argmax())],
         }

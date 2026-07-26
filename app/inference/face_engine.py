@@ -21,7 +21,7 @@ class FaceDetection:
     confidence: float
     embedding: Any  # numpy float32 array, shape (embedding_dim,)
     # Optional facial attributes — None when the loaded model pack doesn't provide them.
-    age: int | None = None
+    age: str | int | None = None  # int from InsightFace; str label (e.g. "10-19") from FairFace
     gender: str | None = None                        # 'M' or 'F'
     ethnicity: str | None = None                     # FairFace label when face.use_fairface is on
     pose: tuple[float, float, float] | None = None   # (pitch, yaw, roll), degrees

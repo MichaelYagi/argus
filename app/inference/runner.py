@@ -150,18 +150,25 @@ def _enrich_fairface(img_array: Any, faces: list[Any]) -> None:
     if ff is None:
         return
 
+    from app.inference.fairface_engine import aligned_crop
+
     h, w = img_array.shape[:2]
     for det in faces:
-        x, y, bw, bh = int(det.bbox[0]), int(det.bbox[1]), int(det.bbox[2]), int(det.bbox[3])
-        # 25% padding, same as the reference implementation
-        pad_x = max(1, int(bw * 0.25))
-        pad_y = max(1, int(bh * 0.25))
-        x1 = max(0, x - pad_x)
-        y1 = max(0, y - pad_y)
-        x2 = min(w, x + bw + pad_x)
-        y2 = min(h, y + bh + pad_y)
-        crop = img_array[y1:y2, x1:x2]
-        if crop.size == 0:
+        # Prefer similarity-transform alignment when keypoints are available;
+        # fall back to padded rect crop otherwise.
+        crop = None
+        if det.kps is not None:
+            crop = aligned_crop(img_array, det.kps)
+        if crop is None:
+            x, y, bw, bh = int(det.bbox[0]), int(det.bbox[1]), int(det.bbox[2]), int(det.bbox[3])
+            pad_x = max(1, int(bw * 0.25))
+            pad_y = max(1, int(bh * 0.25))
+            x1 = max(0, x - pad_x)
+            y1 = max(0, y - pad_y)
+            x2 = min(w, x + bw + pad_x)
+            y2 = min(h, y + bh + pad_y)
+            crop = img_array[y1:y2, x1:x2]
+        if crop is None or crop.size == 0:
             continue
         result = ff.analyze(crop)
         if result:
