@@ -247,10 +247,25 @@ async function _pool(items, concurrency, fn) {
     const desc = summary.length ? summary.join(', ') + ' detected' : 'Nothing detected';
 
     const tagLink = srcId && !discarded ? `<a href="/tag/${srcId}" style="font-size:12px">Tag</a>` : '';
-    const thumbs = allDets.slice(0, 8).map(d =>
-      `<img src="${d.crop_url}" title="${esc(d.label || d.class_name || 'Unknown')}"
-            style="width:48px;height:48px;object-fit:cover;border-radius:3px">`
+
+    // Face thumbs are clickable for labeling; object thumbs are plain.
+    const faceThumbs = faces.map(d =>
+      `<div class="bulk-face-thumb" data-det-id="${d.detection_id}"
+            style="cursor:pointer;text-align:center;width:56px;flex-shrink:0">
+         <img src="${esc(d.crop_url)}"
+              style="width:52px;height:52px;object-fit:cover;border-radius:3px;display:block">
+         <div class="bulk-face-lbl" style="font-size:10px;overflow:hidden;text-overflow:ellipsis;
+              white-space:nowrap;max-width:56px;margin-top:2px;color:var(--muted)"
+              title="${esc(d.label || 'Unknown')}">${esc(d.label || 'Unknown')}</div>
+       </div>`
     ).join('');
+    const objThumbs = objects.map(d =>
+      `<img src="${esc(d.crop_url)}" title="${esc(d.class_name || 'Unknown')}"
+            style="width:52px;height:52px;object-fit:cover;border-radius:3px">`
+    ).join('');
+    const thumbsHtml = (faceThumbs || objThumbs)
+      ? `<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px;align-items:flex-start">${faceThumbs}${objThumbs}</div>`
+      : '';
 
     row.innerHTML = `
       <div style="flex:1;min-width:0">
@@ -262,7 +277,7 @@ async function _pool(items, concurrency, fn) {
         </div>
         ${discarded
           ? `<div class="alert alert-warning" style="margin:0">No detections — image was not saved.</div>`
-          : (thumbs ? `<div style="display:flex;gap:4px;flex-wrap:wrap;margin-bottom:8px">${thumbs}</div>` : '') +
+          : thumbsHtml +
             (allDets.length ? `<div id="overlay-wrap-${i}" style="position:relative;display:inline-block;max-width:100%"></div>` : '') +
             (faces.length && objects.length ? `<div style="display:flex;gap:8px;margin-top:8px">
               <button class="btn btn-ghost tag-toggle active" data-kind="face">Faces</button>
@@ -276,6 +291,56 @@ async function _pool(items, concurrency, fn) {
         this.classList.toggle('active');
         const wrap = row.querySelector(`#overlay-wrap-${i}`);
         if (wrap) wrap.classList.toggle('hide-' + this.dataset.kind + 's', !this.classList.contains('active'));
+      });
+    });
+
+    // Wire up face thumb click → label popup → enroll
+    row.querySelectorAll('.bulk-face-thumb').forEach(thumb => {
+      const detId = parseInt(thumb.dataset.detId, 10);
+      const face  = faces.find(f => f.detection_id === detId);
+      if (!face) return;
+      thumb.addEventListener('click', () => {
+        if (!window.showLabelPopup) return;
+        showLabelPopup(thumb, async name => {
+          if (!name) return;
+          try {
+            const resp = await fetch(`/api/detections/${detId}/label`, {
+              method: 'PUT',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ label: name, enroll: true }),
+            });
+            if (!resp.ok) { showToast('Label failed', 'error'); return; }
+            face.label = name;
+            thumb.querySelector('.bulk-face-lbl').textContent = name;
+            thumb.querySelector('.bulk-face-lbl').title = name;
+            // Update the bbox overlay label if already rendered
+            const wrap = row.querySelector(`#overlay-wrap-${i}`);
+            if (wrap) {
+              wrap.querySelectorAll('.det-box.face').forEach(box => {
+                const b = face.bbox;
+                const fl = parseFloat(box.style.left);
+                const ft = parseFloat(box.style.top);
+                const fw = parseFloat(box.style.width);
+                const fh = parseFloat(box.style.height);
+                // Match box by approximate position (within 2px)
+                const img = wrap.querySelector('img');
+                if (!img) return;
+                const sx = img.clientWidth  / img.naturalWidth;
+                const sy = img.clientHeight / img.naturalHeight;
+                const ex = b.x / srcScale * sx;
+                const ey = b.y / srcScale * sy;
+                if (Math.abs(fl - ex) < 2 && Math.abs(ft - ey) < 2) {
+                  const lbl = box.querySelector('.det-lbl');
+                  if (lbl) {
+                    const pct = face.similarity ?? face.confidence;
+                    lbl.textContent = name + ' ' + (pct * 100).toFixed(0) + '%';
+                  }
+                }
+              });
+            }
+            showToast('Labeled and enrolled.', 'success');
+          } catch { showToast('Label failed', 'error'); }
+        }, 'Name', null, face.label || '');
       });
     });
 
