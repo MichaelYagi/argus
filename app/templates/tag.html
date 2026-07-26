@@ -340,7 +340,6 @@ function closeReprocessOverlay() {
 function flashRow(detId) {
   const row = document.querySelector('#det-list tr[data-id="' + detId + '"]');
   if (!row) return;
-  row.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
   row.style.background = 'rgba(249,115,22,0.2)';
   setTimeout(() => { row.style.background = ''; }, 1200);
 }
