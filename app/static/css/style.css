@@ -638,8 +638,8 @@ body.modal-open { overflow: hidden; }
   50%      { background: rgba(249,115,22,0.22); }
 }
 @keyframes _sel-box-pulse {
-  0%,100% { outline-color: rgba(249,115,22,0.5); }
-  50%      { outline-color: rgba(249,115,22,1.0); }
+  0%,100% { outline-color: #f97316; }
+  50%      { outline-color: #ffffff; }
 }
 .sel-row { animation: _sel-row-pulse 2s ease-in-out infinite; }
-.sel-box { outline: 3px solid rgba(249,115,22,0.9); animation: _sel-box-pulse 2s ease-in-out infinite; }
+.sel-box { outline: 3px solid #f97316; animation: _sel-box-pulse 1.5s ease-in-out infinite; }
