@@ -256,6 +256,7 @@ async def get_identity(
     result = _fmt(row)
     result["detection_count"] = row["detection_count"]
     result["embedding_count"] = row["embedding_count"]
+    result["pending_review_count"] = row["pending_review_count"]
     crop = row["thumbnail_crop"]
     result["thumbnail_url"] = f"/media/crops/{crop}" if crop else None
     return result

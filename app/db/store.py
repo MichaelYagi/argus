@@ -980,7 +980,13 @@ def get_identity_with_counts(identity_id: int, user_id: int, environment_id: int
                            AND d2.environment_id = i.environment_id
                            AND (d2.review_status IS NULL OR d2.review_status != 'rejected')
                          ORDER BY d2.detected_at ASC, d2.id ASC LIMIT 1)
-                      ) AS thumbnail_crop
+                      ) AS thumbnail_crop,
+                      (SELECT COUNT(*) FROM detections dp
+                       WHERE dp.identity_id = i.id AND dp.user_id = i.user_id
+                         AND dp.environment_id = i.environment_id
+                         AND dp.review_status IN ('pending', 'rejected')
+                         AND dp.type = 'face' AND dp.ignored = 0
+                      ) AS pending_review_count
                FROM identities i
                LEFT JOIN detections d  ON d.identity_id = i.id
                                       AND (d.review_status IS NULL OR d.review_status != 'rejected')
