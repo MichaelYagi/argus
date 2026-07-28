@@ -41,13 +41,21 @@
   }
 
   const _shortcutsSg = `
+    <span><kbd>D</kbd> dismiss</span>
     <span><kbd>V</kbd> confirm group</span>
     <span><kbd>F</kbd> dismiss group</span>
-    <span><kbd>D</kbd> dismiss</span>
-    <span><kbd>⇧D</kbd> dismiss sel.</span>`;
-  const _shortcutsOther = `
+    <span><kbd>⇧C</kbd> confirm sel.</span>
+    <span><kbd>⇧D</kbd> dismiss sel.</span>
+    <span><kbd>A</kbd> select all</span>`;
+  const _shortcutsNm = `
     <span><kbd>D</kbd> remove</span>
-    <span><kbd>⇧D</kbd> remove sel.</span>`;
+    <span><kbd>⇧D</kbd> remove sel.</span>
+    <span><kbd>A</kbd> select all</span>`;
+  const _shortcutsMm = `
+    <span><kbd>D</kbd> remove</span>
+    <span><kbd>⇧C</kbd> confirm sel.</span>
+    <span><kbd>⇧D</kbd> remove sel.</span>
+    <span><kbd>A</kbd> select all</span>`;
 
   window.switchTab = (tab, scroll = true) => {
     setFocusedCard(null);
@@ -57,7 +65,8 @@
     document.getElementById('tab-sg').classList.toggle('active', tab === 'sg');
     document.getElementById('tab-nm').classList.toggle('active', tab === 'nm');
     document.getElementById('tab-mm').classList.toggle('active', tab === 'mm');
-    document.getElementById('rq-tab-shortcuts').innerHTML = tab === 'sg' ? _shortcutsSg : _shortcutsOther;
+    document.getElementById('rq-confirm-shortcut').style.display = tab === 'nm' ? 'none' : '';
+    document.getElementById('rq-tab-shortcuts').innerHTML = tab === 'sg' ? _shortcutsSg : tab === 'nm' ? _shortcutsNm : _shortcutsMm;
     if (scroll) window.scrollTo({ top: 0, behavior: 'instant' });
     setFocusedCard(getActivePanelCards()[0] || null);
   };
