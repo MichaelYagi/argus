@@ -520,6 +520,7 @@ window.openSourceModal = function openSourceModal(url, bbox) {
   document.body.appendChild(overlay);
   lockScroll();
   const close = () => { overlay.remove(); unlockScroll(); document.removeEventListener('keydown', onKey); };
+  overlay._close = close;
   closeBtn.addEventListener('click', close);
   overlay.addEventListener('click', e => { if (e.target === overlay) close(); });
   const onKey = e => { if (e.key === 'Escape') close(); };

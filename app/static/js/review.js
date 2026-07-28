@@ -841,7 +841,7 @@
     if (e.key === ' ' && !e.shiftKey && !e.ctrlKey && !e.metaKey && !e.altKey) {
       e.preventDefault();
       const existing = document.querySelector('.src-modal');
-      if (existing) { existing.remove(); return; }
+      if (existing) { existing._close ? existing._close() : existing.remove(); return; }
       if (!focusedCard) return;
       focusedCard.querySelector('.rc-crop-img')?.click();
       return;
