@@ -40,6 +40,15 @@
     return [];
   }
 
+  const _shortcutsSg = `
+    <span><kbd>V</kbd> confirm group</span>
+    <span><kbd>F</kbd> dismiss group</span>
+    <span><kbd>D</kbd> dismiss</span>
+    <span><kbd>⇧D</kbd> dismiss sel.</span>`;
+  const _shortcutsOther = `
+    <span><kbd>D</kbd> remove</span>
+    <span><kbd>⇧D</kbd> remove sel.</span>`;
+
   window.switchTab = (tab, scroll = true) => {
     setFocusedCard(null);
     document.getElementById('panel-sg').style.display = tab === 'sg' ? '' : 'none';
@@ -48,6 +57,7 @@
     document.getElementById('tab-sg').classList.toggle('active', tab === 'sg');
     document.getElementById('tab-nm').classList.toggle('active', tab === 'nm');
     document.getElementById('tab-mm').classList.toggle('active', tab === 'mm');
+    document.getElementById('rq-tab-shortcuts').innerHTML = tab === 'sg' ? _shortcutsSg : _shortcutsOther;
     if (scroll) window.scrollTo({ top: 0, behavior: 'instant' });
     setFocusedCard(getActivePanelCards()[0] || null);
   };
