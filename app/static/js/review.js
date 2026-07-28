@@ -11,6 +11,14 @@
   const itemCache = new Map();
   let focusedCard = null;
 
+  const _stale = { sg: false, nm: false, mm: false };
+
+  function markOtherTabsStale(currentTab) {
+    for (const t of ['sg', 'nm', 'mm']) {
+      if (t !== currentTab) _stale[t] = true;
+    }
+  }
+
   const toTop = document.getElementById('scroll-top');
   const updateToTop = () => { if (toTop) toTop.style.display = window.scrollY > 300 ? 'flex' : 'none'; };
   window.addEventListener('scroll', updateToTop, { passive: true });
@@ -68,6 +76,12 @@
     document.getElementById('rq-confirm-shortcut').style.display = tab === 'nm' ? 'none' : '';
     document.getElementById('rq-tab-shortcuts').innerHTML = tab === 'sg' ? _shortcutsSg : tab === 'nm' ? _shortcutsNm : _shortcutsMm;
     if (scroll) window.scrollTo({ top: 0, behavior: 'instant' });
+    if (_stale[tab]) {
+      _stale[tab] = false;
+      if (tab === 'sg') loadSgGroups();
+      else if (tab === 'nm') nmLoader.reset();
+      else if (tab === 'mm') loadMismatches();
+    }
     setFocusedCard(getActivePanelCards()[0] || null);
   };
 
@@ -187,6 +201,7 @@
       });
       nmLoader.checkEmpty();
     }
+    markOtherTabsStale(getActiveTab());
     if (window.showToast) {
       const verb = action === 'confirm' ? ' confirmed' : action === 'reject' ? ' dismissed' : ' removed';
       showToast(ids.length + verb, 'success');
@@ -238,6 +253,7 @@
     selMm.clear();
     if (mmAll) mmAll.checked = false;
     updateBars();
+    markOtherTabsStale('mm');
     if (window.showToast) showToast(ids.length + ' confirmed', 'success');
   };
 
@@ -253,6 +269,7 @@
     selMm.clear();
     if (mmAll) mmAll.checked = false;
     updateBars();
+    markOtherTabsStale('mm');
     if (window.showToast) showToast(ids.length + ' removed', 'success');
   };
 
@@ -591,6 +608,7 @@
     const ok = await sendReview('/api/review/mismatches/' + id + '/dismiss', { method: 'POST' });
     if (ok) {
       removeMismatchCard(id);
+      markOtherTabsStale('mm');
       if (window.showToast) showToast('Marked as correct', 'success');
     }
   };
@@ -598,6 +616,7 @@
   window.doMismatchDismiss = async id => {
     if (await sendReview('/api/review/' + id + '/unidentify', { method: 'POST' })) {
       removeMismatchCard(id);
+      markOtherTabsStale('mm');
       if (window.showToast) showToast('Removed', 'success');
     }
   };
@@ -609,11 +628,14 @@
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ label }),
     });
-    if (ok) { addFaceLabel(label); removeMismatchCard(id); }
+    if (ok) { addFaceLabel(label); removeMismatchCard(id); markOtherTabsStale('mm'); }
   };
 
   window.doConfirm = async id => {
-    if (await sendReview('/api/review/' + id + '/confirm', { method: 'POST' })) removeCard(id);
+    if (await sendReview('/api/review/' + id + '/confirm', { method: 'POST' })) {
+      removeCard(id);
+      markOtherTabsStale(getActiveTab());
+    }
   };
   window.doReject = async id => {
     if (!await sendReview('/api/review/' + id + '/reject', { method: 'POST' })) return;
@@ -621,16 +643,20 @@
     const item = itemCache.get(id);
     if (item) renderItem({ ...item, current_identity: null, suggested_matches: [] }, nmLoader);
     nmLoader.checkEmpty();
+    markOtherTabsStale(getActiveTab());
   };
   window.doDismiss = async id => {
-    if (await sendReview('/api/review/' + id + '/unidentify', { method: 'POST' })) removeCard(id);
+    if (await sendReview('/api/review/' + id + '/unidentify', { method: 'POST' })) {
+      removeCard(id);
+      markOtherTabsStale(getActiveTab());
+    }
   };
   window.doReassign = async (id, identityId) => {
     const ok = await sendReview('/api/review/' + id + '/reassign', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ identity_id: identityId }),
     });
-    if (ok) removeCard(id);
+    if (ok) { removeCard(id); markOtherTabsStale(getActiveTab()); }
   };
   window.doReassignLabel = async id => {
     const label = document.getElementById('ra-' + id)?.value.trim();
@@ -639,7 +665,7 @@
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ label }),
     });
-    if (ok) { addFaceLabel(label); removeCard(id); }
+    if (ok) { addFaceLabel(label); removeCard(id); markOtherTabsStale(getActiveTab()); }
   };
 
   // ---------------------------------------------------------------------------
@@ -731,6 +757,7 @@
     updateBars();
     checkSgEmpty();
     setFocusedCard(getActivePanelCards()[0] || null);
+    markOtherTabsStale('sg');
     if (window.showToast) showToast(ids.length + ' confirmed', 'success');
   };
 
@@ -757,6 +784,7 @@
       if (item) renderItem({ ...item, current_identity: null, suggested_matches: [] }, nmLoader);
     });
     nmLoader.checkEmpty();
+    markOtherTabsStale('sg');
     if (window.showToast) showToast(ids.length + ' dismissed', 'success');
   };
 
@@ -891,6 +919,7 @@
 
   window.addEventListener('pageshow', e => {
     if (!e.persisted) return;
+    _stale.sg = _stale.nm = _stale.mm = false;
     const savedTab = sessionStorage.getItem('argus_nav_tab');
     const savedScroll = savedTab ? parseInt(sessionStorage.getItem('argus_nav_scroll') || '0', 10) : null;
     if (savedTab) {
