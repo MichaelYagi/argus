@@ -140,8 +140,11 @@
       fetch('/api/review/count?has_suggestion=true'),
       fetch('/api/review/count?has_suggestion=false'),
     ]);
-    if (sgResp.ok) { const d = await sgResp.json(); setTabBadge('sg', d.count); }
-    if (nmResp.ok) { const d = await nmResp.json(); setTabBadge('nm', d.count); }
+    let total = 0;
+    if (sgResp.ok) { const d = await sgResp.json(); setTabBadge('sg', d.count); total += d.count; }
+    if (nmResp.ok) { const d = await nmResp.json(); setTabBadge('nm', d.count); total += d.count; }
+    const badge = document.getElementById('review-count-badge');
+    if (badge) { badge.textContent = total || ''; badge.style.display = total ? '' : 'none'; }
   }
 
   async function sendReview(url, opts) {
