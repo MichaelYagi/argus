@@ -5,6 +5,30 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [0.1.0-alpha.23] — 2026-07-28
+
+### Changed
+
+- **Review page — other tabs refresh in the background after each action.** Confirming, dismissing, reassigning, or any other action on one tab immediately triggers background reloads of the other two tabs without blocking the current workflow. Tab badge counts and the sidebar review count badge are now refreshed from the server on every action rather than maintained by local deltas, so they stay accurate even after moves between tabs (e.g. a reject that moves a face from Suggested to No match).
+- **Review page — tab-aware keyboard shortcut legend.** The shortcut hint bar at the top of the page updates when switching tabs to show only the shortcuts applicable to the current tab. Suggested matches shows D dismiss, V confirm group, F dismiss group, Shift+C/D for selections; No match shows D remove and Shift+D remove selected; Mismatches shows D remove, Shift+C confirm selected, Shift+D remove selected.
+- **Tag and Test pages — persistent pulsing highlight on selected detection.** Clicking a bbox or a table row now applies a sustained pulsing orange highlight (row background and bbox outline) that stays until clicking elsewhere in the image area. The pulse is a slow 2 s orange glow on the row and a 1.5 s orange-to-white cycling bbox outline. Previously the highlight was momentary.
+- **Tag page — delete option in all bbox popups.** The label popup for both face and object bboxes now includes a Delete button that removes the detection and its crop immediately. Previously only manually drawn bboxes had a delete affordance.
+- **Label popup scroll lock.** Opening a label popup on the tag page now locks page scroll while the popup is open; scroll is restored when the popup closes.
+
+### Fixed
+
+- **Review page — Space key locked scroll after closing crop overlay.** Pressing Space to close the source-image crop overlay via the keyboard shortcut bypassed the `close` function's `unlockScroll` call, leaving the page scroll permanently hidden. The overlay now exposes its close function on the element via `_close` and the Space handler calls it.
+- **Review page — focused card not appearing after background tab reload.** After a reload triggered by switching to a stale tab, the focused card highlight was set synchronously before cards were rendered and immediately resolved to null. No match and Mismatches tabs now set focus in a `.then()` callback after the reload completes.
+- **Tag page — selection cleared on list rebuild.** After saving a label, `renderDetList` rebuilt the detection list DOM and wiped the `sel-row` class from the previously selected row. The rebuild now re-applies the selection class after rendering.
+- **Tag page — label popup positioned at top of page on row click.** Clicking a table row previously fired a synthetic click on the bbox div before the smooth-scroll had completed, so `getBoundingClientRect` returned the pre-scroll position and the popup appeared at the wrong location. Row clicks now call `selectRow()` directly without triggering the bbox click.
+- **FairFace engine crashing tests.** Running inference tests with MagicMock inputs called `img_array.shape[:2]` on a mock, raising `ValueError: not enough values to unpack`. An autouse fixture in `conftest.py` now suppresses the FairFace engine across all tests.
+
+### API
+
+- **`pending_review_count` on `GET /api/identities/{id}`.** The identity detail response now includes `pending_review_count` — the count of non-ignored face detections for that identity with `review_status` of `pending` or `rejected`. Lets clients surface per-identity review backlogs without a separate queue query.
+
+---
+
 ## [0.1.0-alpha.22] — 2026-07-23
 
 ### Added
@@ -637,6 +661,11 @@ Initial alpha release.
 
 ---
 
+[0.1.0-alpha.23]: https://github.com/MichaelYagi/argus/compare/v0.1.0-alpha.22...v0.1.0-alpha.23
+[0.1.0-alpha.22]: https://github.com/MichaelYagi/argus/compare/v0.1.0-alpha.21...v0.1.0-alpha.22
+[0.1.0-alpha.21]: https://github.com/MichaelYagi/argus/compare/v0.1.0-alpha.20...v0.1.0-alpha.21
+[0.1.0-alpha.20]: https://github.com/MichaelYagi/argus/compare/v0.1.0-alpha.19...v0.1.0-alpha.20
+[0.1.0-alpha.19]: https://github.com/MichaelYagi/argus/compare/v0.1.0-alpha.18...v0.1.0-alpha.19
 [0.1.0-alpha.18]: https://github.com/MichaelYagi/argus/compare/v0.1.0-alpha.17...v0.1.0-alpha.18
 [0.1.0-alpha.17]: https://github.com/MichaelYagi/argus/compare/v0.1.0-alpha.16...v0.1.0-alpha.17
 [0.1.0-alpha.16]: https://github.com/MichaelYagi/argus/compare/v0.1.0-alpha.15...v0.1.0-alpha.16

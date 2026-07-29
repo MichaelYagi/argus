@@ -11,7 +11,7 @@ Self-hosted face and object recognition you can both **use and build on** — a 
 - Review queue with ranked match suggestions, configurable auto-confirm threshold, and auto-enroll on confirm
 - Suggested people — clusters unlabeled faces into proposed identities; name a cluster to enroll everyone in it at once
 - Justified infinite-scroll galleries per identity with cover photo selection and bulk operations
-- Tag page — full source image with clickable face and object bbox overlays for labelling; draw bounding boxes manually for faces the detector missed (click-drag on desktop, long-press-drag on mobile); Prev/Next navigation across a gallery sequence with adjacent-image preloading; last-viewed thumbnail highlighted on return
+- Tag page — full source image with clickable face and object bbox overlays for labelling; draw bounding boxes manually for faces the detector missed (click-drag on desktop, long-press-drag on mobile); delete any detection directly from its label popup; Prev/Next navigation across a gallery sequence with adjacent-image preloading; last-viewed thumbnail highlighted on return
 - Test page — check whether an image contains people or objects, and who each face looks like, without storing or enrolling anything (read-only)
 - Integration helpers — opaque `external_ref` correlation ids, a change feed for delta sync, webhooks, a capabilities manifest with hardware reporting, and batch label/read endpoints
 - Bulk detection with optional async mode — submit many images in one call; fire-and-forget with a job id and webhook notification on completion
@@ -175,14 +175,19 @@ Detections below the match threshold go into a review queue (`/review`). Each it
 
 | Key | Action |
 |---|---|
-| `↑` / `↓` | Move focus to the previous / next card |
-| `C` | Confirm the focused card |
-| `D` | Dismiss (unidentify / reject) the focused card |
+| `↑` / `↓` or `W` / `S` | Navigate between cards |
+| `Space` | Open / close the source-image zoom for the focused card |
+| `C` | Confirm the focused card (Suggested: confirm match; Mismatches: mark as correct) |
+| `D` | Dismiss the focused card (Suggested: reject; No match / Mismatches: remove) |
+| `V` | Confirm all in the focused card's group (Suggested tab only) |
+| `F` | Reject all in the focused card's group (Suggested tab only) |
 | `A` | Toggle select all on the active tab |
-| `Shift+C` | Confirm all selected cards |
-| `Shift+D` | Dismiss all selected cards |
+| `Shift+C` | Confirm all selected (Suggested and Mismatches tabs) |
+| `Shift+D` | Dismiss / remove all selected |
 
-Shortcuts are suppressed when focus is in a text input or textarea.
+The shortcut hint bar at the top of the page updates when switching tabs to show only the shortcuts that apply to the current tab. All shortcuts are suppressed when focus is in a text input or textarea.
+
+**Live tab refresh.** After any action on one tab, the other two tabs refresh in the background automatically — no need to switch away and back to see updated data. Tab badge counts and the sidebar review count are re-fetched from the server on each action.
 
 Key thresholds (all configurable in **Settings**):
 - `face.match_threshold` (default 0.5) — minimum similarity to assign a match at all. Below this, the face is stored but left unidentified.
