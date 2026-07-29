@@ -12,6 +12,7 @@
   let focusedCard = null;
 
   function reloadOtherTabs(currentTab) {
+    fetchTabCounts();
     if (currentTab !== 'sg') loadSgGroups();
     if (currentTab !== 'nm') { selNm.clear(); nmLoader.reset().then(() => { if (getActiveTab() === 'nm') setFocusedCard(getActivePanelCards()[0] || null); }); }
     if (currentTab !== 'mm') { selMm.clear(); loadMismatches().then(() => { if (getActiveTab() === 'mm') setFocusedCard(getActivePanelCards()[0] || null); }); }
