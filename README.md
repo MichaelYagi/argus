@@ -878,7 +878,7 @@ The version string lives in `app/__init__.py` and is the single source of truth 
 
 Edit `app/__init__.py`:
 ```python
-__version__ = "0.1.0-alpha.19"
+__version__ = "0.1.0-alpha.24"
 ```
 
 **2. Update the changelog**
@@ -898,15 +898,15 @@ All checks must pass before tagging.
 
 ```bash
 git add app/__init__.py CHANGELOG.md README.md
-git commit -m "Release v0.1.0-alpha.19"
+git commit -m "Release v0.1.0-alpha.24"
 ```
 
 **5. Tag and push**
 
 ```bash
-git tag v0.1.0-alpha.19
+git tag v0.1.0-alpha.24
 git push origin main
-git push origin v0.1.0-alpha.19
+git push origin v0.1.0-alpha.24
 ```
 
 **6. GitHub Actions takes over**

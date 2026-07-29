@@ -5,6 +5,15 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [0.1.0-alpha.24] — 2026-07-29
+
+### Changed
+
+- **"Remove" renamed to "Unassign" throughout the review UI.** The action that strips an identity assignment and returns a face to the unidentified queue was labelled "Remove" (ambiguous — sounds like deleting the photo). It is now consistently "Unassign" everywhere: No match and Mismatches tab buttons, bulk action bar, keyboard shortcut legend, label popup on the tag page, and toast messages.
+- **`POST /api/review/{id}/unidentify` renamed to `POST /api/review/{id}/unassign`.** Breaking rename for any API caller using this endpoint directly. The bulk review endpoint's `"unidentify"` action value is similarly renamed to `"unassign"`.
+
+---
+
 ## [0.1.0-alpha.23] — 2026-07-28
 
 ### Changed
@@ -661,6 +670,7 @@ Initial alpha release.
 
 ---
 
+[0.1.0-alpha.24]: https://github.com/MichaelYagi/argus/compare/v0.1.0-alpha.23...v0.1.0-alpha.24
 [0.1.0-alpha.23]: https://github.com/MichaelYagi/argus/compare/v0.1.0-alpha.22...v0.1.0-alpha.23
 [0.1.0-alpha.22]: https://github.com/MichaelYagi/argus/compare/v0.1.0-alpha.21...v0.1.0-alpha.22
 [0.1.0-alpha.21]: https://github.com/MichaelYagi/argus/compare/v0.1.0-alpha.20...v0.1.0-alpha.21

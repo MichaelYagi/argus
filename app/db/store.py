@@ -2432,9 +2432,9 @@ def confirm_detection(detection_id: int, user_id: int, environment_id: int | Non
 
 
 def unassign_detection(detection_id: int, user_id: int, environment_id: int | None = None) -> bool:
-    """Dismiss: clear identity and move to the unidentified page (re-label path).
+    """Unassign: clear identity and move to the unidentified page (re-label path).
     Distinct from reject: reject clears identity_id but keeps the face in the review queue
-    (no-match section); unidentify removes it from the queue entirely."""
+    (no-match section); unassign removes it from the queue entirely."""
     with _connect() as conn:
         env_id = _resolve_env(conn, user_id, environment_id)
         old_id = _detach_old_reference(conn, detection_id, user_id, None)
