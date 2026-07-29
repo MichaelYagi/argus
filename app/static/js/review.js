@@ -79,8 +79,8 @@
     if (_stale[tab]) {
       _stale[tab] = false;
       if (tab === 'sg') loadSgGroups();
-      else if (tab === 'nm') nmLoader.reset();
-      else if (tab === 'mm') loadMismatches();
+      else if (tab === 'nm') nmLoader.reset().then(() => { if (getActiveTab() === 'nm') setFocusedCard(getActivePanelCards()[0] || null); });
+      else if (tab === 'mm') loadMismatches().then(() => { if (getActiveTab() === 'mm') setFocusedCard(getActivePanelCards()[0] || null); });
     }
     setFocusedCard(getActivePanelCards()[0] || null);
   };
@@ -338,7 +338,7 @@
       if (loader.sentinel && !loader.sentinel.parentNode) {
         listEl.after(loader.sentinel);
       }
-      loader.loadPage();
+      return loader.loadPage();
     };
 
     const sentinel = document.createElement('div');
