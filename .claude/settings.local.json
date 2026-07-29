@@ -256,7 +256,8 @@
       "WebFetch(domain:deepwiki.com)",
       "WebFetch(domain:tessl.io)",
       "WebFetch(domain:www.aimodels.fyi)",
-      "WebFetch(domain:wandb.ai)"
+      "WebFetch(domain:wandb.ai)",
+      "Bash(grep -n -A1 \"| \\\\`D\\\\`\\\\|| \\\\`F\\\\`\\\\|| \\\\`V\\\\`\\\\|Dismiss\\\\|dismiss\\\\|Remove\\\\|reject\" /mnt/c/Users/Michael/Documents/development/argus/README.md)"
     ]
   }
 }

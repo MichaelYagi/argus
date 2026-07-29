@@ -169,7 +169,7 @@ Detections below the match threshold go into a review queue (`/review`). Each it
 
 - **Suggested matches** — faces with a plausible identity match below the auto-confirm threshold. Candidates are grouped by the suggested identity: each group has a header showing the name and count, plus **Confirm all** / **Reject all** buttons for one-click bulk action. Groups collapse and expand by clicking the header.
 - **No match** — faces that scored below the match threshold against all enrolled people.
-- **Mismatches** — confirmed faces whose embedding scores poorly against their identity's centroid, flagged as possible mislabels. Each card has a **Looks correct** button (suppress the flag so it won't reappear) and a **Dismiss** button (unidentify — strip the assignment and move the face back to the review queue). Ignoring a card is fine: the face stays confirmed as that person and nothing changes. Mismatch detection uses a per-identity centroid (L2-normalized mean of all confirmed embeddings) and an adaptive threshold (mean − 2σ of similarity scores); identities with fewer than 3 confirmed faces fall back to the global mismatch threshold.
+- **Mismatches** — confirmed faces whose embedding scores poorly against their identity's centroid, flagged as possible mislabels. Each card has a **Looks correct** button (suppress the flag so it won't reappear) and an **Unassign** button (strip the identity assignment and move the face back to the review queue). Ignoring a card is fine: the face stays confirmed as that person and nothing changes. Mismatch detection uses a per-identity centroid (L2-normalized mean of all confirmed embeddings) and an adaptive threshold (mean − 2σ of similarity scores); identities with fewer than 3 confirmed faces fall back to the global mismatch threshold.
 
 **Keyboard shortcuts:**
 
@@ -178,12 +178,12 @@ Detections below the match threshold go into a review queue (`/review`). Each it
 | `↑` / `↓` or `W` / `S` | Navigate between cards |
 | `Space` | Open / close the source-image zoom for the focused card |
 | `C` | Confirm the focused card (Suggested: confirm match; Mismatches: mark as correct) |
-| `D` | Dismiss the focused card (Suggested: reject; No match / Mismatches: remove) |
+| `D` | Dismiss the focused card (Suggested tab) / Unassign the focused card (No match, Mismatches) |
 | `V` | Confirm all in the focused card's group (Suggested tab only) |
 | `F` | Reject all in the focused card's group (Suggested tab only) |
 | `A` | Toggle select all on the active tab |
 | `Shift+C` | Confirm all selected (Suggested and Mismatches tabs) |
-| `Shift+D` | Dismiss / remove all selected |
+| `Shift+D` | Dismiss all selected (Suggested) / Unassign all selected (No match, Mismatches) |
 
 The shortcut hint bar at the top of the page updates when switching tabs to show only the shortcuts that apply to the current tab. All shortcuts are suppressed when focus is in a text input or textarea.
 

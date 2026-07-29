@@ -429,7 +429,7 @@
       }
       if (onUnidentify) {
         const unBtn = document.createElement('button');
-        unBtn.textContent = 'Unidentify';
+        unBtn.textContent = 'Unassign';
         unBtn.className = 'btn btn-ghost';
         Object.assign(unBtn.style, { padding: '4px 10px', fontSize: '12px', color: 'var(--danger)' });
         unBtn.addEventListener('click', () => { close(); onUnidentify(); });

@@ -110,8 +110,8 @@ async def dismiss_mismatch(
     user_id: int = Depends(require_auth),
     environment_id: int = Depends(require_env_id),
 ):
-    """Mark a Mismatches-tab detection as reviewed-and-correct. Suppresses it from
-    future mismatch scans without affecting its gallery presence or label."""
+    """Dismiss a mismatch flag: sets mismatch_reviewed=1, suppressing this detection
+    from future mismatch scans. Does not affect its gallery presence or label."""
     if not store.dismiss_mismatch_detection(detection_id, user_id, environment_id):
         raise HTTPException(404, "Detection not found")
     return {"detection_id": detection_id, "mismatch_reviewed": True}
@@ -127,8 +127,8 @@ async def dismiss_mismatches_batch(
     user_id: int = Depends(require_auth),
     environment_id: int = Depends(require_env_id),
 ):
-    """Batch confirm-as-correct for the Mismatches tab. Sets mismatch_reviewed on each
-    detection, suppressing them from future scans without affecting gallery or labels."""
+    """Batch dismiss mismatch flags: sets mismatch_reviewed=1 on each detection,
+    suppressing them from future mismatch scans. Does not affect gallery or labels."""
     if not body.detection_ids:
         raise HTTPException(400, "detection_ids is required")
     if len(body.detection_ids) > _BATCH_MAX:
@@ -244,11 +244,11 @@ async def confirm(
 
 
 @router.post(
-    "/api/review/{detection_id}/unidentify",
+    "/api/review/{detection_id}/unassign",
     status_code=200,
     responses={**ok({"detection_id": 303, "identity_id": None, "review_status": "pending"}), **ERR_401, **ERR_404},
 )
-async def unidentify(
+async def unassign(
     detection_id: int,
     user_id: int = Depends(require_auth),
     environment_id: int = Depends(require_env_id),
@@ -256,7 +256,7 @@ async def unidentify(
     """Clear identity and return to unidentified queue (re-label path).
     Distinct from reject: reject marks the match wrong but keeps the identity link."""
     det = store.get_detection(detection_id, user_id, environment_id)
-    if not store.unidentify_detection(detection_id, user_id, environment_id):
+    if not store.unassign_detection(detection_id, user_id, environment_id):
         raise HTTPException(404, "Detection not found")
     from app.core import face_index as _fi
     _fi.rebuild_user(user_id, environment_id)
@@ -435,9 +435,9 @@ async def bulk_review(
             _webhook.fire_detection_labeled(item.detection_id, user_id, environment_id, identity_id=iid)
             results.append({"detection_id": item.detection_id, "status": "reassigned",
                              "identity_id": iid})
-        elif item.action == "unidentify":
+        elif item.action == "unassign":
             det = store.get_detection(item.detection_id, user_id, environment_id)
-            store.unidentify_detection(item.detection_id, user_id, environment_id)
+            store.unassign_detection(item.detection_id, user_id, environment_id)
             if det:
                 _webhook.fire(user_id, environment_id, "detection.labeled", {
                     "detection_id": item.detection_id,

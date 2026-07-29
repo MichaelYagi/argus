@@ -56,13 +56,13 @@
     <span><kbd>⇧D</kbd> dismiss sel.</span>
     <span><kbd>A</kbd> select all</span>`;
   const _shortcutsNm = `
-    <span><kbd>D</kbd> remove</span>
-    <span><kbd>⇧D</kbd> remove sel.</span>
+    <span><kbd>D</kbd> unassign</span>
+    <span><kbd>⇧D</kbd> unassign sel.</span>
     <span><kbd>A</kbd> select all</span>`;
   const _shortcutsMm = `
-    <span><kbd>D</kbd> remove</span>
+    <span><kbd>D</kbd> unassign</span>
     <span><kbd>⇧C</kbd> confirm sel.</span>
-    <span><kbd>⇧D</kbd> remove sel.</span>
+    <span><kbd>⇧D</kbd> unassign sel.</span>
     <span><kbd>A</kbd> select all</span>`;
 
   window.switchTab = (tab, scroll = true) => {
@@ -200,14 +200,14 @@
     }
     reloadOtherTabs(getActiveTab());
     if (window.showToast) {
-      const verb = action === 'confirm' ? ' confirmed' : action === 'reject' ? ' dismissed' : ' removed';
+      const verb = action === 'confirm' ? ' confirmed' : action === 'reject' ? ' dismissed' : ' unassigned';
       showToast(ids.length + verb, 'success');
     }
   }
 
   window.sgConfirm = () => bulkAction([...selSg], 'confirm', selSg, sgAll);
   window.sgDismiss = () => bulkAction([...selSg], 'reject',  selSg, sgAll);
-  window.nmDismiss = () => bulkAction([...selNm], 'unidentify', selNm, nmAll);
+  window.nmDismiss = () => bulkAction([...selNm], 'unassign', selNm, nmAll);
 
   function getActiveTab() {
     if (document.getElementById('panel-sg').style.display !== 'none') return 'sg';
@@ -257,7 +257,7 @@
   window.mmDismiss = async () => {
     const ids = [...selMm];
     if (!ids.length) return;
-    const items = ids.map(id => ({ detection_id: id, action: 'unidentify' }));
+    const items = ids.map(id => ({ detection_id: id, action: 'unassign' }));
     const ok = await sendReview('/api/review/bulk', {
       method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(items),
     });
@@ -267,7 +267,7 @@
     if (mmAll) mmAll.checked = false;
     updateBars();
     reloadOtherTabs('mm');
-    if (window.showToast) showToast(ids.length + ' removed', 'success');
+    if (window.showToast) showToast(ids.length + ' unassigned', 'success');
   };
 
   function toggleAll(listEl, sel, on) {
@@ -407,7 +407,7 @@
             <a class="rc-tag-link" href="/tag/${item.source_image_id}?focus=${item.detection_id}" style="font-size:12px;margin-left:4px;white-space:nowrap">View in image</a>
           </div>` : `
           <div style="margin-bottom:10px;display:flex;align-items:center;gap:8px">
-            <button class="btn btn-ghost" onclick="doDismiss(${item.detection_id})">Remove</button>
+            <button class="btn btn-ghost" onclick="doDismiss(${item.detection_id})">Unassign</button>
             <a class="rc-tag-link" href="/tag/${item.source_image_id}?focus=${item.detection_id}" style="font-size:12px;white-space:nowrap">View in image</a>
           </div>`}
 
@@ -540,7 +540,7 @@
 
           <div style="display:flex;gap:6px;margin-bottom:10px;align-items:center;flex-wrap:wrap">
             <button class="btn btn-ghost" onclick="doMismatchOk(${item.detection_id})">Looks correct</button>
-            <button class="btn btn-ghost" onclick="doMismatchDismiss(${item.detection_id})">Remove</button>
+            <button class="btn btn-ghost" onclick="doMismatchDismiss(${item.detection_id})">Unassign</button>
             ${item.source_image_id
               ? `<a class="rc-tag-link" href="/tag/${item.source_image_id}?focus=${item.detection_id}" style="font-size:12px;white-space:nowrap">View in image</a>`
               : ''}
@@ -611,10 +611,10 @@
   };
 
   window.doMismatchDismiss = async id => {
-    if (await sendReview('/api/review/' + id + '/unidentify', { method: 'POST' })) {
+    if (await sendReview('/api/review/' + id + '/unassign', { method: 'POST' })) {
       removeMismatchCard(id);
       reloadOtherTabs('mm');
-      if (window.showToast) showToast('Removed', 'success');
+      if (window.showToast) showToast('Unassigned', 'success');
     }
   };
 
@@ -643,7 +643,7 @@
     reloadOtherTabs(getActiveTab());
   };
   window.doDismiss = async id => {
-    if (await sendReview('/api/review/' + id + '/unidentify', { method: 'POST' })) {
+    if (await sendReview('/api/review/' + id + '/unassign', { method: 'POST' })) {
       removeCard(id);
       reloadOtherTabs(getActiveTab());
     }

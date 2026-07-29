@@ -1190,8 +1190,8 @@ def get_mismatch_detections(
 
 
 def dismiss_mismatch_detection(detection_id: int, user_id: int, environment_id: int | None = None) -> bool:
-    """Mark a Mismatches-tab review as OK — suppresses from future mismatch scans without
-    affecting the gallery or the labeling. Reset automatically when identity changes."""
+    """Dismiss a mismatch flag: sets mismatch_reviewed=1, suppressing this detection
+    from future mismatch scans. Does not change identity, label, or gallery presence."""
     with _connect() as conn:
         env_id = _resolve_env(conn, user_id, environment_id)
         conn.execute(
@@ -1204,7 +1204,7 @@ def dismiss_mismatch_detection(detection_id: int, user_id: int, environment_id: 
 def dismiss_mismatch_detections(
     user_id: int, detection_ids: list[int], environment_id: int | None = None
 ) -> int:
-    """Batch version of dismiss_mismatch_detection. Returns count updated."""
+    """Batch dismiss mismatch flags. Returns count updated. See dismiss_mismatch_detection."""
     if not detection_ids:
         return 0
     with _connect() as conn:
@@ -2431,7 +2431,7 @@ def confirm_detection(detection_id: int, user_id: int, environment_id: int | Non
         return changed
 
 
-def unidentify_detection(detection_id: int, user_id: int, environment_id: int | None = None) -> bool:
+def unassign_detection(detection_id: int, user_id: int, environment_id: int | None = None) -> bool:
     """Dismiss: clear identity and move to the unidentified page (re-label path).
     Distinct from reject: reject clears identity_id but keeps the face in the review queue
     (no-match section); unidentify removes it from the queue entirely."""

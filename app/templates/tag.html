@@ -223,8 +223,8 @@ function trackLabeled(id) {
 }
 
 function labelObjectBox(div, tip, chip) {
-  const onUnidentify = div.dataset.label ? async () => {
-    const r = await fetch('/api/review/' + div.dataset.id + '/unidentify', { method: 'POST' });
+  const onUnassign = div.dataset.label ? async () => {
+    const r = await fetch('/api/review/' + div.dataset.id + '/unassign', { method: 'POST' });
     if (r.ok) {
       div.dataset.label = '';
       tip.textContent = 'object';
@@ -259,11 +259,11 @@ function labelObjectBox(div, tip, chip) {
     } else {
       setStatus('Error saving label.');
     }
-  }, 'Assign label', onUnidentify, div.dataset.label || '', () => deleteDetection(div));
+  }, 'Assign label', onUnassign, div.dataset.label || '', () => deleteDetection(div));
 }
 
-async function unidentifyBox(div, tip, chip) {
-  const r = await fetch('/api/review/' + div.dataset.id + '/unidentify', { method: 'POST' });
+async function unassignBox(div, tip, chip) {
+  const r = await fetch('/api/review/' + div.dataset.id + '/unassign', { method: 'POST' });
   if (r.ok) {
     div.dataset.label = '';
     tip.textContent = 'Unknown';
@@ -300,11 +300,11 @@ async function deleteDetection(div) {
 
 function labelBox(div, tip, chip) {
   const isManual = div.dataset.source === 'manual';
-  const onUnidentify = (!isManual && div.dataset.label) ? () => unidentifyBox(div, tip, chip) : null;
+  const onUnassign = (!isManual && div.dataset.label) ? () => unassignBox(div, tip, chip) : null;
   const onDelete = () => deleteDetection(div);
   showLabelPopup(div, async label => {
     if (!label) {
-      if (!isManual) await unidentifyBox(div, tip, chip);
+      if (!isManual) await unassignBox(div, tip, chip);
       return;
     }
     const resp = await fetch('/api/detections/' + div.dataset.id + '/label', {
@@ -328,7 +328,7 @@ function labelBox(div, tip, chip) {
     } else {
       setStatus('Error saving label.');
     }
-  }, 'Assign name', onUnidentify, div.dataset.label || '', onDelete);
+  }, 'Assign name', onUnassign, div.dataset.label || '', onDelete);
 }
 
 function setStatus(msg) { document.getElementById('tag-status').textContent = msg; }
