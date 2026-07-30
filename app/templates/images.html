@@ -620,6 +620,7 @@ function localDateToUTC(dateStr, endOfDay) {
       rows.forEach(i => {
         const item = document.createElement('div');
         item.className = 'ns-item';
+        item.tabIndex = 0;
         item.style.cursor = 'pointer';
         const thumb = i.cover_url
           ? '<img src="' + _esc(i.cover_url) + '" class="ns-thumb" alt="">'
@@ -645,12 +646,45 @@ function localDateToUTC(dateStr, endOfDay) {
 
   identityInput.addEventListener('blur', () => {
     setTimeout(() => {
-      identityDrop.style.display = 'none';
+      if (!identityDrop.contains(document.activeElement)) {
+        identityDrop.style.display = 'none';
+      }
       if (focusedIdx !== null) { focusedIdx = null; renderChips(); }
     }, 200);
   });
 
+  identityDrop.addEventListener('keydown', e => {
+    const items = [...identityDrop.querySelectorAll('.ns-item')];
+    const idx = items.indexOf(document.activeElement);
+    if (e.key === 'ArrowDown') {
+      e.preventDefault(); items[(idx + 1) % items.length]?.focus();
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      if (idx <= 0) identityInput.focus();
+      else items[idx - 1].focus();
+    } else if (e.key === 'Escape') {
+      identityDrop.style.display = 'none'; identityInput.focus();
+    } else if (e.key === 'Enter') {
+      if (items[idx]) items[idx].dispatchEvent(new MouseEvent('mousedown', { bubbles: true }));
+    }
+  });
+
+  identityDrop.addEventListener('focusout', () => {
+    setTimeout(() => {
+      if (document.activeElement !== identityInput && !identityDrop.contains(document.activeElement)) {
+        identityDrop.style.display = 'none';
+      }
+    }, 200);
+  });
+
   identityInput.addEventListener('keydown', e => {
+    if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      const f = identityDrop.querySelector('.ns-item');
+      if (f) f.focus();
+      return;
+    }
+
     if (e.key === 'ArrowLeft') {
       if (identityInput.selectionStart === 0) {
         const ids = window.filterIdentityIds || [];
