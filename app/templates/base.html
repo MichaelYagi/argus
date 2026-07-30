@@ -120,7 +120,8 @@ document.addEventListener('DOMContentLoaded', function() {
     const hasReview    = [...sidebar.querySelectorAll('.review-count-badge')].some(el => el.style.display !== 'none');
     const hasSuggested = [...sidebar.querySelectorAll('.suggested-dot')].some(el => el.style.display !== 'none');
     const hasModels    = sidebar.querySelector('.models-status-badge') !== null;
-    dot.style.display = (hasReview || hasSuggested || hasModels) ? 'inline-block' : 'none';
+    const hasResets    = [...sidebar.querySelectorAll('.pending-resets-dot')].some(el => el.style.display !== 'none');
+    dot.style.display = (hasReview || hasSuggested || hasModels || hasResets) ? 'inline-block' : 'none';
   };
 
   if (desktopBurger) {
@@ -364,6 +365,23 @@ function _updateSuggestedDot() {
 _updateSuggestedDot();
 setInterval(_updateSuggestedDot, 30000);
 
+{% if is_admin %}
+// Pending password-reset requests dot — admin only.
+function _updatePendingResetsDot() {
+  fetch('/api/admin/pending-resets/count')
+    .then(r => r.ok ? r.json() : null)
+    .then(data => {
+      document.querySelectorAll('.pending-resets-dot').forEach(dot => {
+        dot.style.display = (data && data.count) ? 'inline-block' : 'none';
+      });
+      if (window.updateBurgerDot) window.updateBurgerDot();
+    })
+    .catch(() => {});
+}
+_updatePendingResetsDot();
+setInterval(_updatePendingResetsDot, 30000);
+{% endif %}
+
 // ---------------------------------------------------------------------------
 // Readiness banner: the red (no models active) banner is persistent; the amber
 // (one type active) banner is dismissible for the session. The banner itself is
@@ -501,7 +519,11 @@ setInterval(_updateSuggestedDot, 30000);
   {% if is_admin %}
   <div class="sidebar-divider"></div>
   <a href="/settings" class="{% if active == 'settings' %}active{% endif %}">
-    Settings{% if active_count < 2 %} <span class="models-status-badge"
+    Settings
+    <span class="pending-resets-dot" title="Pending password reset requests"
+      style="display:none;width:7px;height:7px;border-radius:50%;background:#e53e3e;
+             margin-left:3px;vertical-align:middle"></span>
+    {% if active_count < 2 %}<span class="models-status-badge"
       title="{{ 'No recognition models are active' if active_count == 0 else 'Only one model type is active' }}"
       style="display:inline-block;width:7px;height:7px;border-radius:50%;margin-left:3px;vertical-align:middle;
       background:{{ '#e53e3e' if active_count == 0 else '#f59e0b' }}"></span>{% endif %}
@@ -546,7 +568,12 @@ setInterval(_updateSuggestedDot, 30000);
   {% endif %}
   {% if is_admin %}
   <div style="border-top:1px solid rgba(255,255,255,.12);margin:4px 0"></div>
-  <a href="/settings" class="{% if active == 'settings' %}active{% endif %}">Settings</a>
+  <a href="/settings" class="{% if active == 'settings' %}active{% endif %}">
+    Settings
+    <span class="pending-resets-dot" title="Pending password reset requests"
+      style="display:none;width:7px;height:7px;border-radius:50%;background:#e53e3e;
+             margin-left:3px;vertical-align:middle"></span>
+  </a>
   <a href="/models" class="mobile-sub {% if active == 'models' %}active{% endif %}">
     Models{% if active_count < 2 %} <span class="models-status-badge"
       title="{{ 'No recognition models are active' if active_count == 0 else 'Only one model type is active' }}"

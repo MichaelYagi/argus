@@ -325,6 +325,8 @@ async def settings_page(request: Request):
     ctx["gpu_available"]     = gpu_available
     ctx["settings_defaults"] = store.get_settings_defaults()
     ctx["managed_users"]     = [dict(u) for u in store.list_managed_users(ctx["user_id"])]
+    ctx["pending_resets"]    = store.count_pending_reset_requests()
+    ctx["temp_pw_flash"]     = request.session.pop("temp_pw_flash", None)
     from app.core import log_files
     from app.core.paths import logs_dir
     ctx["log_dates"]         = log_files.list_dates(logs_dir())

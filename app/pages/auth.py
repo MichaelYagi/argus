@@ -13,11 +13,13 @@ from app.core.security import (
     REMEMBER_MAX_AGE,
     create_remember_token,
     generate_api_key,
+    generate_temp_password,
     hash_api_key,
     hash_password,
     key_hint,
     verify_password,
 )
+from app.core.auth import get_session_user
 from app.db import store
 
 router = APIRouter()
@@ -115,6 +117,17 @@ async def login(
         request.session["environment_id"] = env_id
 
     # Auto-generate first API key if the user has none yet; redirect to account so they see it
+    try:
+        if row["must_change_password"]:
+            response = RedirectResponse("/reset-password", status_code=303)
+            if remember:
+                secret = os.environ.get("SECRET_KEY", "change-me")
+                token = create_remember_token(row["id"], secret)
+                response.set_cookie(_COOKIE, token, max_age=REMEMBER_MAX_AGE, httponly=True, samesite="lax")
+            return response
+    except (IndexError, KeyError):
+        pass
+
     if not store.list_api_keys(row["id"]):
         plaintext = generate_api_key()
         store.create_api_key(row["id"], hash_api_key(plaintext), "Default key", env_id, key_hint(plaintext))
@@ -134,6 +147,68 @@ async def login(
         response.set_cookie(_COOKIE, token, max_age=REMEMBER_MAX_AGE, httponly=True, samesite="lax")
 
     return response
+
+
+@router.get("/forgot-password")
+async def forgot_password_page(request: Request):
+    return templates.TemplateResponse(request, "forgot_password.html", {"sent": False, "error": ""})
+
+
+@router.post("/forgot-password")
+async def forgot_password(request: Request, username: str = Form(...)):
+    store.request_password_reset(username.strip())
+    # Always show the same confirmation — don't reveal whether the username exists.
+    return templates.TemplateResponse(request, "forgot_password.html", {"sent": True, "error": ""})
+
+
+@router.get("/reset-password")
+async def reset_password_page(request: Request):
+    user_id = get_session_user(request)
+    if not user_id:
+        return RedirectResponse("/login")
+    user = store.get_user_by_id(user_id)
+    if not user:
+        return RedirectResponse("/login")
+    try:
+        if not user["must_change_password"]:
+            return RedirectResponse("/")
+    except (IndexError, KeyError):
+        return RedirectResponse("/")
+    return templates.TemplateResponse(request, "reset_password.html", {"error": ""})
+
+
+@router.post("/reset-password")
+async def reset_password(
+    request: Request,
+    new_password: str = Form(...),
+    confirm: str = Form(...),
+):
+    user_id = get_session_user(request)
+    if not user_id:
+        return RedirectResponse("/login")
+    user = store.get_user_by_id(user_id)
+    if not user:
+        return RedirectResponse("/login")
+    try:
+        if not user["must_change_password"]:
+            return RedirectResponse("/")
+    except (IndexError, KeyError):
+        return RedirectResponse("/")
+
+    if len(new_password) < 8:
+        return templates.TemplateResponse(
+            request, "reset_password.html",
+            {"error": "Password must be at least 8 characters."},
+        )
+    if new_password != confirm:
+        return templates.TemplateResponse(
+            request, "reset_password.html",
+            {"error": "Passwords do not match."},
+        )
+
+    store.complete_forced_password_change(user_id, hash_password(new_password))
+    dest = _admin_landing() if user["is_admin"] else "/"
+    return RedirectResponse(dest, status_code=303)
 
 
 @router.get("/pending")

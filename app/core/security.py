@@ -39,6 +39,11 @@ def generate_api_key() -> str:
     return f"argus_{secrets.token_hex(32)}"
 
 
+def generate_temp_password() -> str:
+    """Return a random temporary password. Shown once to the admin — never stored."""
+    return secrets.token_urlsafe(9)  # 12 printable chars
+
+
 def key_hint(plaintext: str) -> str:
     """Return the last 8 chars of the key for display (e.g. '...a3f9b2c1')."""
     return plaintext[-8:] if len(plaintext) >= 8 else plaintext

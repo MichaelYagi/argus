@@ -239,6 +239,10 @@ def _migrate(conn: sqlite3.Connection) -> None:
         conn.execute("ALTER TABLE users ADD COLUMN locale TEXT NOT NULL DEFAULT 'en-US'")
     if "last_environment_id" not in existing_user_cols:
         conn.execute("ALTER TABLE users ADD COLUMN last_environment_id INTEGER")
+    if "must_change_password" not in existing_user_cols:
+        conn.execute("ALTER TABLE users ADD COLUMN must_change_password INTEGER NOT NULL DEFAULT 0")
+    if "reset_requested_at" not in existing_user_cols:
+        conn.execute("ALTER TABLE users ADD COLUMN reset_requested_at TEXT")
 
     existing_fe_cols = {r[1] for r in conn.execute("PRAGMA table_info(face_embeddings)")}
     if "confidence" not in existing_fe_cols:
@@ -430,11 +434,54 @@ def update_password(user_id: int, password_hash: str) -> None:
         )
 
 
+def request_password_reset(username: str) -> bool:
+    """Flag a user account as requesting a reset. Returns True if the user was found.
+    Admin accounts are excluded — they should use the normal change-password flow."""
+    with _connect() as conn:
+        conn.execute(
+            "UPDATE users SET reset_requested_at = datetime('now') WHERE username = ? AND is_admin = 0",
+            (username,),
+        )
+        return conn.execute("SELECT changes()").fetchone()[0] > 0
+
+
+def count_pending_reset_requests() -> int:
+    with _connect() as conn:
+        return conn.execute(
+            "SELECT COUNT(*) FROM users WHERE reset_requested_at IS NOT NULL"
+        ).fetchone()[0]
+
+
+def set_temp_password(user_id: int, password_hash: str) -> None:
+    """Set a hashed temporary password and flag the account as requiring a change on next login."""
+    with _connect() as conn:
+        conn.execute(
+            "UPDATE users SET password_hash = ?, must_change_password = 1, reset_requested_at = NULL WHERE id = ?",
+            (password_hash, user_id),
+        )
+
+
+def dismiss_reset_request(user_id: int) -> None:
+    """Clear a pending reset request without setting a new password."""
+    with _connect() as conn:
+        conn.execute("UPDATE users SET reset_requested_at = NULL WHERE id = ?", (user_id,))
+
+
+def complete_forced_password_change(user_id: int, password_hash: str) -> None:
+    """Set a new password and clear the must-change flag."""
+    with _connect() as conn:
+        conn.execute(
+            "UPDATE users SET password_hash = ?, must_change_password = 0 WHERE id = ?",
+            (password_hash, user_id),
+        )
+
+
 def list_managed_users(exclude_user_id: int) -> list[sqlite3.Row]:
     """All accounts except the given one (the admin viewing the page), for management."""
     with _connect() as conn:
         return conn.execute(
-            """SELECT id, username, created_at, is_approved, is_admin
+            """SELECT id, username, created_at, is_approved, is_admin,
+                      must_change_password, reset_requested_at
                FROM users WHERE id != ?
                ORDER BY is_approved ASC, created_at ASC""",
             (exclude_user_id,),

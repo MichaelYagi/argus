@@ -8,7 +8,7 @@ from fastapi.templating import Jinja2Templates
 
 from app import __version__
 from app.core.auth import get_session_user
-from app.core.security import generate_api_key, hash_api_key, hash_password, key_hint, verify_password
+from app.core.security import generate_api_key, generate_temp_password, hash_api_key, hash_password, key_hint, verify_password
 from app.db import store
 from app.pages.main_pages import engine_flags as _engine_flags
 
@@ -215,6 +215,33 @@ def _admin_or_redirect(request: Request):
     if not user["is_admin"]:
         return None, RedirectResponse("/account", status_code=303)
     return user, None
+
+
+@router.post("/admin/users/{user_id}/temp-password")
+async def admin_temp_password(user_id: int, request: Request):
+    user, redir = _admin_or_redirect(request)
+    if redir:
+        return redir
+    target = store.get_user_by_id(user_id)
+    if not target or target["is_admin"]:
+        return RedirectResponse("/settings", status_code=303)
+    plaintext = generate_temp_password()
+    store.set_temp_password(user_id, hash_password(plaintext))
+    request.session["temp_pw_flash"] = {
+        "user_id": user_id,
+        "username": target["username"],
+        "password": plaintext,
+    }
+    return RedirectResponse("/settings", status_code=303)
+
+
+@router.post("/admin/users/{user_id}/dismiss-reset")
+async def admin_dismiss_reset(user_id: int, request: Request):
+    user, redir = _admin_or_redirect(request)
+    if redir:
+        return redir
+    store.dismiss_reset_request(user_id)
+    return RedirectResponse("/settings", status_code=303)
 
 
 @router.post("/admin/approve/{user_id}")

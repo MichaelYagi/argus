@@ -9,6 +9,7 @@ import json
 import logging
 import time
 import uuid
+from pathlib import Path
 from typing import Any
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request
@@ -1329,6 +1330,81 @@ def _run_bulk_job(
     if n_imgs:
         _emit_det(nf, no, f"{n_imgs} image{'s' if n_imgs != 1 else ''}")
     result = {"total": len(results), "type": detect_type, "results": results}
+    store.update_job(job_id, "done", result)
+    webhook.fire(user_id, environment_id, "job.done", {"job_id": job_id, "status": "done", **result})
+
+
+def _run_bulk_reprocess_job(
+    job_id: int,
+    source_image_ids: list[int],
+    user_id: int,
+    environment_id: int,
+    det_type: str,  # "faces" | "objects" | "all"
+    replace: bool,
+) -> None:
+    """Background worker for POST /api/images/reprocess.
+
+    For each source image: read its file from disk, clear existing detections if
+    replace=True, run the requested detection type(s), and auto-discard if nothing
+    was found. Progress is written to the job row after each image.
+    """
+    from app.core import webhook
+    # Map API det_type ("faces"/"objects"/"all") → internal clear_type for _clear_detections
+    _clear_type_map = {"faces": "face", "objects": "object", "all": None}
+    clear_type = _clear_type_map.get(det_type)
+
+    store.update_job(job_id, "running")
+    total = len(source_image_ids)
+    n_faces = n_objects = n_discarded = n_errors = 0
+
+    for idx, src_id in enumerate(source_image_ids):
+        try:
+            row = store.get_source_image(src_id, user_id, environment_id)
+            if not row:
+                n_errors += 1
+                continue
+            file_path = row["file_path"]
+            try:
+                raw = Path(file_path).read_bytes()
+            except OSError:
+                n_errors += 1
+                continue
+
+            img = open_and_validate(raw)
+
+            if replace:
+                _clear_detections(user_id, environment_id, src_id, clear_type)
+
+            if det_type in ("faces", "all"):
+                faces = _run_faces(user_id, environment_id, img, src_id)
+                n_faces += len(faces)
+            if det_type in ("objects", "all"):
+                objs, _ = _run_objects(user_id, environment_id, img, src_id, 1.0)
+                n_objects += len(objs)
+
+            if _cleanup_if_no_detections(src_id, user_id, environment_id):
+                n_discarded += 1
+
+            webhook.fire(user_id, environment_id, "detection.created", {
+                "source_image_id": src_id, "type": det_type,
+            })
+        except Exception as exc:
+            logger.warning("reprocess source_id=%d: %s", src_id, exc)
+            n_errors += 1
+
+        try:
+            store.update_job(job_id, "running", {"processed": idx + 1, "total": total})
+        except Exception:
+            pass
+
+    result = {
+        "total": total,
+        "type": det_type,
+        "faces": n_faces,
+        "objects": n_objects,
+        "discarded": n_discarded,
+        "errors": n_errors,
+    }
     store.update_job(job_id, "done", result)
     webhook.fire(user_id, environment_id, "job.done", {"job_id": job_id, "status": "done", **result})
 

@@ -453,6 +453,66 @@ async def reprocess_source_image(
     return result
 
 
+class _BulkReprocessBody(BaseModel):
+    source_image_ids: list[int]
+    type: str = "all"
+    replace: bool = False
+
+
+@router.post(
+    "/api/images/reprocess",
+    status_code=202,
+    responses={
+        **ok({"job_id": 12, "count": 50, "status": "pending"}),
+        **ERR_400,
+        **ERR_401,
+    },
+)
+async def bulk_reprocess(
+    body: _BulkReprocessBody,
+    background_tasks: BackgroundTasks,
+    user_id: int = Depends(require_auth),
+    environment_id: int = Depends(require_env_id),
+):
+    """Re-run detection on a set of stored source images using the currently active models.
+    Always async — returns a job_id immediately and processes in the background."""
+    if body.type not in ("faces", "objects", "all"):
+        raise HTTPException(400, "type must be faces, objects, or all")
+    if not body.source_image_ids:
+        raise HTTPException(400, "source_image_ids is required")
+
+    ids = list(dict.fromkeys(body.source_image_ids))  # deduplicate, preserve order
+
+    async def _run(job_id: int) -> None:
+        from app.api.detect import _run_detection_job
+        from app.core.paths import sources_dir as _src
+        _DET_TYPE = {"faces": "face", "objects": "object", "all": "all"}
+        det_type = _DET_TYPE[body.type]
+        processed = 0
+        for sid in ids:
+            src = store.get_source_image(sid, user_id, environment_id)
+            if not src:
+                continue
+            source_path = _src() / src["file_path"]
+            if not source_path.exists():
+                continue
+            try:
+                raw = source_path.read_bytes()
+                await _run_detection_job.__wrapped__(
+                    job_id, user_id, environment_id,
+                    raw, None, body.replace, det_type, src["external_ref"],
+                ) if hasattr(_run_detection_job, "__wrapped__") else None
+            except Exception:
+                pass
+            processed += 1
+        store.update_job(job_id, "done", processed, len(ids))
+
+    from app.api.detect import _run_bulk_reprocess_job
+    job_id = store.create_job(user_id, "reprocess", environment_id)
+    background_tasks.add_task(_run_bulk_reprocess_job, job_id, ids, user_id, environment_id, body.type, body.replace)
+    return {"job_id": job_id, "count": len(ids), "status": "pending"}
+
+
 class _ManualBbox(BaseModel):
     x: int
     y: int

@@ -51,7 +51,7 @@
       btn.disabled = true;
       btn.textContent = 'Loading…';
       const resp = await fetch('/api/models/' + id + '/activate', { method: 'PUT' });
-      if (resp.ok) { flashToast('Model activated.', 'success'); location.reload(); }
+      if (resp.ok) { flashToast('Model activated.', 'success'); sessionStorage.setItem('argus_model_just_activated', '1'); location.reload(); }
       else {
         const err = await resp.json().catch(() => ({}));
         btn.textContent = 'Error: ' + (err.detail || resp.status);

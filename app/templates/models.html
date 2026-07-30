@@ -4,6 +4,14 @@
 {% block content %}
 <h1 style="margin-bottom:20px">Models</h1>
 
+<div id="activation-callout" hidden style="margin-bottom:18px;padding:14px 18px;
+     background:rgba(59,130,246,.1);border:1px solid rgba(59,130,246,.3);
+     border-radius:var(--radius);font-size:14px;line-height:1.5">
+  Model activated. To re-run detection on your existing images using this model, go to
+  <a href="/images">Images</a>, select the images you want to reprocess, then click
+  <strong>Reprocess</strong> in the action bar.
+</div>
+
 <h2>Face models</h2>
 <div class="card-grid" style="margin-bottom:28px">
 {% for m in models %}{% if m.type == 'face' %}
@@ -119,6 +127,12 @@
 {% if active_obj_world %}
 <script src="/static/js/world-suggestions.js"></script>
 <script>
+if (sessionStorage.getItem('argus_model_just_activated')) {
+  sessionStorage.removeItem('argus_model_just_activated');
+  const callout = document.getElementById('activation-callout');
+  if (callout) callout.hidden = false;
+}
+
 (() => {
   const ta  = document.getElementById('world-classes-input');
   if (!ta) return;

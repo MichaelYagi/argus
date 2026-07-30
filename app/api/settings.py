@@ -287,6 +287,12 @@ async def _ensure_fairface_bg() -> None:
         logger.warning("FairFace load failed: %s", exc, exc_info=True)
 
 
+@router.get("/api/admin/pending-resets/count")
+async def pending_resets_count(_: int = Depends(require_admin)):
+    """Count of users with a pending password-reset request. Admin only."""
+    return {"count": store.count_pending_reset_requests()}
+
+
 def _fmt(row) -> dict:
     from app.core.settings_cache import coerce_setting
     return {

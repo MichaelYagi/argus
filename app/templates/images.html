@@ -82,10 +82,41 @@
      border-radius:var(--radius);box-shadow:var(--shadow)">
   <span id="batch-count" style="font-size:13px;font-weight:500"></span>
   <span class="nav-spacer"></span>
+  <button class="btn btn-primary" style="font-size:12px;padding:4px 12px"
+          onclick="reprocessSelected()">Reprocess</button>
   <button class="btn btn-danger" style="font-size:12px;padding:4px 12px"
           onclick="deleteSelected()">Delete Selected</button>
   <button class="btn btn-ghost" style="font-size:12px;padding:4px 12px"
           onclick="clearSelection()">Clear</button>
+</div>
+
+<div id="reprocess-modal" style="display:none;position:fixed;inset:0;z-index:1000;
+     background:rgba(0,0,0,.45);align-items:center;justify-content:center">
+  <div style="background:var(--surface);border-radius:var(--radius);box-shadow:var(--shadow);
+              padding:24px 28px;max-width:400px;width:calc(100% - 32px)">
+    <h3 style="margin:0 0 14px">Reprocess images</h3>
+    <p style="margin:0 0 16px;font-size:14px;color:var(--muted)">
+      Re-run detection on the selected images using the currently active models.
+    </p>
+    <div style="margin-bottom:12px">
+      <label style="font-size:13px;font-weight:500;display:block;margin-bottom:6px">Detection type</label>
+      <select id="reprocess-type" class="input" style="width:100%;font-size:13px;padding:6px 10px">
+        <option value="all">Faces and objects</option>
+        <option value="faces">Faces only</option>
+        <option value="objects">Objects only</option>
+      </select>
+    </div>
+    <label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer;margin-bottom:20px">
+      <input type="checkbox" id="reprocess-replace" style="width:15px;height:15px">
+      Replace existing detections
+    </label>
+    <div style="display:flex;gap:8px;justify-content:flex-end">
+      <button class="btn btn-ghost" style="font-size:13px"
+              onclick="document.getElementById('reprocess-modal').style.display='none'">Cancel</button>
+      <button class="btn btn-primary" id="reprocess-submit-btn" style="font-size:13px"
+              onclick="submitReprocess()">Reprocess</button>
+    </div>
+  </div>
 </div>
 
 <div id="gallery-actions" style="display:flex;align-items:center;justify-content:flex-end;
@@ -246,6 +277,44 @@ function localDateToUTC(dateStr, endOfDay) {
       },
       { confirmText: 'Delete ' + n, danger: true }
     );
+  };
+
+  window.reprocessSelected = () => {
+    if (!selected.size) return;
+    const modal = document.getElementById('reprocess-modal');
+    modal.style.display = 'flex';
+    modal.addEventListener('click', e => { if (e.target === modal) modal.style.display = 'none'; }, { once: false });
+  };
+
+  window.submitReprocess = async () => {
+    const ids = [...selected];
+    if (!ids.length) return;
+    const type    = document.getElementById('reprocess-type').value;
+    const replace = document.getElementById('reprocess-replace').checked;
+    const btn     = document.getElementById('reprocess-submit-btn');
+    btn.disabled  = true;
+    btn.textContent = 'Submitting…';
+    try {
+      const resp = await fetch('/api/images/reprocess', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ source_image_ids: ids, type, replace }),
+      });
+      document.getElementById('reprocess-modal').style.display = 'none';
+      if (resp.ok) {
+        const data = await resp.json();
+        showToast('Reprocessing ' + data.count + ' image' + (data.count === 1 ? '' : 's') + ' in the background', 'success');
+      } else {
+        const data = await resp.json().catch(() => ({}));
+        showToast('Reprocess failed: ' + (data.detail || resp.status), 'error');
+      }
+    } catch (err) {
+      document.getElementById('reprocess-modal').style.display = 'none';
+      showToast('Reprocess failed: ' + err.message, 'error');
+    } finally {
+      btn.disabled = false;
+      btn.textContent = 'Reprocess';
+    }
   };
 
   let gallery;

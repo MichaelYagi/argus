@@ -112,34 +112,65 @@
   </div>
   {% endif %}
 
+  {% if temp_pw_flash %}
+  <div style="margin-bottom:16px;padding:14px 18px;background:rgba(245,158,11,.1);
+              border:1px solid rgba(245,158,11,.4);border-radius:var(--radius)">
+    <p style="margin:0 0 6px;font-weight:600;font-size:14px">Temporary password for {{ temp_pw_flash.username }}</p>
+    <p style="margin:0 0 8px;font-size:13px;color:var(--muted)">
+      Share this with the user. It is shown only once and will not appear again.
+    </p>
+    <code style="display:block;font-size:16px;letter-spacing:.05em;padding:8px 12px;
+                 background:var(--surface-2);border-radius:4px;user-select:all">{{ temp_pw_flash.password }}</code>
+  </div>
+  {% endif %}
+
   {% if managed_users %}
     {% for u in managed_users %}
-    <div style="display:flex;align-items:center;gap:12px;padding:10px 0;border-bottom:1px solid var(--border);flex-wrap:wrap">
-      <strong style="font-size:14px">{{ u.username }}</strong>
-      {% if u.is_approved %}
-      <span style="font-size:11px;font-weight:600;color:var(--success);border:1px solid var(--success);
-                   border-radius:10px;padding:1px 8px">Active</span>
-      {% else %}
-      <span style="font-size:11px;font-weight:600;color:var(--muted);border:1px solid var(--border);
-                   border-radius:10px;padding:1px 8px">No access</span>
+    <div style="padding:10px 0;border-bottom:1px solid var(--border)">
+      <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+        <strong style="font-size:14px">{{ u.username }}</strong>
+        {% if u.is_approved %}
+        <span style="font-size:11px;font-weight:600;color:var(--success);border:1px solid var(--success);
+                     border-radius:10px;padding:1px 8px">Active</span>
+        {% else %}
+        <span style="font-size:11px;font-weight:600;color:var(--muted);border:1px solid var(--border);
+                     border-radius:10px;padding:1px 8px">No access</span>
+        {% endif %}
+        {% if u.must_change_password %}
+        <span style="font-size:11px;font-weight:600;color:var(--warn);border:1px solid var(--warn);
+                     border-radius:10px;padding:1px 8px">Temporary password active</span>
+        {% endif %}
+        <span class="muted" style="font-size:12px">Registered <time class="fmt-date" datetime="{{ u.created_at }}">{{ u.created_at }}</time></span>
+        <span style="flex:1"></span>
+        {% if u.is_approved %}
+        <form method="post" action="/admin/revoke/{{ u.id }}" style="display:inline">
+          <button class="btn btn-ghost" style="padding:5px 12px;font-size:12px"
+                  title="Block this user from signing in (keeps their data)">Revoke access</button>
+        </form>
+        {% else %}
+        <form method="post" action="/admin/approve/{{ u.id }}" style="display:inline">
+          <button class="btn btn-success" style="padding:5px 12px;font-size:12px">Approve</button>
+        </form>
+        {% endif %}
+        <button class="btn btn-danger" style="padding:5px 12px;font-size:12px"
+                onclick="showConfirm('Delete account &quot;{{ u.username }}&quot;? All of this user\'s identities, detections, references, and images will be permanently removed. This cannot be undone.',
+                  () => document.getElementById('del-user-{{ u.id }}').submit(),
+                  {confirmText:'Delete account', danger:true})">Delete</button>
+        <form id="del-user-{{ u.id }}" method="post" action="/admin/user/{{ u.id }}/delete" style="display:none"></form>
+      </div>
+      {% if u.reset_requested_at %}
+      <div style="display:flex;align-items:center;gap:10px;margin-top:8px;flex-wrap:wrap;
+                  padding:8px 12px;background:rgba(245,158,11,.08);border-radius:4px">
+        <span style="font-size:13px;font-weight:500">Requested a password reset</span>
+        <span style="flex:1"></span>
+        <form method="post" action="/admin/users/{{ u.id }}/temp-password" style="display:inline">
+          <button class="btn btn-primary" style="padding:4px 12px;font-size:12px">Generate temporary password</button>
+        </form>
+        <form method="post" action="/admin/users/{{ u.id }}/dismiss-reset" style="display:inline">
+          <button class="btn btn-ghost" style="padding:4px 12px;font-size:12px">Dismiss</button>
+        </form>
+      </div>
       {% endif %}
-      <span class="muted" style="font-size:12px">Registered <time class="fmt-date" datetime="{{ u.created_at }}">{{ u.created_at }}</time></span>
-      <span style="flex:1"></span>
-      {% if u.is_approved %}
-      <form method="post" action="/admin/revoke/{{ u.id }}" style="display:inline">
-        <button class="btn btn-ghost" style="padding:5px 12px;font-size:12px"
-                title="Block this user from signing in (keeps their data)">Revoke access</button>
-      </form>
-      {% else %}
-      <form method="post" action="/admin/approve/{{ u.id }}" style="display:inline">
-        <button class="btn btn-success" style="padding:5px 12px;font-size:12px">Approve</button>
-      </form>
-      {% endif %}
-      <button class="btn btn-danger" style="padding:5px 12px;font-size:12px"
-              onclick="showConfirm('Delete account &quot;{{ u.username }}&quot;? All of this user\'s identities, detections, references, and images will be permanently removed. This cannot be undone.',
-                () => document.getElementById('del-user-{{ u.id }}').submit(),
-                {confirmText:'Delete account', danger:true})">Delete</button>
-      <form id="del-user-{{ u.id }}" method="post" action="/admin/user/{{ u.id }}/delete" style="display:none"></form>
     </div>
     {% endfor %}
   {% else %}
