@@ -9,17 +9,16 @@ from fastapi.responses import RedirectResponse
 from fastapi.templating import Jinja2Templates
 
 from app.core import settings_cache
+from app.core.auth import get_session_user
 from app.core.security import (
     REMEMBER_MAX_AGE,
     create_remember_token,
     generate_api_key,
-    generate_temp_password,
     hash_api_key,
     hash_password,
     key_hint,
     verify_password,
 )
-from app.core.auth import get_session_user
 from app.db import store
 
 router = APIRouter()
