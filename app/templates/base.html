@@ -263,7 +263,7 @@ document.addEventListener('DOMContentLoaded', function() {
       if (e.key === 'Escape') { focusedIdx = null; renderChips(); close(); input.blur(); return; }
 
       if (e.key === 'ArrowLeft') {
-        if (!input.value) {
+        if (input.selectionStart === 0) {
           if (focusedIdx === null && chips.length) {
             e.preventDefault(); focusedIdx = chips.length - 1; renderChips();
           } else if (focusedIdx !== null && focusedIdx > 0) {
