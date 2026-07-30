@@ -495,14 +495,19 @@ function localDateToUTC(dateStr, endOfDay) {
     return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
   }
 
+  let focusedIdx = null; // null = cursor in input; i = chip[i] is highlighted
+
   function renderChips() {
     wrap.querySelectorAll('.fi-chip').forEach(c => c.remove());
-    (window.filterIdentityIds || []).forEach(f => {
+    const ids = window.filterIdentityIds || [];
+    ids.forEach((f, i) => {
+      const focused = i === focusedIdx;
       const chip = document.createElement('span');
       chip.className = 'fi-chip';
       chip.style.cssText = 'display:inline-flex;align-items:center;gap:3px;padding:2px 4px 2px 8px;' +
-        'background:rgba(59,130,246,.15);color:#3b82f6;border-radius:99px;' +
-        'font-size:12px;font-weight:500;white-space:nowrap;flex-shrink:0';
+        `background:rgba(59,130,246,${focused ? '.4' : '.15'});color:#3b82f6;border-radius:99px;` +
+        `font-size:12px;font-weight:500;white-space:nowrap;flex-shrink:0` +
+        (focused ? ';outline:2px solid #3b82f6;outline-offset:1px' : '');
       const lbl = document.createElement('span');
       lbl.textContent = f.label;
       const btn = document.createElement('button');
@@ -516,14 +521,18 @@ function localDateToUTC(dateStr, endOfDay) {
       btn.addEventListener('mouseleave', () => { btn.style.opacity = '.7'; });
       btn.addEventListener('click', e => {
         e.stopPropagation();
-        window.filterIdentityIds = window.filterIdentityIds.filter(x => x.id !== f.id);
+        window.filterIdentityIds = ids.filter((_, k) => k !== i);
+        if (focusedIdx !== null) {
+          if (focusedIdx === i) focusedIdx = null;
+          else if (focusedIdx > i) focusedIdx--;
+        }
         renderChips();
       });
       chip.appendChild(lbl);
       chip.appendChild(btn);
       wrap.insertBefore(chip, identityInput);
     });
-    const atCap = (window.filterIdentityIds || []).length >= CHIP_MAX;
+    const atCap = ids.length >= CHIP_MAX;
     identityInput.placeholder = atCap ? '' : 'Search people, objects…';
     identityInput.style.display = atCap ? 'none' : '';
   }
@@ -588,7 +597,10 @@ function localDateToUTC(dateStr, endOfDay) {
   fetchFilterCount();
 
   // Click on the wrap focuses the input.
-  wrap.addEventListener('click', () => { if (identityInput.style.display !== 'none') identityInput.focus(); });
+  wrap.addEventListener('click', e => {
+    if (!e.target.closest('.fi-chip')) { focusedIdx = null; renderChips(); }
+    if (identityInput.style.display !== 'none') identityInput.focus();
+  });
 
   let searchTimer;
   identityInput.addEventListener('input', () => {
@@ -619,6 +631,7 @@ function localDateToUTC(dateStr, endOfDay) {
           e.preventDefault();
           if ((window.filterIdentityIds || []).length >= CHIP_MAX) return;
           window.filterIdentityIds = [...(window.filterIdentityIds || []), { id: i.id, label: i.label }];
+          focusedIdx = null;
           renderChips();
           identityInput.value = '';
           identityDrop.style.display = 'none';
@@ -631,22 +644,74 @@ function localDateToUTC(dateStr, endOfDay) {
   });
 
   identityInput.addEventListener('blur', () => {
-    setTimeout(() => { identityDrop.style.display = 'none'; }, 200);
+    setTimeout(() => {
+      identityDrop.style.display = 'none';
+      if (focusedIdx !== null) { focusedIdx = null; renderChips(); }
+    }, 200);
   });
 
   identityInput.addEventListener('keydown', e => {
+    if (e.key === 'ArrowLeft') {
+      if (!identityInput.value) {
+        const ids = window.filterIdentityIds || [];
+        if (focusedIdx === null && ids.length) {
+          e.preventDefault(); focusedIdx = ids.length - 1; renderChips();
+        } else if (focusedIdx !== null && focusedIdx > 0) {
+          e.preventDefault(); focusedIdx--; renderChips();
+        } else if (focusedIdx === 0) {
+          e.preventDefault(); // at left boundary
+        }
+      }
+      return;
+    }
+
+    if (e.key === 'ArrowRight' && focusedIdx !== null) {
+      const ids = window.filterIdentityIds || [];
+      e.preventDefault();
+      if (focusedIdx < ids.length - 1) { focusedIdx++; }
+      else { focusedIdx = null; }
+      renderChips();
+      return;
+    }
+
+    if (e.key === 'Delete' && focusedIdx !== null) {
+      const ids = window.filterIdentityIds || [];
+      if (focusedIdx < ids.length - 1) {
+        e.preventDefault();
+        window.filterIdentityIds = ids.filter((_, k) => k !== focusedIdx + 1);
+        renderChips();
+      }
+      return;
+    }
+
+    if (e.key === 'Backspace') {
+      if (focusedIdx !== null) {
+        const ids = window.filterIdentityIds || [];
+        e.preventDefault();
+        const ri = focusedIdx;
+        window.filterIdentityIds = ids.filter((_, k) => k !== ri);
+        focusedIdx = ri > 0 ? ri - 1 : null;
+        renderChips();
+        return;
+      }
+      if (!identityInput.value) {
+        const ids = window.filterIdentityIds || [];
+        if (ids.length) { window.filterIdentityIds = ids.slice(0, -1); renderChips(); }
+      }
+      return;
+    }
+
+    // Any printable character while chip is focused → return to normal input mode
+    if (focusedIdx !== null && e.key.length === 1 && !e.ctrlKey && !e.metaKey) {
+      focusedIdx = null; renderChips();
+    }
+
     if (e.key === 'Enter') {
       const first = identityDrop.querySelector('.ns-item');
       if (first && identityDrop.style.display !== 'none') {
         first.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }));
       } else if (!identityInput.value.trim()) {
         document.getElementById('filter-apply').click();
-      }
-    } else if (e.key === 'Backspace' && !identityInput.value) {
-      const ids = window.filterIdentityIds || [];
-      if (ids.length) {
-        window.filterIdentityIds = ids.slice(0, -1);
-        renderChips();
       }
     }
   });

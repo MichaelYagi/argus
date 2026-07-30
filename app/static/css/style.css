@@ -194,6 +194,10 @@ a:hover { text-decoration: underline; }
   display: flex; align-items: center; width: 14px; height: 14px; justify-content: center;
 }
 .ns-chip-x:hover { color: #fff; }
+.ns-chip-focused {
+  background: rgba(59,130,246,.55);
+  outline: 2px solid rgba(59,130,246,.9); outline-offset: 1px;
+}
 .ns-add-btn {
   flex-shrink: 0; width: 20px; height: 20px; border-radius: 50%;
   border: 1px solid rgba(255,255,255,.25); background: rgba(255,255,255,.1);

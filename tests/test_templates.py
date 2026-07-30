@@ -39,8 +39,9 @@ def test_esc_escapes_ascii_double_quote():
     m = re.search(r"function _?esc\(s\)\s*\{([^}]+)\}", base)
     assert m, "esc/_esc function not found in base.html"
     body = m.group(1)
-    # Must contain .replace(/"/g, with an ASCII double-quote inside the regex literal
-    assert '.replace(/"/' in body or '"&quot;"' in body, (
+    # Must map ASCII double-quote (U+0022) to &quot; — either via a chained
+    # .replace(/"/ …) call or a character-map object that contains '"':'&quot;'
+    assert '.replace(/"/' in body or '&quot;' in body, (
         'esc() does not replace ASCII double-quote (U+0022); '
         'check for smart-quote regression in the replace regex'
     )

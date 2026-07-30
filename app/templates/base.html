@@ -142,7 +142,8 @@ document.addEventListener('DOMContentLoaded', function() {
 
     let timer = null;
     let lastQ  = '';
-    let chips  = []; // [{id, label, type}]
+    let chips      = []; // [{id, label, type}]
+    let focusedIdx = null; // null = cursor in input; i = chip[i] is highlighted
 
     function esc(s) {
       return String(s).replace(/[&<>"']/g, c =>
@@ -159,7 +160,8 @@ document.addEventListener('DOMContentLoaded', function() {
 
     function renderChips() {
       if (chipsEl) chipsEl.innerHTML = chips.map((c, i) =>
-        `<span class="ns-chip"><span>${esc(c.label)}</span>` +
+        `<span class="ns-chip${i === focusedIdx ? ' ns-chip-focused' : ''}">` +
+        `<span>${esc(c.label)}</span>` +
         `<button class="ns-chip-x" data-idx="${i}" type="button" title="Remove">&times;</button></span>`
       ).join('');
       if (goBtn) goBtn.style.display = chips.length ? 'inline-flex' : 'none';
@@ -169,6 +171,7 @@ document.addEventListener('DOMContentLoaded', function() {
     function addChip(item) {
       if (chips.some(c => c.id === item.id)) { input.focus(); return; }
       chips.push({id: item.id, label: item.label, type: item.type});
+      focusedIdx = null;
       renderChips();
       input.value = '';
       lastQ = '';
@@ -178,6 +181,9 @@ document.addEventListener('DOMContentLoaded', function() {
 
     function removeChip(idx) {
       chips.splice(idx, 1);
+      if (focusedIdx !== null) {
+        focusedIdx = focusedIdx >= idx ? (focusedIdx > 0 ? focusedIdx - 1 : null) : focusedIdx;
+      }
       renderChips();
       input.focus();
     }
@@ -254,10 +260,55 @@ document.addEventListener('DOMContentLoaded', function() {
     });
 
     input.addEventListener('keydown', function(e) {
-      if (e.key === 'Escape') { close(); input.blur(); return; }
-      if (e.key === 'Backspace' && !input.value && chips.length) {
-        removeChip(chips.length - 1); return;
+      if (e.key === 'Escape') { focusedIdx = null; renderChips(); close(); input.blur(); return; }
+
+      if (e.key === 'ArrowLeft') {
+        if (!input.value) {
+          if (focusedIdx === null && chips.length) {
+            e.preventDefault(); focusedIdx = chips.length - 1; renderChips();
+          } else if (focusedIdx !== null && focusedIdx > 0) {
+            e.preventDefault(); focusedIdx--; renderChips();
+          } else if (focusedIdx === 0) {
+            e.preventDefault(); // at left boundary — no-op
+          }
+        }
+        return;
       }
+
+      if (e.key === 'ArrowRight' && focusedIdx !== null) {
+        e.preventDefault();
+        if (focusedIdx < chips.length - 1) { focusedIdx++; }
+        else { focusedIdx = null; }
+        renderChips();
+        return;
+      }
+
+      if (e.key === 'Delete' && focusedIdx !== null) {
+        if (focusedIdx < chips.length - 1) {
+          e.preventDefault();
+          chips.splice(focusedIdx + 1, 1);
+          renderChips();
+        }
+        return;
+      }
+
+      if (e.key === 'Backspace') {
+        if (focusedIdx !== null) {
+          e.preventDefault();
+          const ri = focusedIdx;
+          chips.splice(ri, 1);
+          focusedIdx = ri > 0 ? ri - 1 : null;
+          renderChips();
+          return;
+        }
+        if (!input.value && chips.length) { removeChip(chips.length - 1); return; }
+      }
+
+      // Any printable character typed while in chip navigation mode → return to input
+      if (focusedIdx !== null && e.key.length === 1 && !e.ctrlKey && !e.metaKey) {
+        focusedIdx = null; renderChips();
+      }
+
       if (e.key === 'Enter') {
         if (chips.length) { window.location = imagesUrl(); return; }
         const f = drop.querySelector('.ns-item');
@@ -281,7 +332,7 @@ document.addEventListener('DOMContentLoaded', function() {
     });
 
     document.addEventListener('click', function(e) {
-      if (!wrap.contains(e.target)) close();
+      if (!wrap.contains(e.target)) { focusedIdx = null; renderChips(); close(); }
     });
   })();
 
