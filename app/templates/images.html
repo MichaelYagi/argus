@@ -676,11 +676,12 @@ function localDateToUTC(dateStr, endOfDay) {
 
     if (e.key === 'Delete' && focusedIdx !== null) {
       const ids = window.filterIdentityIds || [];
-      if (focusedIdx < ids.length - 1) {
-        e.preventDefault();
-        window.filterIdentityIds = ids.filter((_, k) => k !== focusedIdx + 1);
-        renderChips();
-      }
+      e.preventDefault();
+      const ri = focusedIdx;
+      window.filterIdentityIds = ids.filter((_, k) => k !== ri);
+      const newLen = (window.filterIdentityIds || []).length;
+      focusedIdx = ri < newLen ? ri : (ri > 0 ? ri - 1 : null);
+      renderChips();
       return;
     }
 

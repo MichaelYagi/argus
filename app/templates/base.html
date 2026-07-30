@@ -284,11 +284,11 @@ document.addEventListener('DOMContentLoaded', function() {
       }
 
       if (e.key === 'Delete' && focusedIdx !== null) {
-        if (focusedIdx < chips.length - 1) {
-          e.preventDefault();
-          chips.splice(focusedIdx + 1, 1);
-          renderChips();
-        }
+        e.preventDefault();
+        const ri = focusedIdx;
+        chips.splice(ri, 1);
+        focusedIdx = ri < chips.length ? ri : (ri > 0 ? ri - 1 : null);
+        renderChips();
         return;
       }
 
