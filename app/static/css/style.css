@@ -166,18 +166,49 @@ a:hover { text-decoration: underline; }
   flex: 1; min-width: 0; position: relative;
   padding: 0 10px;
 }
-.nav-search-wrap input[type=search] {
-  width: 100%; background: rgba(255,255,255,.08);
-  border: 1px solid rgba(255,255,255,.13); border-radius: 6px;
-  color: #fff; font-size: 13px; padding: 5px 10px;
-  outline: none; font-family: inherit;
+.ns-inner {
+  display: flex; align-items: center; flex-wrap: wrap; gap: 4px;
+  background: rgba(255,255,255,.08); border: 1px solid rgba(255,255,255,.13);
+  border-radius: 6px; padding: 4px 8px; cursor: text; min-height: 32px;
   transition: border-color .15s, background .15s;
-  -webkit-appearance: none;
 }
-.nav-search-wrap input[type=search]::placeholder { color: var(--nav-text); }
-.nav-search-wrap input[type=search]:focus {
+.ns-inner:focus-within {
   border-color: rgba(255,255,255,.35); background: rgba(255,255,255,.12);
 }
+.nav-search-wrap input[type=search] {
+  flex: 1; min-width: 60px; background: none; border: none; border-radius: 0;
+  color: #fff; font-size: 13px; padding: 0 2px;
+  outline: none; font-family: inherit; -webkit-appearance: none;
+}
+.nav-search-wrap input[type=search]::placeholder { color: rgba(255,255,255,.5); }
+.ns-chip {
+  display: inline-flex; align-items: center; gap: 3px;
+  background: rgba(255,255,255,.2); border-radius: 99px;
+  padding: 2px 5px 2px 8px; font-size: 11px; font-weight: 500;
+  color: #fff; white-space: nowrap; max-width: 100px; flex-shrink: 0;
+}
+.ns-chip > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ns-chip-x {
+  background: none; border: none; color: rgba(255,255,255,.6); cursor: pointer;
+  padding: 0; font-size: 14px; line-height: 1; flex-shrink: 0;
+  display: flex; align-items: center; width: 14px; height: 14px; justify-content: center;
+}
+.ns-chip-x:hover { color: #fff; }
+.ns-add-btn {
+  flex-shrink: 0; width: 20px; height: 20px; border-radius: 50%;
+  border: 1px solid rgba(255,255,255,.25); background: rgba(255,255,255,.1);
+  color: rgba(255,255,255,.8); font-size: 15px; line-height: 1;
+  cursor: pointer; padding: 0; display: flex; align-items: center; justify-content: center;
+  opacity: 0; transition: opacity .1s;
+}
+.ns-item:hover .ns-add-btn, .ns-add-btn:focus { opacity: 1; outline: none; }
+.ns-go-btn {
+  flex-shrink: 0; background: rgba(59,130,246,.85); border: none; color: #fff;
+  border-radius: 4px; padding: 3px 9px; font-size: 11px; font-weight: 600;
+  cursor: pointer; white-space: nowrap; font-family: inherit;
+}
+.ns-go-btn:hover { background: #3b82f6; }
+.ns-added-mark { font-size: 11px; color: var(--muted); flex-shrink: 0; }
 .nav-search-dropdown {
   display: none; position: absolute;
   top: calc(100% + 6px); left: 10px; right: 10px;
