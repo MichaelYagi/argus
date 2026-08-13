@@ -42,16 +42,20 @@
       hide();
       if (!items.length) return;
 
+      const rect = input.getBoundingClientRect();
+      const flipUp = window.innerHeight - rect.bottom < 200 && rect.top > 200;
+
       drop = document.createElement('ul');
       Object.assign(drop.style, {
-        position: 'absolute', listStyle: 'none', margin: '0', padding: '0',
+        position: 'fixed', listStyle: 'none', margin: '0', padding: '0',
         background: 'var(--surface)', color: 'var(--text)', border: '1px solid var(--border)',
-        borderRadius: 'var(--radius)', zIndex: '400',
+        borderRadius: 'var(--radius)', zIndex: '1000',
         maxHeight: '180px', overflowY: 'auto',
         boxShadow: '0 4px 12px rgba(0,0,0,.15)',
         minWidth: Math.max(input.offsetWidth, 160) + 'px',
-        top: (input.offsetTop + input.offsetHeight + 2) + 'px',
-        left: input.offsetLeft + 'px',
+        left: rect.left + 'px',
+        top: flipUp ? 'auto' : (rect.bottom + 2) + 'px',
+        bottom: flipUp ? (window.innerHeight - rect.top + 2) + 'px' : 'auto',
       });
 
       items.forEach(label => {
@@ -72,17 +76,7 @@
         drop.appendChild(li);
       });
 
-      const parent = input.closest('.ra-wrap') || input.closest('[style*="position:relative"]') || input.parentElement;
-      parent.style.position = 'relative';
-      parent.appendChild(drop);
-
-      // Flip the dropdown above the input when there isn't room below — e.g. an
-      // input in a sticky bottom action bar (the Suggested page).
-      const rect = input.getBoundingClientRect();
-      if (rect.bottom + 200 > window.innerHeight && rect.top > 200) {
-        drop.style.top = 'auto';
-        drop.style.bottom = (parent.offsetHeight - input.offsetTop + 2) + 'px';
-      }
+      document.body.appendChild(drop);
     };
 
     input.addEventListener('input', () => {

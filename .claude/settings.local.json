@@ -257,7 +257,8 @@
       "WebFetch(domain:tessl.io)",
       "WebFetch(domain:www.aimodels.fyi)",
       "WebFetch(domain:wandb.ai)",
-      "Bash(grep -n -A1 \"| \\\\`D\\\\`\\\\|| \\\\`F\\\\`\\\\|| \\\\`V\\\\`\\\\|Dismiss\\\\|dismiss\\\\|Remove\\\\|reject\" /mnt/c/Users/Michael/Documents/development/argus/README.md)"
+      "Bash(grep -n -A1 \"| \\\\`D\\\\`\\\\|| \\\\`F\\\\`\\\\|| \\\\`V\\\\`\\\\|Dismiss\\\\|dismiss\\\\|Remove\\\\|reject\" /mnt/c/Users/Michael/Documents/development/argus/README.md)",
+      "Bash(xargs ls -la)"
     ]
   }
 }
