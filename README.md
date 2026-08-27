@@ -1,6 +1,6 @@
 # Argus
 
-> AI-authored. 100% of the code was written by Claude (Anthropic); I shaped the architecture, scope, and every decision, and did all the testing.
+> **AI-authored.** 100% of the code was written by Claude (Anthropic); I shaped the architecture, scope, and every decision, and did all the testing.
 
 Self-hosted face and object recognition you can both **use and build on** — a clean API backend for other apps *and* a real human curation UI in one, instead of a headless black box or a feature trapped inside a photo library. Runs on your LAN via `docker compose up`.
 
