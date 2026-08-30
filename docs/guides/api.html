@@ -58,6 +58,16 @@ curl http://localhost:8100/api/capabilities</code></pre>
       hardcoding what's available.
     </p>
 
+    <h2>Stats</h2>
+    <pre><code>GET /api/stats</code></pre>
+    <p>Dashboard counts and storage summary in one round-trip.</p>
+    <pre><code>curl -H "X-API-Key: argus_..." http://localhost:8100/api/stats
+# → {"identities": 12, "face_identities": 8, "object_identities": 4,
+#    "detections": 348, "face_detections": 210, "object_detections": 138,
+#    "source_images": 95, "pending_review": 14,
+#    "storage": "1.2 GB", "storage_free": "45.3 GB",
+#    "storage_bytes": 1288490188, "storage_free_bytes": 48644997120}</code></pre>
+
     <h2>Detect</h2>
     <p>
       Every detect endpoint accepts exactly one of: a <code>file</code> multipart upload, an
@@ -70,18 +80,21 @@ curl http://localhost:8100/api/capabilities</code></pre>
     </p>
 
     <h3>Detect faces</h3>
+    <pre><code>POST /api/detect/faces</code></pre>
     <pre><code>curl -X POST \
   -H "X-API-Key: argus_..." \
   -F "file=@photo.jpg" \
   http://localhost:8100/api/detect/faces</code></pre>
 
     <h3>Detect objects</h3>
+    <pre><code>POST /api/detect/objects</code></pre>
     <pre><code>curl -X POST \
   -H "X-API-Key: argus_..." \
   -F "file=@photo.jpg" \
   http://localhost:8100/api/detect/objects</code></pre>
 
     <h3>Detect all (faces + objects)</h3>
+    <pre><code>POST /api/detect/all</code></pre>
     <pre><code>curl -X POST \
   -H "X-API-Key: argus_..." \
   -F "file=@photo.jpg" \
@@ -110,18 +123,102 @@ curl http://localhost:8100/api/capabilities</code></pre>
   -F "replace=true" \
   http://localhost:8100/api/detect/all</code></pre>
 
+    <h3>Bulk detection</h3>
+    <p>
+      Detect faces and/or objects across many images in a single call. Each image can be a URL,
+      file upload, or base64. One bad image never fails the others.
+    </p>
+    <pre><code>POST /api/detect/bulk</code></pre>
+
+    <p><strong>Sync</strong> (waits for all results):</p>
+    <pre><code>curl -X POST \
+  -H "X-API-Key: argus_..." \
+  -H "Content-Type: application/json" \
+  -d '{"image_urls": ["http://cam1/snap.jpg", "http://cam2/snap.jpg"], "type": "faces"}' \
+  http://localhost:8100/api/detect/bulk</code></pre>
+
+    <p><strong>Async</strong> (returns job id immediately, max 200 images per call):</p>
+    <pre><code>curl -X POST \
+  -H "X-API-Key: argus_..." \
+  -H "Content-Type: application/json" \
+  -d '{"image_urls": ["http://cam1/snap.jpg", "..."], "type": "all"}' \
+  "http://localhost:8100/api/detect/bulk?async=true"
+# → {"job_id": 7, "status": "pending", "total": 50}</code></pre>
+    <p>Register a <code>job.done</code> <a href="#webhooks">webhook</a> to be notified instead of polling.</p>
+
     <h2>Enroll</h2>
+    <p>Add a reference face for a person. The image must contain exactly one face.</p>
+    <pre><code>POST /api/faces/enroll</code></pre>
     <pre><code>curl -X POST \
   -H "X-API-Key: argus_..." \
   -F "name=Noah" \
   -F "file=@noah.jpg" \
-  http://localhost:8100/api/faces/enroll</code></pre>
+  http://localhost:8100/api/faces/enroll
+# → {"identity_id": 3, "label": "Noah", "embedding_id": 17, "enrolled": true}</code></pre>
+
+    <h3>Enroll into an existing identity</h3>
+    <p>Add an additional reference photo to an existing identity (by id).</p>
+    <pre><code>POST /api/identities/{id}/enroll</code></pre>
+    <pre><code>curl -X POST \
+  -H "X-API-Key: argus_..." \
+  -F "file=@another_noah.jpg" \
+  http://localhost:8100/api/identities/3/enroll</code></pre>
+
+    <h3>Enroll from an existing detection</h3>
+    <p>
+      Promote a stored detection's embedding into the reference set. The detection must already be
+      assigned to an identity; it must be a face type with a stored embedding.
+    </p>
+    <pre><code>POST /api/detections/{id}/enroll</code></pre>
+    <pre><code>curl -X POST \
+  -H "X-API-Key: argus_..." \
+  http://localhost:8100/api/detections/42/enroll
+# → {"detection_id": 42, "identity_id": 3, "embedding_id": 19, "enrolled": true}</code></pre>
+
+    <h3>Remove a detection's enrollment</h3>
+    <p>Revoke a detection's reference enrollment without deleting the detection itself.</p>
+    <pre><code>DELETE /api/detections/{id}/enroll</code></pre>
+    <pre><code>curl -X DELETE \
+  -H "X-API-Key: argus_..." \
+  http://localhost:8100/api/detections/42/enroll
+# → {"detection_id": 42, "removed": 1}</code></pre>
+
+    <h2>Face embeddings</h2>
+    <p>
+      Enrolled face reference embeddings. A person's identity can have multiple embeddings — one per
+      enrolled photo. Each embedding is tagged with the model that generated it and is only used for
+      matching when that model is active.
+    </p>
+
+    <h3>List embeddings</h3>
+    <pre><code>GET /api/face-embeddings</code></pre>
+    <pre><code>curl -H "X-API-Key: argus_..." \
+  "http://localhost:8100/api/face-embeddings?identity_id=3"
+# → {"items": [{"id": 17, "identity_id": 3, "label": "Noah",
+#               "model_id": 1, "model_name": "buffalo_l",
+#               "detection_id": 42, "source_image_id": 7,
+#               "created_at": "2026-01-10T08:00:00Z",
+#               "crop_url": "/media/crops/abc.jpg"}]}</code></pre>
+    <p>Optional query params: <code>identity_id</code>, <code>model_id</code>.</p>
+
+    <h3>Get one embedding</h3>
+    <pre><code>GET /api/face-embeddings/{id}</code></pre>
+    <pre><code>curl -H "X-API-Key: argus_..." http://localhost:8100/api/face-embeddings/17</code></pre>
+
+    <h3>Delete an embedding</h3>
+    <p>Removes a single reference embedding; does not delete the associated detection.</p>
+    <pre><code>DELETE /api/face-embeddings/{id}</code></pre>
+    <pre><code>curl -X DELETE \
+  -H "X-API-Key: argus_..." \
+  http://localhost:8100/api/face-embeddings/17
+# → {"deleted": 17}</code></pre>
 
     <h2>Identify (1:N, read-only)</h2>
     <p>
       Detects faces and matches them against enrolled people <strong>without storing anything</strong>
       (no crops, detections, or review entries). Returns best match per face plus ranked suggestions.
     </p>
+    <pre><code>POST /api/identify</code></pre>
     <pre><code>curl -X POST \
   -H "X-API-Key: argus_..." \
   -F "file=@group.jpg" \
@@ -137,6 +234,7 @@ curl http://localhost:8100/api/capabilities</code></pre>
       matching enrolled person. <strong>Stores nothing and enrolls nothing.</strong> Also available
       as a UI page at <code>/test</code>.
     </p>
+    <pre><code>POST /api/test</code></pre>
     <pre><code>curl -X POST \
   -H "X-API-Key: argus_..." \
   -F "file=@photo.jpg" \
@@ -150,6 +248,7 @@ curl http://localhost:8100/api/capabilities</code></pre>
 
     <h3>Batch test</h3>
     <p>Test many images in one call, still storing nothing. Per-image results; one bad image never fails the rest (max 100 per call).</p>
+    <pre><code>POST /api/test/batch</code></pre>
     <pre><code>curl -X POST \
   -H "X-API-Key: argus_..." \
   -F "type=all" -F "file=@a.jpg" -F "file=@b.jpg" \
@@ -160,6 +259,7 @@ curl http://localhost:8100/api/capabilities</code></pre>
 
     <h2>Verify (1:1)</h2>
     <p>Compares two images directly. Stores nothing.</p>
+    <pre><code>POST /api/verify</code></pre>
     <pre><code>curl -X POST \
   -H "X-API-Key: argus_..." \
   -F "file1=@a.jpg" -F "file2=@b.jpg" \
@@ -178,45 +278,562 @@ curl http://localhost:8100/api/capabilities</code></pre>
       <code>null</code>. These fields are API-only and not displayed in the UI.
     </p>
 
-    <h2>Relabel a detection</h2>
+    <h2>Identities</h2>
+    <p>
+      An identity is a named person or object class. Every detection is either unidentified or
+      assigned to an identity. Identities scoped to the caller's user and environment.
+    </p>
+
+    <h3>List</h3>
+    <pre><code>GET /api/identities</code></pre>
+    <pre><code>curl -H "X-API-Key: argus_..." \
+  "http://localhost:8100/api/identities?type=face&limit=50"
+# → {"items": [{"id": 3, "type": "face", "label": "Alice",
+#               "external_ref": "person_alice", "cover_detection_id": 101,
+#               "created_at": "2026-01-10T08:00:00Z"}],
+#    "next_cursor": "Alice", "has_more": false}</code></pre>
+    <p>
+      Optional params: <code>type</code> (<code>face</code> | <code>object</code>),
+      <code>q</code> (name search), <code>external_ref</code> (exact match),
+      <code>cursor</code>, <code>limit</code>. Omit <code>limit</code> to get all
+      identities unpaginated.
+    </p>
+
+    <h3>Summary (with counts and thumbnails)</h3>
+    <pre><code>GET /api/identities/summary</code></pre>
+    <pre><code>curl -H "X-API-Key: argus_..." \
+  "http://localhost:8100/api/identities/summary?type=face"
+# → {"items": [{"id": 3, "type": "face", "label": "Alice",
+#               "external_ref": "person_alice", "cover_detection_id": 101,
+#               "created_at": "...", "detection_count": 42,
+#               "embedding_count": 5,
+#               "thumbnail_url": "/media/crops/abc123.jpg"}],
+#    "next_cursor": "Alice", "has_more": true, "total": 8}</code></pre>
+    <p>Same filters as <code>/api/identities</code>. Used by the dashboard grid — includes counts and thumbnail URL per identity.</p>
+
+    <h3>Get one</h3>
+    <pre><code>GET /api/identities/{id}</code></pre>
+    <pre><code>curl -H "X-API-Key: argus_..." http://localhost:8100/api/identities/3
+# → {"id": 3, "type": "face", "label": "Alice", "external_ref": "person_alice",
+#    "cover_detection_id": 101, "created_at": "...",
+#    "detection_count": 42, "embedding_count": 5,
+#    "pending_review_count": 2, "thumbnail_url": "/media/crops/abc123.jpg"}</code></pre>
+
+    <h3>Create</h3>
+    <pre><code>POST /api/identities</code></pre>
+    <pre><code>curl -X POST \
+  -H "X-API-Key: argus_..." \
+  -H "Content-Type: application/json" \
+  -d '{"label": "Alice", "type": "face", "external_ref": "person_alice"}' \
+  http://localhost:8100/api/identities
+# → 201 {"id": 3, "type": "face", "label": "Alice", "external_ref": "person_alice"}</code></pre>
+    <p>Returns 409 if a <code>label</code> + <code>type</code> identity already exists in this environment.</p>
+
+    <h3>Rename</h3>
+    <pre><code>PUT /api/identities/{id}</code></pre>
     <pre><code>curl -X PUT \
   -H "X-API-Key: argus_..." \
   -H "Content-Type: application/json" \
+  -d '{"label": "Alice Smith"}' \
+  http://localhost:8100/api/identities/3
+# → {"id": 3, "label": "Alice Smith"}</code></pre>
+
+    <h3>Set external_ref</h3>
+    <pre><code>PUT /api/identities/{id}/external_ref</code></pre>
+    <pre><code>curl -X PUT \
+  -H "X-API-Key: argus_..." \
+  -H "Content-Type: application/json" \
+  -d '{"external_ref": "my-app-person-7"}' \
+  http://localhost:8100/api/identities/3/external_ref
+# → {"id": 3, "external_ref": "my-app-person-7"}</code></pre>
+
+    <h3>Set cover photo</h3>
+    <pre><code>PUT /api/identities/{id}/cover</code></pre>
+    <pre><code>curl -X PUT \
+  -H "X-API-Key: argus_..." \
+  -H "Content-Type: application/json" \
+  -d '{"detection_id": 101}' \
+  http://localhost:8100/api/identities/3/cover
+# → {"identity_id": 3, "cover_detection_id": 101}</code></pre>
+    <p>The detection must belong to this identity.</p>
+
+    <h3>Delete</h3>
+    <p>Deletes the identity and all its detections, crops, and embeddings.</p>
+    <pre><code>DELETE /api/identities/{id}</code></pre>
+    <pre><code>curl -X DELETE \
+  -H "X-API-Key: argus_..." \
+  http://localhost:8100/api/identities/3
+# → 204 No Content</code></pre>
+
+    <h3>Bulk delete</h3>
+    <pre><code>DELETE /api/identities</code></pre>
+    <pre><code>curl -X DELETE \
+  -H "X-API-Key: argus_..." \
+  -H "Content-Type: application/json" \
+  -d '{"identity_ids": [3, 5, 7]}' \
+  http://localhost:8100/api/identities
+# → {"deleted": 3}</code></pre>
+
+    <h3>Merge</h3>
+    <p>
+      Combine two identities when the same person was enrolled under different names. All detections
+      and enrolled face references are moved to the target; the source is deleted.
+    </p>
+    <pre><code>POST /api/identities/{id}/merge</code></pre>
+    <pre><code>curl -X POST \
+  -H "X-API-Key: argus_..." \
+  -H "Content-Type: application/json" \
+  -d '{"into": 5}' \
+  http://localhost:8100/api/identities/12/merge
+# → {"merged_into": 5, "deleted": 12}</code></pre>
+
+    <h3>Gallery</h3>
+    <p>Cursor-paginated detection crops for an identity. Used by the identity gallery page.</p>
+    <pre><code>GET /api/identities/{id}/gallery</code></pre>
+    <pre><code>curl -H "X-API-Key: argus_..." \
+  "http://localhost:8100/api/identities/3/gallery?limit=30"
+# → {"items": [{"detection_id": 101, "crop_url": "/media/crops/abc.jpg",
+#               "source_image_id": 7, "detected_at": "...",
+#               "confidence": 0.98, "review_status": "confirmed"}],
+#    "next_cursor": "2026-01-15T10:30:00Z_101", "has_more": true}</code></pre>
+    <p>
+      Pagination: <code>?cursor=&lt;detected_at&gt;_&lt;id&gt;&amp;limit=N</code>.
+      Optional <code>sort</code>: <code>newest</code> (default) | <code>oldest</code>.
+    </p>
+
+    <h3>Rejected detections</h3>
+    <p>Detections that were rejected from this identity (for re-review or deletion).</p>
+    <pre><code>GET /api/identities/{id}/rejected</code></pre>
+    <pre><code>curl -H "X-API-Key: argus_..." \
+  http://localhost:8100/api/identities/3/rejected
+# → {"items": [{"detection_id": 88, "crop_url": "...", ...}]}</code></pre>
+
+    <h2>Detections</h2>
+
+    <h3>Get one</h3>
+    <pre><code>GET /api/detections/{id}</code></pre>
+    <pre><code>curl -H "X-API-Key: argus_..." http://localhost:8100/api/detections/42
+# → {"id": 42, "type": "face", "source_image_id": 7,
+#    "bbox": {"x": 120, "y": 80, "w": 60, "h": 75}, "confidence": 0.98,
+#    "identity_id": 3, "label": "Alice", "review_status": "confirmed",
+#    "crop_url": "/media/crops/abc.jpg", "detected_at": "..."}</code></pre>
+
+    <h3>Relabel</h3>
+    <p>
+      Assign or correct a detection's identity. Works for both face and object detections. This is
+      the single endpoint shared by all "fix this label" UI surfaces.
+    </p>
+    <pre><code>PUT /api/detections/{id}/label</code></pre>
+    <pre><code># Relabel to a name (creates identity if it doesn't exist)
+curl -X PUT \
+  -H "X-API-Key: argus_..." \
+  -H "Content-Type: application/json" \
   -d '{"label": "Sarah"}' \
+  http://localhost:8100/api/detections/42/label
+
+# Assign to an existing identity by id
+curl -X PUT \
+  -H "X-API-Key: argus_..." \
+  -H "Content-Type: application/json" \
+  -d '{"identity_id": 5}' \
   http://localhost:8100/api/detections/42/label</code></pre>
 
-    <h2>Delete an image</h2>
+    <h3>Batch relabel</h3>
+    <p>Relabel many detections in one call. Per-item results; one bad item never fails the rest.</p>
+    <pre><code>POST /api/detections/label</code></pre>
+    <pre><code>curl -X POST \
+  -H "X-API-Key: argus_..." \
+  -H "Content-Type: application/json" \
+  -d '{"items": [{"detection_id": 1, "label": "park bench"},
+                 {"detection_id": 2, "identity_id": 5}]}' \
+  http://localhost:8100/api/detections/label
+# → {"results": [{"detection_id": 1, "ok": true},
+#                {"detection_id": 2, "ok": true}]}</code></pre>
+
+    <h3>Batch read</h3>
+    <p>Current state of many detections in one round-trip. Unknown ids are simply absent from the response.</p>
+    <pre><code>POST /api/detections/query</code></pre>
+    <pre><code>curl -X POST \
+  -H "X-API-Key: argus_..." \
+  -H "Content-Type: application/json" \
+  -d '{"detection_ids": [1, 2, 3]}' \
+  http://localhost:8100/api/detections/query
+# → {"items": [{"id": 1, ...}, {"id": 2, ...}]}</code></pre>
+
+    <h3>Dismiss (remove from review without labeling)</h3>
+    <p>Moves a detection out of the review queue without assigning an identity.</p>
+    <pre><code>POST /api/detections/dismiss</code></pre>
+    <pre><code>curl -X POST \
+  -H "X-API-Key: argus_..." \
+  -H "Content-Type: application/json" \
+  -d '{"detection_ids": [42, 43]}' \
+  http://localhost:8100/api/detections/dismiss
+# → {"dismissed": 2}</code></pre>
+
+    <h3>Delete a detection</h3>
+    <pre><code>DELETE /api/detections/{id}</code></pre>
+    <pre><code>curl -X DELETE \
+  -H "X-API-Key: argus_..." \
+  http://localhost:8100/api/detections/42
+# → {"deleted": 42, "source_image_discarded": false}</code></pre>
+    <p>
+      If this was the last detection on its source image, the source image (and its file if no other
+      row references it) is auto-discarded. <code>source_image_discarded</code> is <code>true</code>
+      in that case.
+    </p>
+
+    <h3>Bulk delete detections</h3>
+    <pre><code>POST /api/detections/delete</code></pre>
+    <pre><code>curl -X POST \
+  -H "X-API-Key: argus_..." \
+  -H "Content-Type: application/json" \
+  -d '{"detection_ids": [40, 41, 42]}' \
+  http://localhost:8100/api/detections/delete
+# → {"deleted": 3, "source_images_discarded": 1}</code></pre>
+
+    <h3>Unknown (unidentified face detections)</h3>
+    <p>Paginated list of face detections with no identity assigned.</p>
+    <pre><code>GET /api/detections/unknown</code></pre>
+    <pre><code>curl -H "X-API-Key: argus_..." \
+  "http://localhost:8100/api/detections/unknown?limit=30"
+# → {"items": [...], "next_cursor": "...", "has_more": true}</code></pre>
+
+    <h2>Review queue</h2>
+    <p>
+      The review queue holds face detections that matched an enrolled person but fell below the
+      auto-confirm threshold, or that have no match at all. See
+      <a href="./concepts.html#review-queue">Concepts</a> for threshold details.
+    </p>
+
+    <h3>List (pending review)</h3>
+    <pre><code>GET /api/review</code></pre>
+    <pre><code>curl -H "X-API-Key: argus_..." \
+  "http://localhost:8100/api/review?limit=30"
+# → {"items": [{"detection_id": 303, "crop_url": "...",
+#               "source_image_id": 10, "source_image_url": "...",
+#               "confidence": 0.8514,
+#               "bbox": {"x": 90, "y": 60, "w": 55, "h": 70},
+#               "detected_at": "...",
+#               "current_identity": null,
+#               "suggested_matches": [
+#                 {"identity_id": 3, "label": "Alice", "similarity": 0.7823}]}],
+#    "next_cursor": "0.8514_303", "has_more": false}</code></pre>
+    <p>
+      Pagination: <code>?cursor=&lt;confidence&gt;_&lt;id&gt;&amp;limit=N</code>. Items are sorted
+      by confidence descending. Optional <code>has_suggestion=true</code> to show only items with at
+      least one ranked match.
+    </p>
+
+    <h3>Count</h3>
+    <pre><code>GET /api/review/count</code></pre>
+    <pre><code>curl -H "X-API-Key: argus_..." http://localhost:8100/api/review/count
+# → {"count": 14}</code></pre>
+    <p>Optional <code>has_suggestion=true</code> to count only items with a suggested match.</p>
+
+    <h3>Confirm</h3>
+    <p>Mark a detection as confirmed, accepting the current or a new identity assignment.</p>
+    <pre><code>POST /api/review/{id}/confirm</code></pre>
+    <pre><code>curl -X POST \
+  -H "X-API-Key: argus_..." \
+  -H "Content-Type: application/json" \
+  -d '{"identity_id": 3}' \
+  http://localhost:8100/api/review/303/confirm
+# → {"detection_id": 303, "review_status": "confirmed", "identity_id": 3, "enrolled": true}</code></pre>
+    <p>Human confirmations always enroll the embedding unconditionally, regardless of detection quality.</p>
+
+    <h3>Unassign</h3>
+    <p>Remove the current identity assignment without deleting the detection — returns it to the unidentified pool.</p>
+    <pre><code>POST /api/review/{id}/unassign</code></pre>
+    <pre><code>curl -X POST \
+  -H "X-API-Key: argus_..." \
+  http://localhost:8100/api/review/303/unassign
+# → {"detection_id": 303, "review_status": "pending"}</code></pre>
+
+    <h3>Reject</h3>
+    <p>Mark a detection as rejected from its current identity (removes assignment, flags as rejected).</p>
+    <pre><code>POST /api/review/{id}/reject</code></pre>
+    <pre><code>curl -X POST \
+  -H "X-API-Key: argus_..." \
+  http://localhost:8100/api/review/303/reject
+# → {"detection_id": 303, "review_status": "rejected"}</code></pre>
+
+    <h3>Restore</h3>
+    <p>Move a rejected detection back to pending review.</p>
+    <pre><code>POST /api/review/{id}/restore</code></pre>
+    <pre><code>curl -X POST \
+  -H "X-API-Key: argus_..." \
+  http://localhost:8100/api/review/303/restore
+# → {"detection_id": 303, "review_status": "pending"}</code></pre>
+
+    <h3>Reassign</h3>
+    <p>Assign a detection to a different identity (or create a new one by name).</p>
+    <pre><code>POST /api/review/{id}/reassign</code></pre>
+    <pre><code>curl -X POST \
+  -H "X-API-Key: argus_..." \
+  -H "Content-Type: application/json" \
+  -d '{"identity_id": 5}' \
+  http://localhost:8100/api/review/303/reassign
+# → {"detection_id": 303, "review_status": "confirmed", "identity_id": 5}</code></pre>
+
+    <h3>Bulk review actions</h3>
+    <pre><code>POST /api/review/bulk</code></pre>
+    <pre><code>curl -X POST \
+  -H "X-API-Key: argus_..." \
+  -H "Content-Type: application/json" \
+  -d '{"detection_ids": [303, 304, 305], "action": "confirm", "identity_id": 3}' \
+  http://localhost:8100/api/review/bulk
+# → {"processed": 3, "failed": 0}</code></pre>
+    <p>
+      <code>action</code> is one of: <code>confirm</code>, <code>reject</code>,
+      <code>unassign</code>, <code>restore</code>, <code>reassign</code>.
+      <code>identity_id</code> is required for <code>confirm</code> and <code>reassign</code>.
+    </p>
+
+    <h3>Mismatches</h3>
+    <p>
+      Confirmed face detections whose embedding scores poorly against their current identity's
+      representative — likely mislabels. Sorted worst-first.
+    </p>
+    <pre><code>GET /api/review/mismatches</code></pre>
+    <pre><code>curl -H "X-API-Key: argus_..." \
+  "http://localhost:8100/api/review/mismatches?threshold=0.5"
+# → {"items": [{"detection_id": 42, "crop_url": "...",
+#               "source_image_id": 7, "confidence": 0.91,
+#               "bbox": {...}, "detected_at": "...",
+#               "current_identity": {"identity_id": 3, "label": "Alice"},
+#               "similarity": 0.31}],
+#    "count": 1, "threshold": 0.5}</code></pre>
+    <p>Optional <code>threshold</code> override (default: the active <code>face.match_threshold</code> setting).</p>
+
+    <h3>Dismiss a mismatch</h3>
+    <pre><code>POST /api/review/mismatches/{id}/dismiss</code></pre>
+    <pre><code>curl -X POST \
+  -H "X-API-Key: argus_..." \
+  http://localhost:8100/api/review/mismatches/42/dismiss
+# → {"detection_id": 42, "mismatch_reviewed": true}</code></pre>
+
+    <h3>Bulk dismiss mismatches</h3>
+    <pre><code>POST /api/review/mismatches/dismiss</code></pre>
+    <pre><code>curl -X POST \
+  -H "X-API-Key: argus_..." \
+  -H "Content-Type: application/json" \
+  -d '{"detection_ids": [42, 43, 44]}' \
+  http://localhost:8100/api/review/mismatches/dismiss
+# → {"dismissed": 3}</code></pre>
+
+    <h2>Clusters (Suggested people)</h2>
+    <p>
+      Unsupervised groupings of unidentified face detections. See
+      <a href="./concepts.html#suggested-people">Concepts</a> for how clustering works.
+    </p>
+
+    <h3>List clusters</h3>
+    <pre><code>GET /api/clusters</code></pre>
+    <pre><code>curl -H "X-API-Key: argus_..." \
+  "http://localhost:8100/api/clusters?threshold=0.5"
+# → {"clusters": [{"cluster_id": "cluster_001",
+#                  "size": 12,
+#                  "items": [{"detection_id": 55, "crop_url": "...",
+#                             "confidence": 0.97, "detected_at": "..."},
+#                            ...]}],
+#    "total_unclustered": 4, "threshold": 0.5}</code></pre>
+    <p>Optional <code>threshold</code> (default: <code>face.cluster_threshold</code> setting), <code>limit</code>.</p>
+
+    <h3>Count</h3>
+    <pre><code>GET /api/clusters/count</code></pre>
+    <pre><code>curl -H "X-API-Key: argus_..." http://localhost:8100/api/clusters/count
+# → {"count": 7, "threshold": 0.5}</code></pre>
+
+    <h2>Jobs</h2>
+    <p>
+      Async operations (bulk detection, bulk reprocess) run as jobs. Poll for status or register a
+      <code>job.done</code> webhook.
+    </p>
+
+    <h3>List jobs</h3>
+    <pre><code>GET /api/jobs</code></pre>
+    <pre><code>curl -H "X-API-Key: argus_..." http://localhost:8100/api/jobs
+# → {"items": [{"id": 7, "type": "bulk_detect", "status": "done",
+#               "total": 50, "done": 50, "failed": 0,
+#               "created_at": "...", "finished_at": "..."}]}</code></pre>
+
+    <h3>Get one job</h3>
+    <pre><code>GET /api/jobs/{id}</code></pre>
+    <pre><code>curl -H "X-API-Key: argus_..." http://localhost:8100/api/jobs/7
+# → {"id": 7, "type": "bulk_detect", "status": "running",
+#    "total": 50, "done": 23, "failed": 1,
+#    "created_at": "...", "finished_at": null}</code></pre>
+    <p><code>status</code> is one of: <code>pending</code> · <code>running</code> · <code>done</code> · <code>failed</code>.</p>
+
+    <h3>Delete a job</h3>
+    <p>Remove a completed job record. Does not cancel a running job.</p>
+    <pre><code>DELETE /api/jobs/{id}</code></pre>
+    <pre><code>curl -X DELETE \
+  -H "X-API-Key: argus_..." \
+  http://localhost:8100/api/jobs/7
+# → 204 No Content</code></pre>
+
+    <h2>Images</h2>
+
+    <h3>List</h3>
+    <pre><code>GET /api/images</code></pre>
+    <p>See <a href="#image-filtering">Image filtering</a> for the full query parameter reference.</p>
+    <pre><code>curl -H "X-API-Key: argus_..." \
+  "http://localhost:8100/api/images?type=face&limit=30"
+# → {"items": [{"id": 7, "external_ref": "img_abc123",
+#               "file_path": "abc456.jpg", "width": 1920, "height": 1080,
+#               "uploaded_at": "...", "detection_count": 3,
+#               "source_image_url": "/media/sources/abc456.jpg"}],
+#    "next_cursor": "...", "has_more": true}</code></pre>
+
+    <h3>Get faces for an image</h3>
+    <p>All face detections for a source image, including bboxes, labels, embeddings, and attributes.</p>
+    <pre><code>GET /api/images/{id}/faces</code></pre>
+    <pre><code>curl -H "X-API-Key: argus_..." \
+  http://localhost:8100/api/images/7/faces
+# → {"source_image_id": 7, "external_ref": "img_abc123",
+#    "width": 1920, "height": 1080, "uploaded_at": "...",
+#    "source_image_url": "/media/sources/abc456.jpg",
+#    "scene_tags": [],
+#    "faces": [{"detection_id": 101,
+#               "bbox": {"x": 120, "y": 80, "w": 60, "h": 75},
+#               "confidence": 0.98, "identity_id": 3, "label": "Alice",
+#               "crop_url": "/media/crops/abc123.jpg",
+#               "review_status": "confirmed", "embedding_source": "aligned",
+#               "age": 32, "gender": "F", "pose": [1.2, -0.3, 0.1]}]}</code></pre>
+
+    <h3>Create a manual detection</h3>
+    <p>
+      Add a hand-drawn bounding box to an existing source image. Use this when the automatic
+      detector missed a face or object you want to tag.
+    </p>
+    <pre><code>POST /api/images/{id}/detections</code></pre>
+    <pre><code>curl -X POST \
+  -H "X-API-Key: argus_..." \
+  -H "Content-Type: application/json" \
+  -d '{"type": "face", "bbox": {"x": 120, "y": 80, "w": 60, "h": 75},
+       "label": "Alice"}' \
+  http://localhost:8100/api/images/7/detections
+# → {"detection_id": 210, "identity_id": 3, "label": "Alice",
+#    "crop_url": "/media/crops/manual_xyz.jpg", "is_manual": true}</code></pre>
+
+    <h3>Reprocess</h3>
+    <p>
+      Re-run detection on a previously stored image using the currently active models. Useful after
+      switching to a better model.
+    </p>
+    <pre><code>POST /api/images/{id}/reprocess</code></pre>
+    <pre><code># Re-detect all (keeps existing)
+curl -X POST \
+  -H "X-API-Key: argus_..." \
+  "http://localhost:8100/api/images/42/reprocess?type=all"
+
+# Replace existing face detections
+curl -X POST \
+  -H "X-API-Key: argus_..." \
+  "http://localhost:8100/api/images/42/reprocess?type=faces&replace=true"
+
+# Async
+curl -X POST \
+  -H "X-API-Key: argus_..." \
+  "http://localhost:8100/api/images/42/reprocess?type=all&replace=true&async=true"
+# → {"job_id": 8, "status": "pending"}</code></pre>
+
+    <h3>Bulk reprocess</h3>
+    <p>Re-run detection on a set of source images, using the currently active models.</p>
+    <pre><code>POST /api/images/reprocess</code></pre>
+    <pre><code>curl -X POST \
+  -H "X-API-Key: argus_..." \
+  -H "Content-Type: application/json" \
+  -d '{"source_image_ids": [7, 8, 9], "type": "all", "replace": true}' \
+  "http://localhost:8100/api/images/reprocess?async=true"
+# → {"job_id": 9, "status": "pending", "total": 3}</code></pre>
+
+    <h3>Delete an image</h3>
+    <p>Deletes the source image row, all its detections, and all crops. The source file is only
+    deleted from disk if no other source image row references the same content hash.</p>
+    <pre><code>DELETE /api/images/{id}</code></pre>
     <pre><code>curl -X DELETE \
   -H "X-API-Key: argus_..." \
   http://localhost:8100/api/images/42
 # → {"source_image_id": 42, "detections_deleted": 5, "crops_removed": 5}</code></pre>
 
-    <h2>Bulk detection</h2>
+    <h2 id="image-filtering">Image filtering</h2>
+    <p>Query the source image list with filters. All params are optional and combinable.</p>
+    <table>
+      <thead>
+        <tr><th>Param</th><th>Type</th><th>Description</th></tr>
+      </thead>
+      <tbody>
+        <tr><td><code>identity_id</code></td><td>int (repeatable)</td><td>Images containing this identity (AND across multiple)</td></tr>
+        <tr><td><code>type</code></td><td><code>face</code> | <code>object</code></td><td>Only images with detections of this type</td></tr>
+        <tr><td><code>external_ref</code></td><td>string</td><td>Exact match on the caller's own id</td></tr>
+        <tr><td><code>since</code> / <code>until</code></td><td>ISO timestamp</td><td>Upload date range</td></tr>
+        <tr><td><code>no_detections</code></td><td>bool</td><td>Images with zero detections</td></tr>
+        <tr><td><code>no_tagged_faces</code></td><td>bool</td><td>Images where no face has been identified</td></tr>
+        <tr><td><code>no_crops</code></td><td>bool</td><td>Images with no stored crop files</td></tr>
+        <tr><td><code>has_manual_detections</code></td><td>bool</td><td>Images with at least one manually drawn detection</td></tr>
+        <tr><td><code>sort</code></td><td>string</td><td><code>newest</code> | <code>oldest</code> | <code>most_detections</code> | <code>fewest_detections</code></td></tr>
+        <tr><td><code>cursor</code> / <code>limit</code></td><td>string / int</td><td>Cursor pagination</td></tr>
+      </tbody>
+    </table>
+    <pre><code># Images containing identity 5
+curl -H "X-API-Key: argus_..." \
+  "http://localhost:8100/api/images?identity_id=5"
+
+# Face-detection images from a date range
+curl -H "X-API-Key: argus_..." \
+  "http://localhost:8100/api/images?type=face&since=2025-01-01T00:00:00&until=2025-12-31T23:59:59"</code></pre>
     <p>
-      Detect faces and/or objects across many images in a single call. Each image can be a URL, file
-      upload, or base64. One bad image never fails the others.
+      Companion endpoints: <code>GET /api/images/count</code> returns the matching total;
+      <code>GET /api/images/ids</code> returns all matching IDs (no pagination, for select-all
+      operations).
     </p>
 
-    <h3>Sync (waits for all results)</h3>
-    <pre><code>curl -X POST \
+    <h2>Models</h2>
+    <p>
+      Manage face and object detection models. Models can be downloaded, activated, and hot-swapped
+      without restarting. All model management is also available via the <strong>Models</strong>
+      page in the UI.
+    </p>
+    <pre><code># List all models
+curl -H "X-API-Key: argus_..." http://localhost:8100/api/models
+
+# Get one model
+curl -H "X-API-Key: argus_..." http://localhost:8100/api/models/1
+
+# Download a model (returns job_id)
+curl -X POST \
+  -H "X-API-Key: argus_..." \
+  http://localhost:8100/api/models/1/download
+
+# Activate a model (hot-swaps in-process, no restart needed)
+curl -X PUT \
+  -H "X-API-Key: argus_..." \
+  http://localhost:8100/api/models/1/activate</code></pre>
+    <p>
+      Activating a model replaces the running engine live. In-flight detection calls are not
+      interrupted — a lock ensures they complete against the old model before the swap.
+    </p>
+
+    <h2>Settings</h2>
+    <p>All settings are live — changes take effect immediately. See the <a href="./settings.html">Settings reference</a> for the full list of keys and defaults.</p>
+    <pre><code># Get a setting
+curl -H "X-API-Key: argus_..." \
+  http://localhost:8100/api/settings/face.match_threshold
+# → {"key": "face.match_threshold", "value": 0.5}
+
+# Update a setting
+curl -X PUT \
   -H "X-API-Key: argus_..." \
   -H "Content-Type: application/json" \
-  -d '{"image_urls": ["http://cam1/snap.jpg", "http://cam2/snap.jpg"], "type": "faces"}' \
-  http://localhost:8100/api/detect/bulk</code></pre>
+  -d '{"value": 0.6}' \
+  http://localhost:8100/api/settings/face.match_threshold
 
-    <h3>Async (returns job id immediately)</h3>
-    <pre><code>curl -X POST \
-  -H "X-API-Key: argus_..." \
-  -H "Content-Type: application/json" \
-  -d '{"image_urls": ["http://cam1/snap.jpg", "..."], "type": "all"}' \
-  "http://localhost:8100/api/detect/bulk?async=true"
-# → {"job_id": 7, "status": "pending", "total": 50}
+# List all settings
+curl -H "X-API-Key: argus_..." http://localhost:8100/api/settings</code></pre>
 
-# Poll for status
-curl -H "X-API-Key: argus_..." http://localhost:8100/api/jobs/7</code></pre>
-    <p>Register a <code>job.done</code> <a href="#webhooks">webhook</a> to be notified instead of polling.</p>
-
-    <h2>Webhooks</h2>
+    <h2 id="webhooks">Webhooks</h2>
     <p>
       HTTP callbacks fired when events occur. Per-environment, filterable by event type. Manage from
       the UI at <strong>Account → Webhooks</strong>.
@@ -258,45 +875,8 @@ curl -H "X-API-Key: argus_..." http://localhost:8100/api/webhooks/1/deliveries</
       Verify it on your server to confirm the call is from Argus.
     </p>
 
-    <h2>Identity merge</h2>
-    <p>
-      Combine two identities when the same person was enrolled under different names. All detections
-      and enrolled face references are moved to the target; the source is deleted.
-    </p>
-    <pre><code># Merge identity 12 into identity 5
-curl -X POST \
-  -H "X-API-Key: argus_..." \
-  -H "Content-Type: application/json" \
-  -d '{"into": 5}' \
-  http://localhost:8100/api/identities/12/merge
-# → {"merged_into": 5, "deleted": 12}</code></pre>
-    <p>
-      From the UI: open an identity's gallery and click <strong>Merge into</strong> in the page
-      header.
-    </p>
-
-    <h2>Reprocess</h2>
-    <p>
-      Re-run detection on a previously stored image using the currently active models. Useful when
-      switching to a better model and wanting to update results for existing photos.
-    </p>
-    <pre><code># Re-detect all (keeps existing)
-curl -X POST \
-  -H "X-API-Key: argus_..." \
-  "http://localhost:8100/api/images/42/reprocess?type=all"
-
-# Replace existing face detections
-curl -X POST \
-  -H "X-API-Key: argus_..." \
-  "http://localhost:8100/api/images/42/reprocess?type=faces&replace=true"
-
-# Async
-curl -X POST \
-  -H "X-API-Key: argus_..." \
-  "http://localhost:8100/api/images/42/reprocess?type=all&replace=true&async=true"</code></pre>
-    <p>From the UI: open any image's tag page and click <strong>Reprocess</strong> in the header.</p>
-
     <h2>Identity search</h2>
+    <pre><code>GET /api/search</code></pre>
     <p>
       Search enrolled identities by name using FTS5 trigram matching — handles partial names,
       case-insensitive, near-misses.
@@ -308,42 +888,14 @@ curl -X POST \
 curl -H "X-API-Key: argus_..." \
   "http://localhost:8100/api/search?q=john&type=face&limit=20"</code></pre>
 
-    <h2>Image filtering</h2>
-    <p>Query the source image list with filters. All params are optional and combinable.</p>
-    <table>
-      <thead>
-        <tr><th>Param</th><th>Type</th><th>Description</th></tr>
-      </thead>
-      <tbody>
-        <tr><td><code>identity_id</code></td><td>int (repeatable)</td><td>Images containing this identity (AND across multiple)</td></tr>
-        <tr><td><code>type</code></td><td><code>face</code> | <code>object</code></td><td>Only images with detections of this type</td></tr>
-        <tr><td><code>since</code> / <code>until</code></td><td>ISO timestamp</td><td>Upload date range</td></tr>
-        <tr><td><code>no_detections</code></td><td>bool</td><td>Images with zero detections</td></tr>
-        <tr><td><code>no_tagged_faces</code></td><td>bool</td><td>Images where no face has been identified</td></tr>
-        <tr><td><code>no_crops</code></td><td>bool</td><td>Images with no stored crop files</td></tr>
-        <tr><td><code>has_manual_detections</code></td><td>bool</td><td>Images with at least one manually drawn detection</td></tr>
-        <tr><td><code>sort</code></td><td>string</td><td><code>newest</code> | <code>oldest</code> | <code>most_detections</code> | <code>fewest_detections</code></td></tr>
-      </tbody>
-    </table>
-    <pre><code># Images containing identity 5
-curl -H "X-API-Key: argus_..." \
-  "http://localhost:8100/api/images?identity_id=5"
-
-# Face-detection images from a date range
-curl -H "X-API-Key: argus_..." \
-  "http://localhost:8100/api/images?type=face&since=2025-01-01T00:00:00&until=2025-12-31T23:59:59"</code></pre>
-    <p>
-      Companion endpoints: <code>GET /api/images/count</code> returns the matching total;
-      <code>GET /api/images/ids</code> returns all matching IDs (no pagination, for select-all
-      operations).
-    </p>
-
     <h2>Export and import</h2>
     <p>
       Export recognition data (identities, embeddings, detections, images) and import into another
       instance. Imports merge by identity name — existing identities receive additional detections
       and embeddings rather than being duplicated.
     </p>
+    <pre><code>POST /api/export
+POST /api/import</code></pre>
     <pre><code># Export selected identities
 curl -X POST \
   -H "X-API-Key: argus_..." \
