@@ -1,0 +1,177 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Argus Docs — Settings</title>
+    <link rel="stylesheet" href="../docs.css" />
+    <script src="../docs.js" defer></script>
+  </head>
+  <body>
+    <h1>Argus</h1>
+    <nav class="docs-nav">
+      <a href="../index.html">Overview</a>
+      <a href="./getting-started.html">Getting started</a>
+      <a href="./concepts.html">Concepts</a>
+      <a href="./api.html">API reference</a>
+      <a href="./integrating.html">Integrating</a>
+      <a href="./settings.html" aria-current="page">Settings</a>
+      <a href="./troubleshooting.html">Troubleshooting</a>
+      <a href="./development.html">Development</a>
+    </nav>
+
+    <h1>Settings</h1>
+    <p>
+      All settings are live — changes take effect immediately with no restart. Edit them via the
+      <strong>Settings</strong> page in the UI, or via the API:
+    </p>
+    <pre><code># Get a setting
+curl -H "X-API-Key: argus_..." http://localhost:8100/api/settings/face.match_threshold
+
+# Update a setting
+curl -X PUT \
+  -H "X-API-Key: argus_..." \
+  -H "Content-Type: application/json" \
+  -d '{"value": 0.6}' \
+  http://localhost:8100/api/settings/face.match_threshold</code></pre>
+
+    <h2>Face recognition</h2>
+    <table>
+      <thead>
+        <tr><th>Setting</th><th>Default</th><th>Description</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><code>face.match_threshold</code></td>
+          <td>0.5</td>
+          <td>
+            Minimum cosine similarity to assign a match at all. Below this, the face is stored but
+            left unidentified.
+          </td>
+        </tr>
+        <tr>
+          <td><code>face.auto_confirm_threshold</code></td>
+          <td>0.80</td>
+          <td>
+            Detections at or above this are confirmed automatically and bypass the review queue.
+            Between <code>match_threshold</code> and this value, they land in the queue.
+          </td>
+        </tr>
+        <tr>
+          <td><code>face.auto_enroll_threshold</code></td>
+          <td>0.92</td>
+          <td>
+            Gate for automatic enrollment only. When Argus auto-confirms a match without human
+            review, the embedding is added to the reference set only if face-detection quality
+            clears this bar. Set to 0 to disable automatic enrollment. Human confirmations always
+            enroll unconditionally.
+          </td>
+        </tr>
+        <tr>
+          <td><code>face.match_strategy</code></td>
+          <td><code>best_match</code></td>
+          <td>
+            <code>best_match</code> — score against every reference photo, take the closest.
+            <code>average</code> — score against the mean embedding of all references.
+          </td>
+        </tr>
+        <tr>
+          <td><code>face.cluster_threshold</code></td>
+          <td>0.5</td>
+          <td>
+            Similarity threshold for the Suggested people clustering. Higher = stricter (more,
+            smaller groups); lower = looser (fewer, larger groups). Adjustable live via the slider
+            on the Suggested page.
+          </td>
+        </tr>
+      </tbody>
+    </table>
+
+    <h2>System</h2>
+    <table>
+      <thead>
+        <tr><th>Setting</th><th>Default</th><th>Description</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><code>system.use_gpu</code></td>
+          <td>true</td>
+          <td>
+            When <code>true</code> and <code>CUDAExecutionProvider</code> is available, the face
+            engine uses GPU. Setting to <code>false</code> forces CPU even on capable hardware.
+            Setting to <code>true</code> on a system without GPU is rejected with a 400. The active
+            provider is visible in <code>GET /api/health</code>.
+          </td>
+        </tr>
+        <tr>
+          <td><code>system.source_max_size</code></td>
+          <td>1920</td>
+          <td>
+            Maximum pixel dimension (width or height) for saved source images. Images larger than
+            this are resized proportionally before storage. Detection always runs on the original
+            full-resolution image before any resize occurs.
+          </td>
+        </tr>
+        <tr>
+          <td><code>system.ingest_jpeg_quality</code></td>
+          <td>85</td>
+          <td>JPEG quality (1–95) used when saving source images.</td>
+        </tr>
+        <tr>
+          <td><code>system.crop_jpeg_quality</code></td>
+          <td>75</td>
+          <td>
+            JPEG quality (1–95) used when saving face and object crops. Crops are taken from the
+            original full-resolution image before source resize, preserving quality.
+          </td>
+        </tr>
+        <tr>
+          <td><code>system.crop_padding</code></td>
+          <td>0.2</td>
+          <td>
+            Fractional padding added around each detection bbox before cropping (e.g. 0.2 = 20% of
+            bbox width/height on each side). Clamped to image bounds.
+          </td>
+        </tr>
+        <tr>
+          <td><code>system.url_fetch_timeout_seconds</code></td>
+          <td>10</td>
+          <td>
+            Timeout in seconds for fetching images via <code>image_url</code>. Private/local IP
+            ranges are intentionally allowed — Argus is designed to pull from local cameras and
+            services.
+          </td>
+        </tr>
+        <tr>
+          <td><code>system.url_fetch_max_size_mb</code></td>
+          <td>25</td>
+          <td>Maximum size in MB for images fetched via <code>image_url</code>.</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <h2>Object detection</h2>
+    <table>
+      <thead>
+        <tr><th>Setting</th><th>Description</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>Object classes</td>
+          <td>
+            For standard YOLO models, a filter list of the 80 COCO class names to detect.
+            Leave empty to detect all 80. Ignored for YOLO-World models.
+          </td>
+        </tr>
+        <tr>
+          <td>YOLO-World vocabulary</td>
+          <td>
+            For YOLO-World models, the list of plain-language descriptions to detect. One per line.
+            Changes take effect on the next detection — no restart needed. See
+            <a href="./concepts.html#yolo-world">YOLO-World</a> in the Concepts guide.
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </body>
+</html>

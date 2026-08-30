@@ -1,0 +1,106 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Argus Docs — Troubleshooting</title>
+    <link rel="stylesheet" href="../docs.css" />
+    <script src="../docs.js" defer></script>
+  </head>
+  <body>
+    <h1>Argus</h1>
+    <nav class="docs-nav">
+      <a href="../index.html">Overview</a>
+      <a href="./getting-started.html">Getting started</a>
+      <a href="./concepts.html">Concepts</a>
+      <a href="./api.html">API reference</a>
+      <a href="./integrating.html">Integrating</a>
+      <a href="./settings.html">Settings</a>
+      <a href="./troubleshooting.html" aria-current="page">Troubleshooting</a>
+      <a href="./development.html">Development</a>
+    </nav>
+
+    <h1>Troubleshooting</h1>
+
+    <h2>GPU not detected (<code>active_provider: cpu</code> in <code>/api/health</code>)</h2>
+
+    <h3>Check your GPU is visible</h3>
+    <pre><code>nvidia-smi</code></pre>
+
+    <h3>Check if PyTorch sees CUDA</h3>
+    <pre><code>python -c "import torch; print(torch.cuda.is_available(), torch.version.cuda)"</code></pre>
+
+    <h3>Check if onnxruntime sees CUDA</h3>
+    <pre><code>python -c "import onnxruntime as ort; print(ort.get_available_providers())"</code></pre>
+    <p>
+      If PyTorch sees CUDA but onnxruntime only shows <code>CPUExecutionProvider</code>, the CUDA
+      shared libraries aren't on the dynamic linker's path. Argus pre-loads them automatically at
+      startup. If it still doesn't work, check whether both <code>onnxruntime</code> and
+      <code>onnxruntime-gpu</code> are installed:
+    </p>
+    <pre><code>python -m pip list | grep onnxruntime</code></pre>
+    <p>If both appear, uninstall and reinstall only the GPU version:</p>
+    <pre><code>python -m pip uninstall onnxruntime onnxruntime-gpu -y
+python -m pip install onnxruntime-gpu</code></pre>
+    <p>
+      Then restart Argus. Confirm GPU is working via <code>GET /api/health</code> — the
+      <code>active_provider</code> field shows the result.
+    </p>
+
+    <h2><code>libcudart.so.X: cannot open shared object file</code></h2>
+    <p>
+      <code>onnxruntime-gpu</code> can't find the CUDA runtime library. Argus's startup code
+      pre-loads CUDA libs from pip-installed nvidia packages automatically. If you still see this
+      error:
+    </p>
+    <ol>
+      <li>
+        Verify nvidia packages are installed in the same Python environment as Argus:
+        <pre><code>python -m pip list | grep nvidia</code></pre>
+      </li>
+      <li>
+        If missing, reinstall PyTorch with CUDA:
+        <pre><code>python -m pip install torch --index-url https://download.pytorch.org/whl/cu124</code></pre>
+      </li>
+      <li>
+        Verify onnxruntime-gpu version matches your CUDA version — onnxruntime-gpu 1.19+ bundles
+        CUDA 12.x. If you're on CUDA 13.x (check with <code>torch.version.cuda</code>), ensure you
+        have the matching onnxruntime-gpu.
+      </li>
+    </ol>
+
+    <h2>Face model shows <code>null</code> in <code>/api/health</code> after restart</h2>
+    <p>
+      The face engine failed to load silently at startup. Check the log for a
+      <code>Failed to load face model</code> warning with a traceback. Most common causes:
+    </p>
+    <ul>
+      <li>CUDA library not found (see above)</li>
+      <li>Model files corrupted — re-download from the <strong>Models</strong> page</li>
+      <li>Insufficient GPU memory — try a smaller model (<code>buffalo_s</code>)</li>
+    </ul>
+    <p>
+      Force a reload without restarting: <code>PUT /api/models/{id}/activate</code>.
+    </p>
+
+    <h2 id="segfault-on-macos">Segfault on macOS / Apple Silicon when running object detection</h2>
+    <p>
+      <code>faiss-cpu</code> and <code>torch</code> (used by YOLO object detection) each bundle
+      their own OpenMP runtime, and loading both in one process segfaults on Apple Silicon —
+      typically the process dies the first time the object detector runs, while face detection alone
+      is fine.
+    </p>
+    <p>
+      Argus auto-detects macOS and sets <code>ARGUS_DISABLE_FAISS=true</code>, which skips faiss
+      entirely (it's never imported, so its OpenMP runtime never loads) and uses the numpy matching
+      fallback — equivalent results, fine until tens of thousands of enrolled faces. No action
+      needed; this is handled for you on the native run path.
+    </p>
+    <p>
+      If you still hit it (e.g. running uvicorn directly, bypassing <code>python -m app</code>),
+      set the flag yourself before starting:
+    </p>
+    <pre><code>export ARGUS_DISABLE_FAISS=true</code></pre>
+    <p>Linux/CUDA is unaffected and keeps faiss for fast matching at scale.</p>
+  </body>
+</html>

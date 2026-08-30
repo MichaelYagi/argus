@@ -1,0 +1,167 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Argus Docs — Getting started</title>
+    <link rel="stylesheet" href="../docs.css" />
+    <script src="../docs.js" defer></script>
+  </head>
+  <body>
+    <h1>Argus</h1>
+    <nav class="docs-nav">
+      <a href="../index.html">Overview</a>
+      <a href="./getting-started.html" aria-current="page">Getting started</a>
+      <a href="./concepts.html">Concepts</a>
+      <a href="./api.html">API reference</a>
+      <a href="./integrating.html">Integrating</a>
+      <a href="./settings.html">Settings</a>
+      <a href="./troubleshooting.html">Troubleshooting</a>
+      <a href="./development.html">Development</a>
+    </nav>
+
+    <h1>Getting started</h1>
+
+    <h2>Docker quickstart</h2>
+    <p>The primary way to run Argus. Requires Docker Desktop.</p>
+
+    <h3>1. Clone</h3>
+    <pre><code>git clone https://github.com/MichaelYagi/argus.git
+cd argus</code></pre>
+    <p>
+      No <code>.env</code> file needed — <code>SECRET_KEY</code> is auto-generated on first startup
+      and persisted automatically. See <code>.env.example</code> if you want to override it or set
+      other options.
+    </p>
+
+    <h3>2. Build and start</h3>
+    <pre><code>docker compose up --build</code></pre>
+    <p>
+      The first build downloads PyTorch, InsightFace, Ultralytics, and their dependencies — expect
+      several GB and 5–15 minutes depending on your connection. Subsequent starts are fast:
+    </p>
+    <pre><code>docker compose up      # foreground
+docker compose up -d   # background</code></pre>
+
+    <h3>3. Open the app</h3>
+    <pre><code>http://localhost:8100</code></pre>
+    <p>Port 8100 — Argus had 100 eyes.</p>
+
+    <h2>First run</h2>
+    <ol>
+      <li>Visit <code>http://localhost:8100</code> — you're redirected to sign up</li>
+      <li>Create an account — the <strong>first user is automatically the admin</strong></li>
+      <li>Subsequent sign-ups require admin approval from the <strong>Account</strong> page</li>
+      <li>
+        Go to <strong>Models</strong> and download a face model (<code>buffalo_l</code> is
+        recommended), then <strong>Activate</strong> it
+      </li>
+      <li>
+        Go to <strong>Enroll</strong> and enroll a face with a name — or skip this and label faces
+        directly on the <strong>Detect</strong> page
+      </li>
+      <li>
+        Go to <strong>Detect</strong> and drop in a photo — Argus will detect and match faces
+      </li>
+    </ol>
+    <p>
+      For object detection: download and activate a YOLO model from the Models page.
+      <code>yolov8s</code> is a good starting point. For open-vocabulary detection, see
+      <a href="./concepts.html#yolo-world">YOLO-World</a> in the Concepts guide.
+    </p>
+
+    <h2>Native run (no Docker)</h2>
+    <p>Requires Python 3.11+.</p>
+    <pre><code>cd argus
+python3 -m venv .venv
+source .venv/bin/activate      # Linux/macOS
+.venv\Scripts\activate         # Windows PowerShell
+pip install -r requirements.txt</code></pre>
+    <pre><code>python -m app</code></pre>
+    <p>
+      Binds to <code>http://localhost:8100</code> by default. Pass <code>--host</code> and
+      <code>--port</code> to override:
+    </p>
+    <pre><code>python -m app --host 0.0.0.0 --port 9000</code></pre>
+    <p>
+      Data is stored in <code>./data/</code> and model weights in <code>./models/</code> relative to
+      the working directory. To use a different data location, set <code>DATA_PATH</code>:
+    </p>
+    <pre><code>DATA_PATH="/Volumes/MyDrive/argus-data" python3 -m app --host 0.0.0.0 --port 8100</code></pre>
+    <p>
+      GPU (native run): install <code>requirements.txt</code> and ensure NVIDIA drivers are installed.
+      Argus auto-detects the GPU and pre-loads the required CUDA libraries at startup — no manual
+      configuration needed for most setups. See
+      <a href="./troubleshooting.html">Troubleshooting</a> if GPU isn't detected.
+    </p>
+
+    <h2>Docker reference</h2>
+    <table>
+      <thead>
+        <tr>
+          <th>Command</th>
+          <th>What it does</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><code>docker compose up --build</code></td>
+          <td>Build image and start (required after code changes)</td>
+        </tr>
+        <tr>
+          <td><code>docker compose up</code></td>
+          <td>Start using existing image</td>
+        </tr>
+        <tr>
+          <td><code>docker compose up -d</code></td>
+          <td>Start in background</td>
+        </tr>
+        <tr>
+          <td><code>docker compose down</code></td>
+          <td>Stop and remove containers</td>
+        </tr>
+        <tr>
+          <td><code>docker compose logs -f</code></td>
+          <td>Stream logs</td>
+        </tr>
+      </tbody>
+    </table>
+    <p>
+      <strong>Data persists</strong> — <code>./data</code> (database, crops, source images) and
+      <code>./models</code> (downloaded weights) are bind-mounted from your host, so they survive
+      container rebuilds.
+    </p>
+
+    <h2>GPU support (Docker)</h2>
+    <p>
+      Uncomment the <code>deploy</code> block in <code>docker-compose.yml</code> under the
+      <code>argus-inference</code> service. That's where the model weights load, so that's where the
+      GPU reservation belongs. Requires the NVIDIA Container Toolkit installed on the host and Docker
+      Desktop using the WSL2 backend. GPU availability is auto-detected at runtime — no rebuild
+      needed.
+    </p>
+    <p>A GPU materially speeds up both engines:</p>
+    <ul>
+      <li>
+        <strong>Face engine (InsightFace/onnxruntime)</strong> — moderate speedup; CPU is usable for
+        casual use
+      </li>
+      <li>
+        <strong>Object engine (YOLO/torch)</strong> — significant speedup under sustained load
+      </li>
+    </ul>
+    <p>
+      The active provider is visible in <code>GET /api/health</code> — confirm GPU is working there
+      before running heavy workloads.
+    </p>
+
+    <h2>ARM / Apple Silicon (M1/M2/M3)</h2>
+    <p>
+      Works natively. The image builds for ARM64 and <code>onnxruntime</code> (CPU) is installed
+      automatically — <code>onnxruntime-gpu</code> has no ARM64 wheels. Everything runs correctly on
+      CPU; Apple's Neural Engine is not used. See
+      <a href="./troubleshooting.html#segfault-on-macos">the macOS segfault note</a> if you run
+      natively (not Docker).
+    </p>
+  </body>
+</html>

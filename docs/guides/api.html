@@ -1,0 +1,362 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Argus Docs — API reference</title>
+    <link rel="stylesheet" href="../docs.css" />
+    <script src="../docs.js" defer></script>
+  </head>
+  <body>
+    <h1>Argus</h1>
+    <nav class="docs-nav">
+      <a href="../index.html">Overview</a>
+      <a href="./getting-started.html">Getting started</a>
+      <a href="./concepts.html">Concepts</a>
+      <a href="./api.html" aria-current="page">API reference</a>
+      <a href="./integrating.html">Integrating</a>
+      <a href="./settings.html">Settings</a>
+      <a href="./troubleshooting.html">Troubleshooting</a>
+      <a href="./development.html">Development</a>
+    </nav>
+
+    <h1>API reference</h1>
+
+    <h2>Authentication</h2>
+    <p>
+      All <code>/api/*</code> routes require an <code>X-API-Key</code> header, or a valid browser
+      session (for same-origin UI calls — no header needed when calling from the browser while logged
+      in).
+    </p>
+    <p>
+      <strong>CORS:</strong> Argus includes <code>CORSMiddleware</code> with
+      <code>allow_origins=["*"]</code>, so browser-side calls from other LAN hosts work without a
+      proxy. Authentication is still enforced via <code>X-API-Key</code> on every request.
+    </p>
+    <p>To get an API key:</p>
+    <ol>
+      <li>Sign in at <code>http://localhost:8100</code></li>
+      <li>
+        Go to <strong>Account</strong> → click <strong>Create key</strong>, choose an environment
+        and type a label → copy the key (shown once)
+      </li>
+    </ol>
+    <p>
+      <strong>Interactive docs</strong> (requires a running instance):
+      <code>http://localhost:8100/docs</code>
+    </p>
+
+    <h2>Discovery</h2>
+    <p>These endpoints require no API key.</p>
+    <pre><code># Health — status, version, active provider, loaded models
+curl http://localhost:8100/api/health
+
+# Capabilities — detection types, supported formats, pagination limits, integration features
+curl http://localhost:8100/api/capabilities</code></pre>
+    <p>
+      Call <code>/api/capabilities</code> before integrating so a client can adapt instead of
+      hardcoding what's available.
+    </p>
+
+    <h2>Detect</h2>
+    <p>
+      Every detect endpoint accepts exactly one of: a <code>file</code> multipart upload, an
+      <code>image_url</code> field, or an <code>image_base64</code> field (raw base64 or a
+      <code>data:image/...;base64,</code> URI). Zero or more than one is a 400.
+    </p>
+    <p>
+      Supported formats: JPEG, PNG, WEBP, BMP, GIF (first frame), TIFF, HEIC/HEIF, AVIF, MPO
+      (first frame).
+    </p>
+
+    <h3>Detect faces</h3>
+    <pre><code>curl -X POST \
+  -H "X-API-Key: argus_..." \
+  -F "file=@photo.jpg" \
+  http://localhost:8100/api/detect/faces</code></pre>
+
+    <h3>Detect objects</h3>
+    <pre><code>curl -X POST \
+  -H "X-API-Key: argus_..." \
+  -F "file=@photo.jpg" \
+  http://localhost:8100/api/detect/objects</code></pre>
+
+    <h3>Detect all (faces + objects)</h3>
+    <pre><code>curl -X POST \
+  -H "X-API-Key: argus_..." \
+  -F "file=@photo.jpg" \
+  http://localhost:8100/api/detect/all</code></pre>
+
+    <h3>Detect with an inline label</h3>
+    <p>
+      When <code>label</code> is provided, the highest-confidence face is confirmed as that person
+      and enrolled immediately, bypassing the review queue. Any other faces are stored as pending.
+    </p>
+    <pre><code>curl -X POST \
+  -H "X-API-Key: argus_..." \
+  -H "Content-Type: application/json" \
+  -d '{"image_url": "http://...", "label": "Noah"}' \
+  http://localhost:8100/api/detect/faces</code></pre>
+
+    <h3>Re-detect without duplicates</h3>
+    <p>
+      Argus deduplicates source images by content hash, so re-detecting the same image reuses its
+      <code>source_image_id</code>. Pass <code>replace=true</code> to clear prior detections of the
+      type being run before writing new ones.
+    </p>
+    <pre><code>curl -X POST \
+  -H "X-API-Key: argus_..." \
+  -F "file=@photo.jpg" \
+  -F "replace=true" \
+  http://localhost:8100/api/detect/all</code></pre>
+
+    <h2>Enroll</h2>
+    <pre><code>curl -X POST \
+  -H "X-API-Key: argus_..." \
+  -F "name=Noah" \
+  -F "file=@noah.jpg" \
+  http://localhost:8100/api/faces/enroll</code></pre>
+
+    <h2>Identify (1:N, read-only)</h2>
+    <p>
+      Detects faces and matches them against enrolled people <strong>without storing anything</strong>
+      (no crops, detections, or review entries). Returns best match per face plus ranked suggestions.
+    </p>
+    <pre><code>curl -X POST \
+  -H "X-API-Key: argus_..." \
+  -F "file=@group.jpg" \
+  http://localhost:8100/api/identify
+# → {"threshold": 0.5, "faces": [
+#      {"bbox": {...}, "confidence": 0.99, "identity_id": 2, "label": "Noah",
+#       "similarity": 0.71, "suggestions": [...], "age": 9, "gender": "M", "pose": [...]}]}</code></pre>
+    <p>Optional <code>threshold</code> (override) and <code>top_n</code> (suggestion count) via form field, JSON, or query param.</p>
+
+    <h2>Test (read-only)</h2>
+    <p>
+      Runs the face and object engines and returns bounding boxes, counts, and for each face the best
+      matching enrolled person. <strong>Stores nothing and enrolls nothing.</strong> Also available
+      as a UI page at <code>/test</code>.
+    </p>
+    <pre><code>curl -X POST \
+  -H "X-API-Key: argus_..." \
+  -F "file=@photo.jpg" \
+  "http://localhost:8100/api/test?type=all"
+# → {"faces": [{"bbox": {...}, "confidence": 0.95, "label": "Noah", "similarity": 0.87,
+#               "identity_id": 2, "age": 30, "gender": "F", "pose": [...]}],
+#    "objects": [{"bbox": {...}, "confidence": 0.9, "class_name": "person", "class_id": 0}],
+#    "counts": {"faces": 1, "objects": 1},
+#    "available": {"faces": true, "objects": true}}</code></pre>
+    <p><code>?type=faces|objects|all</code> (default <code>all</code>). An engine with no active model is skipped rather than erroring.</p>
+
+    <h3>Batch test</h3>
+    <p>Test many images in one call, still storing nothing. Per-image results; one bad image never fails the rest (max 100 per call).</p>
+    <pre><code>curl -X POST \
+  -H "X-API-Key: argus_..." \
+  -F "type=all" -F "file=@a.jpg" -F "file=@b.jpg" \
+  http://localhost:8100/api/test/batch
+# → {"total": 2, "type": "all", "results": [
+#      {"index": 0, "filename": "a.jpg", "faces": [...], "objects": [...], ...},
+#      {"index": 1, "filename": "b.jpg", "error": "..."}]}</code></pre>
+
+    <h2>Verify (1:1)</h2>
+    <p>Compares two images directly. Stores nothing.</p>
+    <pre><code>curl -X POST \
+  -H "X-API-Key: argus_..." \
+  -F "file1=@a.jpg" -F "file2=@b.jpg" \
+  http://localhost:8100/api/verify
+# → {"similarity": 0.83, "match": true, "threshold": 0.5,
+#    "face1": {"bbox": {...}, "confidence": 0.99, "age": 31, "gender": "F", "pose": [...]},
+#    "face2": {...}}</code></pre>
+    <p>Each image is one of <code>file{1,2}</code> / <code>image{1,2}_url</code> / <code>image{1,2}_base64</code>. Optional <code>threshold</code> override.</p>
+
+    <h2>Facial attributes</h2>
+    <p>
+      Face detections include <code>age</code>, <code>gender</code> (<code>"M"</code>/<code>"F"</code>),
+      and <code>pose</code> (<code>[pitch, yaw, roll]</code> in degrees) when the active model
+      provides them — all three bundled packs (<code>buffalo_l</code>, <code>buffalo_s</code>,
+      <code>antelopev2</code>) do. Any value the model doesn't produce comes back as
+      <code>null</code>. These fields are API-only and not displayed in the UI.
+    </p>
+
+    <h2>Relabel a detection</h2>
+    <pre><code>curl -X PUT \
+  -H "X-API-Key: argus_..." \
+  -H "Content-Type: application/json" \
+  -d '{"label": "Sarah"}' \
+  http://localhost:8100/api/detections/42/label</code></pre>
+
+    <h2>Delete an image</h2>
+    <pre><code>curl -X DELETE \
+  -H "X-API-Key: argus_..." \
+  http://localhost:8100/api/images/42
+# → {"source_image_id": 42, "detections_deleted": 5, "crops_removed": 5}</code></pre>
+
+    <h2>Bulk detection</h2>
+    <p>
+      Detect faces and/or objects across many images in a single call. Each image can be a URL, file
+      upload, or base64. One bad image never fails the others.
+    </p>
+
+    <h3>Sync (waits for all results)</h3>
+    <pre><code>curl -X POST \
+  -H "X-API-Key: argus_..." \
+  -H "Content-Type: application/json" \
+  -d '{"image_urls": ["http://cam1/snap.jpg", "http://cam2/snap.jpg"], "type": "faces"}' \
+  http://localhost:8100/api/detect/bulk</code></pre>
+
+    <h3>Async (returns job id immediately)</h3>
+    <pre><code>curl -X POST \
+  -H "X-API-Key: argus_..." \
+  -H "Content-Type: application/json" \
+  -d '{"image_urls": ["http://cam1/snap.jpg", "..."], "type": "all"}' \
+  "http://localhost:8100/api/detect/bulk?async=true"
+# → {"job_id": 7, "status": "pending", "total": 50}
+
+# Poll for status
+curl -H "X-API-Key: argus_..." http://localhost:8100/api/jobs/7</code></pre>
+    <p>Register a <code>job.done</code> <a href="#webhooks">webhook</a> to be notified instead of polling.</p>
+
+    <h2>Webhooks</h2>
+    <p>
+      HTTP callbacks fired when events occur. Per-environment, filterable by event type. Manage from
+      the UI at <strong>Account → Webhooks</strong>.
+    </p>
+    <p>
+      <strong>Supported events:</strong> <code>detection.created</code> ·
+      <code>detection.labeled</code> · <code>detection.deleted</code> ·
+      <code>identity.created</code> · <code>identity.updated</code> ·
+      <code>identity.deleted</code> · <code>identity.merged</code> · <code>job.done</code>
+    </p>
+    <pre><code># Register
+curl -X POST \
+  -H "X-API-Key: argus_..." \
+  -H "Content-Type: application/json" \
+  -d '{"url": "https://my-server.local/hooks/argus", "events": ["job.done"],
+       "label": "job alerts", "secret": "mysecret"}' \
+  http://localhost:8100/api/webhooks
+
+# List
+curl -H "X-API-Key: argus_..." http://localhost:8100/api/webhooks
+
+# Disable temporarily
+curl -X PUT \
+  -H "X-API-Key: argus_..." \
+  -H "Content-Type: application/json" \
+  -d '{"is_active": false}' \
+  http://localhost:8100/api/webhooks/1
+
+# Test ping — returns {ok, status_code, duration_ms, error}
+curl -X POST \
+  -H "X-API-Key: argus_..." \
+  http://localhost:8100/api/webhooks/1/test
+
+# Delivery history (last 50, newest first)
+curl -H "X-API-Key: argus_..." http://localhost:8100/api/webhooks/1/deliveries</code></pre>
+    <p>
+      When a <code>secret</code> is set, each request carries an
+      <code>X-Argus-Signature: sha256=&lt;hmac&gt;</code> header computed over the JSON body.
+      Verify it on your server to confirm the call is from Argus.
+    </p>
+
+    <h2>Identity merge</h2>
+    <p>
+      Combine two identities when the same person was enrolled under different names. All detections
+      and enrolled face references are moved to the target; the source is deleted.
+    </p>
+    <pre><code># Merge identity 12 into identity 5
+curl -X POST \
+  -H "X-API-Key: argus_..." \
+  -H "Content-Type: application/json" \
+  -d '{"into": 5}' \
+  http://localhost:8100/api/identities/12/merge
+# → {"merged_into": 5, "deleted": 12}</code></pre>
+    <p>
+      From the UI: open an identity's gallery and click <strong>Merge into</strong> in the page
+      header.
+    </p>
+
+    <h2>Reprocess</h2>
+    <p>
+      Re-run detection on a previously stored image using the currently active models. Useful when
+      switching to a better model and wanting to update results for existing photos.
+    </p>
+    <pre><code># Re-detect all (keeps existing)
+curl -X POST \
+  -H "X-API-Key: argus_..." \
+  "http://localhost:8100/api/images/42/reprocess?type=all"
+
+# Replace existing face detections
+curl -X POST \
+  -H "X-API-Key: argus_..." \
+  "http://localhost:8100/api/images/42/reprocess?type=faces&replace=true"
+
+# Async
+curl -X POST \
+  -H "X-API-Key: argus_..." \
+  "http://localhost:8100/api/images/42/reprocess?type=all&replace=true&async=true"</code></pre>
+    <p>From the UI: open any image's tag page and click <strong>Reprocess</strong> in the header.</p>
+
+    <h2>Identity search</h2>
+    <p>
+      Search enrolled identities by name using FTS5 trigram matching — handles partial names,
+      case-insensitive, near-misses.
+    </p>
+    <pre><code>curl -H "X-API-Key: argus_..." \
+  "http://localhost:8100/api/search?q=alice"
+
+# Faces only, up to 20 results
+curl -H "X-API-Key: argus_..." \
+  "http://localhost:8100/api/search?q=john&type=face&limit=20"</code></pre>
+
+    <h2>Image filtering</h2>
+    <p>Query the source image list with filters. All params are optional and combinable.</p>
+    <table>
+      <thead>
+        <tr><th>Param</th><th>Type</th><th>Description</th></tr>
+      </thead>
+      <tbody>
+        <tr><td><code>identity_id</code></td><td>int (repeatable)</td><td>Images containing this identity (AND across multiple)</td></tr>
+        <tr><td><code>type</code></td><td><code>face</code> | <code>object</code></td><td>Only images with detections of this type</td></tr>
+        <tr><td><code>since</code> / <code>until</code></td><td>ISO timestamp</td><td>Upload date range</td></tr>
+        <tr><td><code>no_detections</code></td><td>bool</td><td>Images with zero detections</td></tr>
+        <tr><td><code>no_tagged_faces</code></td><td>bool</td><td>Images where no face has been identified</td></tr>
+        <tr><td><code>no_crops</code></td><td>bool</td><td>Images with no stored crop files</td></tr>
+        <tr><td><code>has_manual_detections</code></td><td>bool</td><td>Images with at least one manually drawn detection</td></tr>
+        <tr><td><code>sort</code></td><td>string</td><td><code>newest</code> | <code>oldest</code> | <code>most_detections</code> | <code>fewest_detections</code></td></tr>
+      </tbody>
+    </table>
+    <pre><code># Images containing identity 5
+curl -H "X-API-Key: argus_..." \
+  "http://localhost:8100/api/images?identity_id=5"
+
+# Face-detection images from a date range
+curl -H "X-API-Key: argus_..." \
+  "http://localhost:8100/api/images?type=face&since=2025-01-01T00:00:00&until=2025-12-31T23:59:59"</code></pre>
+    <p>
+      Companion endpoints: <code>GET /api/images/count</code> returns the matching total;
+      <code>GET /api/images/ids</code> returns all matching IDs (no pagination, for select-all
+      operations).
+    </p>
+
+    <h2>Export and import</h2>
+    <p>
+      Export recognition data (identities, embeddings, detections, images) and import into another
+      instance. Imports merge by identity name — existing identities receive additional detections
+      and embeddings rather than being duplicated.
+    </p>
+    <pre><code># Export selected identities
+curl -X POST \
+  -H "X-API-Key: argus_..." \
+  -H "Content-Type: application/json" \
+  -d '{"identity_ids": [1, 2, 3]}' \
+  http://localhost:8100/api/export \
+  --output argus_export.zip
+
+# Import into another instance
+curl -X POST \
+  -H "X-API-Key: argus_..." \
+  -F "file=@argus_export.zip" \
+  http://localhost:8100/api/import</code></pre>
+    <p>Also available via <strong>Account</strong> page in the UI.</p>
+  </body>
+</html>

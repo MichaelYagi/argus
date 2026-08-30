@@ -1,0 +1,72 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Argus Docs</title>
+    <link rel="stylesheet" href="./docs.css" />
+    <script src="./docs.js" defer></script>
+  </head>
+  <body data-no-toc>
+    <h1>Argus</h1>
+    <p>
+      Self-hosted face and object recognition — a clean HTTP API for other apps <em>and</em> a full
+      human curation UI in one container. Enroll people by name, match them across photos, review
+      uncertain matches, and keep everything on your LAN.
+    </p>
+
+    <h2>Guides</h2>
+    <ul class="guide-list">
+      <li>
+        <a href="./guides/getting-started.html">Getting started</a>
+        <p>Docker quickstart, first-run setup, native Python run, GPU configuration.</p>
+      </li>
+      <li>
+        <a href="./guides/concepts.html">Concepts</a>
+        <p>
+          Review queue, suggested people (face clustering), manual face tagging, object detection
+          models, and environments.
+        </p>
+      </li>
+      <li>
+        <a href="./guides/api.html">API reference</a>
+        <p>
+          Every endpoint with curl examples — detect, enroll, identify, verify, test, bulk, webhooks,
+          merge, reprocess, search, filtering, export and import.
+        </p>
+      </li>
+      <li>
+        <a href="./guides/integrating.html">Integrating</a>
+        <p>
+          Correlating your own records with <code>external_ref</code>, staying in sync via the change
+          feed, and batch operations.
+        </p>
+      </li>
+      <li>
+        <a href="./guides/settings.html">Settings</a>
+        <p>
+          Every live setting — face thresholds, GPU, image quality, crop padding, YOLO vocabulary —
+          with defaults and descriptions.
+        </p>
+      </li>
+      <li>
+        <a href="./guides/troubleshooting.html">Troubleshooting</a>
+        <p>GPU not detected, CUDA library errors, face model not loading, macOS segfault.</p>
+      </li>
+      <li>
+        <a href="./guides/development.html">Development</a>
+        <p>Running tests, linting, and cutting a release.</p>
+      </li>
+    </ul>
+
+    <h2>Quick links</h2>
+    <ul>
+      <li><a href="https://github.com/MichaelYagi/argus">GitHub repository</a></li>
+      <li><a href="https://github.com/MichaelYagi/argus/releases">Releases</a></li>
+      <li>
+        Interactive API docs (requires a running instance):
+        <code>http://localhost:8100/docs</code>
+      </li>
+    </ul>
+  </body>
+</html>

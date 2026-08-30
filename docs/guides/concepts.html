@@ -1,0 +1,263 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Argus Docs — Concepts</title>
+    <link rel="stylesheet" href="../docs.css" />
+    <script src="../docs.js" defer></script>
+  </head>
+  <body>
+    <h1>Argus</h1>
+    <nav class="docs-nav">
+      <a href="../index.html">Overview</a>
+      <a href="./getting-started.html">Getting started</a>
+      <a href="./concepts.html" aria-current="page">Concepts</a>
+      <a href="./api.html">API reference</a>
+      <a href="./integrating.html">Integrating</a>
+      <a href="./settings.html">Settings</a>
+      <a href="./troubleshooting.html">Troubleshooting</a>
+      <a href="./development.html">Development</a>
+    </nav>
+
+    <h1>Concepts</h1>
+
+    <h2>Review queue</h2>
+    <p>
+      Detections below the auto-confirm threshold go into a review queue at <code>/review</code>.
+      Each card shows the detected face crop, the current match and similarity score, ranked
+      suggestions from enrolled faces, and a <strong>View in image</strong> link that opens the full
+      tag page with the detection bbox highlighted.
+    </p>
+
+    <h3>Three tabs</h3>
+    <ul>
+      <li>
+        <strong>Suggested matches</strong> — faces with a plausible identity match below the
+        auto-confirm threshold. Candidates are grouped by suggested identity, with
+        <strong>Confirm all</strong> / <strong>Reject all</strong> per group.
+      </li>
+      <li>
+        <strong>No match</strong> — faces that scored below the match threshold against all enrolled
+        people.
+      </li>
+      <li>
+        <strong>Mismatches</strong> — confirmed faces whose embedding scores poorly against their
+        identity's centroid, flagged as possible mislabels. Each card has a
+        <strong>Looks correct</strong> button (suppresses the flag) and an
+        <strong>Unassign</strong> button (strips the identity and returns the face to the queue).
+        Ignoring a card leaves the face confirmed as that person.
+      </li>
+    </ul>
+
+    <h3>Key thresholds</h3>
+    <p>All configurable in <a href="./settings.html">Settings</a>.</p>
+    <table>
+      <thead>
+        <tr>
+          <th>Setting</th>
+          <th>Default</th>
+          <th>What it controls</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><code>face.match_threshold</code></td>
+          <td>0.5</td>
+          <td>
+            Minimum similarity to assign a match at all. Below this, the face is stored but left
+            unidentified.
+          </td>
+        </tr>
+        <tr>
+          <td><code>face.auto_confirm_threshold</code></td>
+          <td>0.80</td>
+          <td>
+            Detections at or above this are confirmed automatically and skip the queue. Below it,
+            they land in the queue.
+          </td>
+        </tr>
+        <tr>
+          <td><code>face.auto_enroll_threshold</code></td>
+          <td>0.92</td>
+          <td>
+            Gate for the automatic enrollment path only. When Argus auto-confirms a high-similarity
+            match, the embedding is added to the reference set only if the face-detection quality
+            score clears this bar. Set to 0 to disable automatic enrollment.
+          </td>
+        </tr>
+      </tbody>
+    </table>
+
+    <h3>Human actions always enroll</h3>
+    <p>
+      When you confirm, reassign, or label a face yourself, that's ground truth — its embedding is
+      added to the person's reference set unconditionally. The auto-enroll threshold above does not
+      apply to human actions.
+    </p>
+
+    <h3>Matching strategy</h3>
+    <p>Controlled by <code>face.match_strategy</code> in Settings.</p>
+    <ul>
+      <li>
+        <strong>Best match</strong> (default) — a face is scored against every reference photo and
+        takes the closest. Enrolled photos stay ~100%, and people who look different across photos
+        (age, glasses, lighting) recognize better.
+      </li>
+      <li>
+        <strong>Average</strong> — each person's references are blended into one representative
+        embedding. Faster and steadier, but an individual photo's score drifts below 100% as varied
+        references are added.
+      </li>
+    </ul>
+
+    <h3>Keyboard shortcuts</h3>
+    <table class="nowrap-code">
+      <thead>
+        <tr>
+          <th>Key</th>
+          <th>Action</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr><td><code>↑</code> / <code>↓</code> or <code>W</code> / <code>S</code></td><td>Navigate between cards</td></tr>
+        <tr><td><code>Space</code></td><td>Open / close the source-image zoom for the focused card</td></tr>
+        <tr><td><code>C</code></td><td>Confirm the focused card</td></tr>
+        <tr><td><code>D</code></td><td>Dismiss (Suggested) / Unassign (No match, Mismatches)</td></tr>
+        <tr><td><code>V</code></td><td>Confirm all in the focused card's group (Suggested only)</td></tr>
+        <tr><td><code>F</code></td><td>Reject all in the focused card's group (Suggested only)</td></tr>
+        <tr><td><code>A</code></td><td>Toggle select all on the active tab</td></tr>
+        <tr><td><code>Shift+C</code></td><td>Confirm all selected</td></tr>
+        <tr><td><code>Shift+D</code></td><td>Dismiss / Unassign all selected</td></tr>
+      </tbody>
+    </table>
+    <p>All shortcuts are suppressed when focus is in a text input.</p>
+
+    <h2>Suggested people (face clustering)</h2>
+    <p>
+      The <strong>Suggested</strong> page (<code>/clusters</code>) groups unlabeled faces — ones that
+      match nobody enrolled — into "probably the same person" clusters by similarity. Name a group
+      and every face in it is labelled and enrolled together. This is the fast way to seed
+      recognition on an existing photo set.
+    </p>
+    <ul>
+      <li>
+        Adjust grouping live with the threshold slider (backed by
+        <code>face.cluster_threshold</code>, default 0.5). Higher = stricter; lower = looser.
+      </li>
+      <li>Singletons are dropped — a suggestion needs at least two corroborating faces.</li>
+      <li>
+        Faces are individually selectable — remove a wrong face, split a group, merge faces across
+        groups, dismiss faces without enrolling, or delete junk detections permanently.
+      </li>
+    </ul>
+    <p>
+      It complements the review queue: the queue handles faces that do resemble an enrolled person;
+      clustering handles the residual unknowns that match no one yet.
+    </p>
+    <p>
+      Available over the API: <code>GET /api/clusters?threshold=&lt;0-1&gt;&amp;min_size=&lt;n&gt;</code>
+      returns the groups with detection ids and crop URLs. Read-only — clustering is computed on
+      demand and stores nothing.
+    </p>
+
+    <h2>Manual face tagging</h2>
+    <p>
+      When the face detector misses someone — profile shots, occluded faces, poor lighting — you can
+      draw a bounding box yourself on the tag page. Click-drag on desktop; long-press-drag on mobile.
+      Label the box with a name and save.
+    </p>
+
+    <h3>Three-tier embedding fallback</h3>
+    <p>
+      After saving a manual box, Argus runs three attempts in order to extract a face embedding:
+    </p>
+    <ol>
+      <li>
+        <strong>Aligned (tier 1)</strong> — RetinaFace re-runs on the cropped region to detect and
+        align the face, then ArcFace extracts an embedding from the aligned face. Best quality. Most
+        manual boxes on a reasonably visible face land here.
+      </li>
+      <li>
+        <strong>Unaligned (tier 2)</strong> — RetinaFace found nothing, so ArcFace runs directly on
+        the raw crop without alignment. The embedding participates in matching but accuracy is lower.
+        Useful for side profiles or partially covered faces.
+      </li>
+      <li>
+        <strong>No embedding (tier 3)</strong> — ArcFace also returned nothing. The detection is
+        saved as a labelled crop and appears in the identity's gallery, but it won't match against
+        future detections. Rare — typically only very small or heavily obscured faces.
+      </li>
+    </ol>
+
+    <h3>Border colors on the tag page</h3>
+    <p>Manually drawn boxes use a dashed border. Color indicates tier:</p>
+    <table>
+      <thead>
+        <tr><th>Color</th><th>Meaning</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>Green</td><td>Aligned embedding extracted (tier 1)</td></tr>
+        <tr><td>Amber</td><td>Unaligned embedding extracted (tier 2)</td></tr>
+        <tr><td>Red</td><td>No embedding found (tier 3)</td></tr>
+      </tbody>
+    </table>
+    <p>Auto-detected boxes use a solid white border regardless of outcome.</p>
+
+    <h2>Object detection models</h2>
+
+    <h3>Standard YOLO</h3>
+    <p>Models: <code>yolov8n</code>, <code>yolov8s</code>, <code>yolov8m</code>, <code>yolov8x</code>, <code>yolo11n</code></p>
+    <p>
+      Detects a fixed set of 80 everyday object categories defined by the COCO dataset (people,
+      vehicles, animals, furniture, food, etc.). Fast and consistent — the vocabulary is baked into
+      the model weights. Use the <strong>Object classes</strong> setting to filter which of the 80
+      you care about.
+    </p>
+
+    <h3 id="yolo-world">YOLO-World (open vocabulary)</h3>
+    <p>Models: <code>yolov8s-worldv2</code>, <code>yolov8m-worldv2</code>, <code>yolov8l-worldv2</code></p>
+    <p>
+      Detects anything you describe in plain language. Instead of a fixed list, you define a
+      vocabulary of words and phrases, and the model finds those things in photos.
+    </p>
+    <p>
+      YOLO-World understands natural language, so descriptions like "golden retriever",
+      "broken window", or "person on a bicycle" work. Abstract or non-visual concepts do not — if
+      you couldn't point at it in a photo, it won't work.
+    </p>
+    <p>
+      Argus ships with ~160 default classes covering all 80 COCO categories plus common additions:
+      weapons, fire, smoke, license plates, face masks, extended vehicle types, more animal species,
+      and other frequently useful categories. Edit the vocabulary in
+      <strong>Settings → YOLO-World vocabulary</strong>. Changes take effect on the next detection —
+      no restart needed.
+    </p>
+    <p>
+      Use standard YOLO when the things you want to detect are within COCO's 80 classes. Switch to
+      YOLO-World when you need to detect things outside that list.
+    </p>
+
+    <h2>Environments</h2>
+    <p>
+      Each user has one or more named environments. All recognition data — identities, detections,
+      enrolled faces, source images — is isolated per environment. Switching environments is instant;
+      data in other environments is never visible.
+    </p>
+    <p>Use cases:</p>
+    <ul>
+      <li>Separate a test or staging dataset from production data</li>
+      <li>Run multiple independent recognition projects under one account</li>
+      <li>Scope an API key to one dataset so a client app can only read/write its own data</li>
+    </ul>
+    <p>
+      Manage environments at <strong>Account → Manage environments</strong>. Deleting an environment
+      permanently removes all its data.
+    </p>
+    <p>
+      <strong>API keys are environment-scoped.</strong> Each key is bound to one environment at
+      creation time. Requests authenticated by that key read and write only that environment's data,
+      regardless of which environment the browser session has active.
+    </p>
+  </body>
+</html>

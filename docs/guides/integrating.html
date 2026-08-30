@@ -1,0 +1,123 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Argus Docs — Integrating</title>
+    <link rel="stylesheet" href="../docs.css" />
+    <script src="../docs.js" defer></script>
+  </head>
+  <body>
+    <h1>Argus</h1>
+    <nav class="docs-nav">
+      <a href="../index.html">Overview</a>
+      <a href="./getting-started.html">Getting started</a>
+      <a href="./concepts.html">Concepts</a>
+      <a href="./api.html">API reference</a>
+      <a href="./integrating.html" aria-current="page">Integrating</a>
+      <a href="./settings.html">Settings</a>
+      <a href="./troubleshooting.html">Troubleshooting</a>
+      <a href="./development.html">Development</a>
+    </nav>
+
+    <h1>Integrating</h1>
+    <p>
+      These endpoints make it easy for a client — a photo manager, a home server, a camera script —
+      to correlate its own records with Argus and stay in sync. All are generic: Argus never
+      interprets your identifiers or assumes anything about the calling system.
+    </p>
+
+    <h2>external_ref — attach your own id</h2>
+    <p>
+      Every detect and enroll call accepts an optional opaque <code>external_ref</code> string. It's
+      stored on the source image (and, for enroll, the identity), echoed back in responses, and
+      queryable. Set it at creation and you never have to match by name afterwards.
+    </p>
+    <pre><code># Tag the image with your own id at detect time
+curl -X POST -H "X-API-Key: argus_..." \
+  -F "file=@photo.jpg" -F "external_ref=my-app-image-42" \
+  http://localhost:8100/api/detect/all
+
+# Resolve your id back to Argus's source_image_id
+curl -H "X-API-Key: argus_..." \
+  "http://localhost:8100/api/images?external_ref=my-app-image-42"</code></pre>
+
+    <p>Works the same for identities:</p>
+    <pre><code># Create an identity with a ref
+curl -X POST -H "X-API-Key: argus_..." -H "Content-Type: application/json" \
+  -d '{"label": "Noah", "type": "face", "external_ref": "my-app-person-7"}' \
+  http://localhost:8100/api/identities
+
+# Look it up by your ref
+curl -H "X-API-Key: argus_..." \
+  "http://localhost:8100/api/identities?external_ref=my-app-person-7"
+
+# Backfill a ref onto an existing identity
+curl -X PUT -H "X-API-Key: argus_..." -H "Content-Type: application/json" \
+  -d '{"external_ref": "my-app-person-7"}' \
+  http://localhost:8100/api/identities/12/external_ref</code></pre>
+
+    <h2>Change feed — sync deltas without re-scanning</h2>
+    <p>
+      Poll <code>/api/changes?since=&lt;cursor&gt;</code> to learn what changed — identities and
+      detections created, relabeled, or deleted. The returned <code>next_cursor</code> is the value
+      to pass as <code>since</code> next time. Detection events carry the source image's
+      <code>external_ref</code> so you know which of your records to update.
+    </p>
+    <pre><code>curl -H "X-API-Key: argus_..." "http://localhost:8100/api/changes?since=0&limit=100"
+# → {"changes": [{"id": 1, "entity_type": "detection", "entity_id": 42,
+#                 "action": "relabeled", "external_ref": "my-app-image-42", ...}],
+#    "next_cursor": 1, "has_more": false}</code></pre>
+    <p>Start with <code>since=0</code> on first run, then store and forward <code>next_cursor</code> each time.</p>
+
+    <h2>Capabilities — discover what this instance can do</h2>
+    <p>
+      <code>GET /api/capabilities</code> reports which detection types are usable right now, active
+      models, supported formats, pagination limits, and which integration features the build exposes.
+      Call it before integrating so a client can adapt instead of hardcoding.
+    </p>
+    <pre><code>curl http://localhost:8100/api/capabilities</code></pre>
+    <p>No API key required.</p>
+
+    <h2>Batch operations</h2>
+    <p>Relabel or read many detections in one round-trip.</p>
+    <pre><code># Batch relabel — per-item results, one bad item never fails the others
+curl -X POST -H "X-API-Key: argus_..." -H "Content-Type: application/json" \
+  -d '{"items": [{"detection_id": 1, "label": "park bench"},
+                 {"detection_id": 2, "identity_id": 5}]}' \
+  http://localhost:8100/api/detections/label
+
+# Batch read — current state of many detections (unknown ids simply absent)
+curl -X POST -H "X-API-Key: argus_..." -H "Content-Type: application/json" \
+  -d '{"detection_ids": [1, 2, 3]}' \
+  http://localhost:8100/api/detections/query</code></pre>
+
+    <h2>Example integration pattern</h2>
+    <p>
+      A photo manager that wants to show face tags alongside its own photo view can integrate with
+      Argus like this:
+    </p>
+    <ol>
+      <li>
+        At import time, POST each photo to <code>/api/detect/all</code> with
+        <code>external_ref</code> set to your own photo id. Store the returned
+        <code>source_image_id</code>.
+      </li>
+      <li>
+        Poll <code>/api/changes?since=&lt;cursor&gt;</code> on a schedule (or respond to
+        <code>detection.labeled</code> webhooks) to learn when faces are confirmed or relabeled.
+        Each change event includes the <code>external_ref</code> so you know which photo to update.
+      </li>
+      <li>
+        Fetch current face data for a photo via
+        <code>GET /api/images/{source_image_id}/faces</code> when displaying the detail view.
+        Bbox coordinates are stored relative to the original image dimensions.
+      </li>
+      <li>
+        To check whether Argus has already seen a photo, query by
+        <code>external_ref</code> before submitting — avoids double-ingestion without your app
+        needing to track source_image_ids.
+      </li>
+    </ol>
+  </body>
+</html>
