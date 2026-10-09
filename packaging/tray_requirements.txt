@@ -1,0 +1,5 @@
+# Only for packaging/tray_app.py and the packaged desktop build.
+# Not part of requirements.txt -- a headless server deployment never needs these.
+# Install into the same .venv: pip install -r packaging/tray_requirements.txt
+pystray>=0.19
+Pillow>=10.0

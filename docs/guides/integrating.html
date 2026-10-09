@@ -92,6 +92,79 @@ curl -X POST -H "X-API-Key: argus_..." -H "Content-Type: application/json" \
   -d '{"detection_ids": [1, 2, 3]}' \
   http://localhost:8100/api/detections/query</code></pre>
 
+    <h2>Webhooks</h2>
+    <p>
+      Configure a webhook URL in settings and Argus will POST a JSON payload to it whenever
+      something changes. Register it under <strong>Settings → Webhook URL</strong>.
+    </p>
+    <p>All events share the same envelope:</p>
+    <pre><code>{ "event": "&lt;name&gt;", "data": { ... } }</code></pre>
+
+    <h3>Identity events</h3>
+    <table>
+      <thead><tr><th>Event</th><th>When</th><th>Key data fields</th></tr></thead>
+      <tbody>
+        <tr>
+          <td><code>identity.created</code></td>
+          <td>New identity saved (face enrollment, manual create)</td>
+          <td><code>identity_id</code>, <code>label</code>, <code>type</code> (<code>face</code>/<code>object</code>), <code>external_ref</code></td>
+        </tr>
+        <tr>
+          <td><code>identity.updated</code></td>
+          <td>Rename, thumbnail change, embedding added/removed, detection added</td>
+          <td><code>identity_id</code>, <code>action</code> (<code>renamed</code>, <code>thumbnail_updated</code>, <code>embedding_added</code>, <code>embedding_removed</code>, <code>detection_added</code>), plus action-specific fields</td>
+        </tr>
+        <tr>
+          <td><code>identity.merged</code></td>
+          <td>Two identities merged</td>
+          <td><code>identity_id</code> (source, now deleted), <code>merged_into</code> (surviving id)</td>
+        </tr>
+        <tr>
+          <td><code>identity.deleted</code></td>
+          <td>Identity removed</td>
+          <td><code>identity_id</code></td>
+        </tr>
+      </tbody>
+    </table>
+
+    <h3>Detection events</h3>
+    <table>
+      <thead><tr><th>Event</th><th>When</th><th>Key data fields</th></tr></thead>
+      <tbody>
+        <tr>
+          <td><code>detection.created</code></td>
+          <td>New detection row written</td>
+          <td><code>detection_id</code>, <code>type</code>, <code>identity_id</code> (nullable), <code>external_ref</code> (source image's ref)</td>
+        </tr>
+        <tr>
+          <td><code>detection.labeled</code></td>
+          <td>Detection assigned or reassigned to an identity</td>
+          <td><code>detection_id</code>, <code>type</code>, <code>identity_id</code> (null = rejected)</td>
+        </tr>
+        <tr>
+          <td><code>detection.deleted</code></td>
+          <td>One or more detections removed</td>
+          <td><code>detection_ids</code> (array)</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <h3>Enrollment via Argus UI and webhook-driven sync</h3>
+    <p>
+      When a face is enrolled directly in the Argus UI (not via a client's scan), Argus fires
+      <code>identity.created</code> followed by <code>identity.updated</code>
+      (<code>action: "embedding_added"</code>) for each enrolled detection. The
+      <code>identity.created</code> payload includes the identity's <code>external_ref</code>
+      if one was already set.
+    </p>
+    <p>
+      A client that stored its own photo IDs as <code>external_ref</code> on source images at
+      detect time can use this to reconcile without a full resync: on receiving
+      <code>identity.created</code>, fetch
+      <code>GET /api/identities/{identity_id}/gallery</code> and match each item's
+      <code>source_external_ref</code> (the original photo id) to your own records.
+    </p>
+
     <h2>Example integration pattern</h2>
     <p>
       A photo manager that wants to show face tags alongside its own photo view can integrate with
@@ -104,9 +177,11 @@ curl -X POST -H "X-API-Key: argus_..." -H "Content-Type: application/json" \
         <code>source_image_id</code>.
       </li>
       <li>
-        Poll <code>/api/changes?since=&lt;cursor&gt;</code> on a schedule (or respond to
-        <code>detection.labeled</code> webhooks) to learn when faces are confirmed or relabeled.
-        Each change event includes the <code>external_ref</code> so you know which photo to update.
+        Listen for <code>detection.labeled</code> and <code>identity.created</code> webhooks
+        (or poll <code>/api/changes?since=&lt;cursor&gt;</code>) to learn when faces are
+        confirmed or relabeled. Detection events carry the source image's
+        <code>external_ref</code> so you know which photo to update. On
+        <code>identity.created</code>, walk the identity's gallery to link any existing photos.
       </li>
       <li>
         Fetch current face data for a photo via

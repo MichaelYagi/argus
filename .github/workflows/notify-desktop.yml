@@ -1,0 +1,36 @@
+name: Notify desktop build
+
+# When a version tag is pushed here, tells the private
+# MichaelYagi/argus-artifacts repo to build the desktop .exe/.app for it.
+# Artifacts on a public repo are downloadable by any signed-in GitHub user;
+# keeping builds in the private repo prevents that.
+#
+# Needs a repo secret DESKTOP_DISPATCH_TOKEN: a fine-grained PAT scoped to
+# MichaelYagi/argus-artifacts with "Contents: Read and write"
+# (GitHub's repository_dispatch API requires that permission).
+# Until the secret exists this skips itself with a warning instead of
+# failing on every tag push.
+on:
+  push:
+    tags:
+      - "v*.*.*"
+
+jobs:
+  dispatch:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger the private desktop build
+        env:
+          DISPATCH_TOKEN: ${{ secrets.DESKTOP_DISPATCH_TOKEN }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          if [[ -z "$DISPATCH_TOKEN" ]]; then
+            echo "::warning::DESKTOP_DISPATCH_TOKEN isn't set -- not triggering a desktop build for $TAG"
+            exit 0
+          fi
+          curl -sS -f -X POST \
+            -H "Authorization: Bearer $DISPATCH_TOKEN" \
+            -H "Accept: application/vnd.github+json" \
+            https://api.github.com/repos/MichaelYagi/argus-artifacts/dispatches \
+            -d "{\"event_type\":\"public-tag\",\"client_payload\":{\"tag\":\"$TAG\"}}"
+          echo "Triggered the desktop build for $TAG"
