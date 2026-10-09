@@ -32,11 +32,12 @@ if [[ ! -e packaging/icon.icns ]]; then
   ICONSET=$(mktemp -d)/icon.iconset
   mkdir -p "$ICONSET"
   .venv/bin/python - <<'PYEOF'
-import sys
-sys.path.insert(0, ".")
-from packaging.tray_app import _make_icon
+import importlib.util, pathlib
+spec = importlib.util.spec_from_file_location("tray_app", pathlib.Path("packaging/tray_app.py"))
+mod = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(mod)
 for sz in (16, 32, 64, 128, 256, 512, 1024):
-    _make_icon(sz).save(f"/tmp/argus-icon-{sz}.png")
+    mod._make_icon(sz).save(f"/tmp/argus-icon-{sz}.png")
 PYEOF
   cp /tmp/argus-icon-16.png  "$ICONSET/icon_16x16.png"
   cp /tmp/argus-icon-32.png  "$ICONSET/icon_16x16@2x.png"
