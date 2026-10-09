@@ -17,6 +17,9 @@ fi
 echo "== Installing pyinstaller =="
 .venv/bin/pip install pyinstaller
 
+echo "== Installing UPX (binary compressor) =="
+sudo apt-get install -y upx-ucl 2>/dev/null || true
+
 echo "== Running PyInstaller =="
 rm -rf build dist
 .venv/bin/pyinstaller packaging/argus-linux.spec --distpath dist --workpath build

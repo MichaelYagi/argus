@@ -56,6 +56,9 @@ echo "== Installing pyinstaller + tray dependencies =="
 .venv/bin/pip install pyinstaller
 .venv/bin/pip install -r packaging/tray_requirements.txt
 
+echo "== Installing UPX (binary compressor) =="
+brew install upx 2>/dev/null || true
+
 echo "== Running PyInstaller ($MODE) =="
 rm -rf build dist
 PACKAGE_MODE="$MODE" .venv/bin/pyinstaller packaging/argus.spec --distpath dist --workpath build

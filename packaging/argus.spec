@@ -139,7 +139,7 @@ exe = EXE(
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,
-    upx=False,
+    upx=True,
     console=False,
     icon=icon_path,
     runtime_tmpdir=None,
@@ -152,7 +152,7 @@ if not ONEFILE:
         a.zipfiles,
         a.datas,
         strip=False,
-        upx=False,
+        upx=True,
         upx_exclude=[],
         name="Argus",
     )

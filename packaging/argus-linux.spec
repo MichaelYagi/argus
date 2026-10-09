@@ -101,7 +101,7 @@ exe = EXE(
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,
-    upx=False,
+    upx=True,
     console=True,  # CLI binary -- server logs go to stdout/stderr
     onefile=True,
 )

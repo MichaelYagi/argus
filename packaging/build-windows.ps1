@@ -25,6 +25,9 @@ Write-Host "== Installing pyinstaller + tray dependencies =="
 .\.venv\Scripts\python.exe -m pip install pyinstaller
 .\.venv\Scripts\pip.exe install -r packaging\tray_requirements.txt
 
+Write-Host "== Installing UPX (binary compressor) =="
+choco install upx -y --no-progress | Out-Null
+
 Write-Host "== Running PyInstaller ($Mode) =="
 Remove-Item -Recurse -Force build, dist -ErrorAction SilentlyContinue
 $env:PACKAGE_MODE = $Mode
