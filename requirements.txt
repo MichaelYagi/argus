@@ -3,8 +3,8 @@ uvicorn[standard]
 jinja2
 python-multipart
 insightface
-onnxruntime-gpu; platform_machine == "x86_64"
-onnxruntime; platform_machine != "x86_64"
+onnxruntime-gpu; platform_machine == "x86_64" and sys_platform != "darwin"
+onnxruntime; platform_machine != "x86_64" or sys_platform == "darwin"
 ultralytics
 transformers>=4.57,<5.0  # Florence-2 (4.57+) and Grounding DINO (4.49+); <5.0 because ram package uses APIs removed in 5.x
 ram @ git+https://github.com/xinyu1205/recognize-anything.git  # RAM++ tagger engine (installs as 'ram')
