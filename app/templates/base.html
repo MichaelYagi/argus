@@ -646,7 +646,7 @@ setInterval(_updatePendingResetsDot, 30000);
   <a href="/unidentified" class="sidebar-sub {% if active == 'unidentified' %}active{% endif %}">Unidentified</a>
   {% endif %}
   {% if is_admin %}
-  <div class="sidebar-divider"></div>
+  {% if face_active %}<div class="sidebar-divider"></div>{% endif %}
   <a href="/settings" class="{% if active == 'settings' %}active{% endif %}">
     Settings
     <span class="pending-resets-dot" title="Pending password reset requests"
@@ -696,7 +696,7 @@ setInterval(_updatePendingResetsDot, 30000);
   <a href="/unidentified" class="mobile-sub {% if active == 'unidentified' %}active{% endif %}">Unidentified</a>
   {% endif %}
   {% if is_admin %}
-  <div style="border-top:1px solid rgba(255,255,255,.12);margin:4px 0"></div>
+  {% if face_active %}<div style="border-top:1px solid rgba(255,255,255,.12);margin:4px 0"></div>{% endif %}
   <a href="/settings" class="{% if active == 'settings' %}active{% endif %}">
     Settings
     <span class="pending-resets-dot" title="Pending password reset requests"

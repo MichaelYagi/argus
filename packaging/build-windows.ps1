@@ -28,6 +28,20 @@ Write-Host "== Installing pyinstaller + tray dependencies =="
 Write-Host "== Installing UPX (binary compressor) =="
 choco install upx -y --no-progress | Out-Null
 
+Write-Host "== Generating packaging\icon.ico =="
+if (-not (Test-Path "packaging\icon.ico")) {
+    .\.venv\Scripts\python.exe - @"
+import importlib.util, pathlib
+spec = importlib.util.spec_from_file_location('tray_app', pathlib.Path('packaging/tray_app.py'))
+mod = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(mod)
+sizes = [16, 24, 32, 48, 64, 128, 256]
+frames = [mod._make_icon(s).convert('RGBA') for s in sizes]
+frames[0].save('packaging/icon.ico', format='ICO', append_images=frames[1:],
+               sizes=[(s, s) for s in sizes])
+"@
+}
+
 Write-Host "== Running PyInstaller ($Mode) =="
 Remove-Item -Recurse -Force build, dist -ErrorAction SilentlyContinue
 $env:PACKAGE_MODE = $Mode
