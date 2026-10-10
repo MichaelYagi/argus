@@ -19,6 +19,7 @@ import signal
 import socket
 import subprocess
 import sys
+import threading
 import time
 import urllib.error
 import urllib.request
@@ -389,9 +390,10 @@ class TrayApp:
         self._tk_root = None
 
         base = _make_icon(256)
-        self.icon_idle    = base.copy()
-        self.icon_running = _badge(base, "#16a34a")
-        self.icon_error   = _badge(base, "#dc2626")
+        self.icon_idle     = base.copy()
+        self.icon_starting = _badge(base, "#ca8a04")  # amber — process up, not yet accepting requests
+        self.icon_running  = _badge(base, "#16a34a")
+        self.icon_error    = _badge(base, "#dc2626")
 
         self.icon = pystray.Icon(
             "argus",
@@ -532,8 +534,33 @@ class TrayApp:
             stdout=self.log_file,
             stderr=subprocess.STDOUT,
         )
-        self._set_status(self.icon_running, f"Argus (running on {host}:{port})")
-        self._notify(f"Argus running at http://{host}:{port}")
+        self._set_status(self.icon_starting, f"Argus (starting on {host}:{port}...)")
+        threading.Thread(
+            target=self._wait_for_ready,
+            args=(host, port),
+            daemon=True,
+        ).start()
+
+    def _wait_for_ready(self, host: str, port: int) -> None:
+        """Poll /api/health until the server accepts requests, then go green."""
+        url = f"http://{host}:{port}/api/health"
+        deadline = time.monotonic() + 120  # give up after 2 minutes
+        while time.monotonic() < deadline:
+            if not self.is_running():
+                self._set_status(self.icon_error, "Argus (failed to start)")
+                return
+            try:
+                with urllib.request.urlopen(url, timeout=2) as resp:
+                    if resp.status == 200:
+                        self._set_status(self.icon_running, f"Argus (running on {host}:{port})")
+                        self._notify(f"Argus running at http://{host}:{port}")
+                        return
+            except Exception:  # noqa: BLE001
+                pass
+            time.sleep(1)
+        # Timed out — server process is alive but never became healthy
+        if self.is_running():
+            self._set_status(self.icon_error, "Argus (not responding)")
 
     def stop(self, _icon=None, _item=None) -> None:
         if not self.is_running():
