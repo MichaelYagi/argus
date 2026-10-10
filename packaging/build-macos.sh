@@ -22,13 +22,16 @@ if [[ ! -e .venv/bin/python ]]; then
   exit 1
 fi
 
-# Generate packaging/icon.icns from the favicon SVG if not already present.
-# Requires Pillow (already in .venv via requirements.txt) and cairosvg, or
-# skip this and leave icon_path unset in the spec (PyInstaller falls back to
-# a generic icon, cosmetic only).
+echo "== Installing pyinstaller + tray dependencies =="
+.venv/bin/pip install pyinstaller
+.venv/bin/pip install -r packaging/tray_requirements.txt
+
+echo "== Installing UPX (binary compressor) =="
+brew install upx 2>/dev/null || true
+
+# Generate packaging/icon.icns (requires Pillow + pystray, installed above).
 if [[ ! -e packaging/icon.icns ]]; then
   echo "== Generating packaging/icon.icns =="
-  # Use the tray_app icon generator to produce a PNG, then iconutil it.
   ICONSET=$(mktemp -d)/icon.iconset
   mkdir -p "$ICONSET"
   .venv/bin/python - <<'PYEOF'
@@ -52,13 +55,6 @@ PYEOF
   iconutil -c icns "$ICONSET" -o packaging/icon.icns
   rm -rf "$(dirname "$ICONSET")"
 fi
-
-echo "== Installing pyinstaller + tray dependencies =="
-.venv/bin/pip install pyinstaller
-.venv/bin/pip install -r packaging/tray_requirements.txt
-
-echo "== Installing UPX (binary compressor) =="
-brew install upx 2>/dev/null || true
 
 echo "== Running PyInstaller ($MODE) =="
 rm -rf build dist
