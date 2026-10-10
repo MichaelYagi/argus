@@ -62,8 +62,9 @@ DEFAULT_CONFIG = {
     "port": 8100,
     "host": "127.0.0.1",
     "launch_at_login": False,
-    "data_path": "",   # empty = use default per-user dir (frozen) or repo/data/ (source)
-    "db_path": "",     # empty = DATA_PATH/argus.db
+    "data_path": "",    # empty = use default per-user dir (frozen) or repo/data/ (source)
+    "db_path": "",      # empty = DATA_PATH/argus.db
+    "models_path": "",  # empty = use default per-user dir (frozen) or repo/models/ (source)
 }
 
 
@@ -406,6 +407,7 @@ class TrayApp:
                 pystray.MenuItem(lambda _: f"Port: {self.config['port']}", self.change_port),
                 pystray.MenuItem(lambda _: f"Host: {self.config['host']}", self.change_host),
                 pystray.MenuItem(lambda _: "Data folder: " + (self.config["data_path"] or "default"), self.change_data_path),
+                pystray.MenuItem(lambda _: "Models folder: " + (self.config["models_path"] or "default"), self.change_models_path),
                 pystray.MenuItem(lambda _: "DB path: " + (self.config["db_path"] or "default"), self.change_db_path),
                 pystray.MenuItem(
                     "Launch at startup",
@@ -479,13 +481,15 @@ class TrayApp:
         env = os.environ.copy()
         if FROZEN:
             # Point the server subprocess at the per-user data directory (overridable via config)
-            env["DATA_PATH"]   = self.config["data_path"] or str(_DATA_ROOT / "data")
-            env["MODELS_PATH"] = str(_DATA_ROOT / "models")
+            env["DATA_PATH"]   = self.config["data_path"]   or str(_DATA_ROOT / "data")
+            env["MODELS_PATH"] = self.config["models_path"] or str(_DATA_ROOT / "models")
             env["LOG_PATH"]    = str(_DATA_ROOT / "logs")
         else:
             env["PYTHONPATH"] = str(REPO_ROOT)
             if self.config["data_path"]:
                 env["DATA_PATH"] = self.config["data_path"]
+            if self.config["models_path"]:
+                env["MODELS_PATH"] = self.config["models_path"]
         if self.config["db_path"]:
             env["DB_PATH"] = self.config["db_path"]
 
@@ -612,6 +616,13 @@ class TrayApp:
         if path is None:
             return
         self.config["data_path"] = path.rstrip("/\\")
+        self._apply_setting_change()
+
+    def change_models_path(self, _icon=None, _item=None) -> None:
+        path = self._run_on_main_thread(lambda: _ask_directory(self._tk_root, "Choose Argus models folder"))
+        if path is None:
+            return
+        self.config["models_path"] = path.rstrip("/\\")
         self._apply_setting_change()
 
     def change_db_path(self, _icon=None, _item=None) -> None:
