@@ -88,7 +88,15 @@ class FaceEngine:
         min_size = settings_cache.cache.get_or("face.min_face_size", 40)
 
         t0 = time.monotonic()
-        raw = self._app.get(image)
+        try:
+            raw = self._app.get(image)
+        except Exception as exc:
+            # InsightFace's landmark model can return None for certain images
+            # (very small, extreme angle, partial crop) and then crashes internally
+            # rather than skipping the face. Treat the whole image as zero faces
+            # rather than propagating a 500.
+            logger.warning("InsightFace detection failed (%s: %s) — skipping image", type(exc).__name__, exc)
+            return []
         detections: list[FaceDetection] = []
         for face in raw:
             if float(face.det_score) < min_conf:
