@@ -19,6 +19,15 @@ venv/
 # Log files (generated at runtime)
 /logs/
 
+# PyInstaller build outputs
+/build/
+/dist/
+packaging/icon.ico
+packaging/icon.icns
+
+# Tray config (local machine settings)
+tray_config.json
+
 # OS
 .DS_Store
 Thumbs.db

@@ -27,6 +27,15 @@ import os
 import sys
 
 ONEFILE = os.environ.get("PACKAGE_MODE", "onefile") == "onefile"
+
+# Read version from the single source of truth
+def _read_version():
+    init = os.path.join(SPECPATH, "..", "app", "__init__.py")
+    for line in open(init).readlines():
+        if line.startswith("__version__"):
+            return line.split("=")[1].strip().strip('"').strip("'")
+    return "0.0.0"
+version = _read_version()
 block_cipher = None
 REPO_ROOT = os.path.dirname(SPECPATH)
 
@@ -164,7 +173,7 @@ if sys.platform == "darwin":
         icon=icon_path,
         bundle_identifier="com.argus.app",
         info_plist={
-            "CFBundleShortVersionString": "0.1.0",
+            "CFBundleShortVersionString": version,
             "NSHighResolutionCapable": True,
             "LSUIElement": True,  # tray-only, no Dock icon
         },
