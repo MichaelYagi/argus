@@ -22,17 +22,12 @@ templates = Jinja2Templates(directory="app/templates")
 
 
 def engine_flags() -> dict:
-    """Which recognition engines are active (model activated AND engine loaded).
+    """Which recognition engines are active (model activated in DB).
     Drives nav visibility, the Detect/Test mode control, and the readiness banner —
-    all rendered server-side so there's no flash. Shared by every page context."""
-    from app.inference.registry import registry
-    from app.inference.runner import _inference_url
-    if _inference_url():
-        face_active   = bool(store.get_active_model("face"))
-        object_active = bool(store.get_active_model("object"))
-    else:
-        face_active   = bool(store.get_active_model("face")   and registry.get_face_engine())
-        object_active = bool(store.get_active_model("object") and registry.get_object_engine())
+    all rendered server-side so there's no flash. Shared by every page context.
+    DB-only: the banner means "setup complete", not "engine currently in memory"."""
+    face_active   = bool(store.get_active_model("face"))
+    object_active = bool(store.get_active_model("object"))
     return {"face_active": face_active, "object_active": object_active}
 
 SLIDER_RANGES = {
