@@ -559,7 +559,12 @@ class TrayApp:
             self._notify(f"Couldn't save logs: {exc}")
 
     def open_data_folder(self, _icon=None, _item=None) -> None:
-        folder = _DATA_ROOT / "data" if FROZEN else REPO_ROOT / "data"
+        if self.config.get("data_path"):
+            folder = Path(self.config["data_path"])
+        elif FROZEN:
+            folder = _DATA_ROOT / "data"
+        else:
+            folder = REPO_ROOT / "data"
         folder.mkdir(parents=True, exist_ok=True)
         try:
             if platform.system() == "Windows":
