@@ -443,6 +443,13 @@ class TrayApp:
         self.icon.update_menu()
 
     def _notify(self, message: str) -> None:
+        if platform.system() == "Darwin":
+            subprocess.run(
+                ["osascript", "-e",
+                 f'display notification "{_applescript_escape(message)}" with title "Argus"'],
+                capture_output=True,
+            )
+            return
         try:
             self.icon.notify(message, "Argus")
         except NotImplementedError:
