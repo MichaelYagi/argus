@@ -160,7 +160,16 @@ def main() -> None:
     parser = argparse.ArgumentParser(description="Argus face & object recognition server")
     parser.add_argument("--host", default="127.0.0.1")
     parser.add_argument("--port", type=int, default=8100)
+    parser.add_argument("--db-path",     metavar="PATH", help="Path to argus.db (overrides DB_PATH env / .env)")
+    parser.add_argument("--data-path",   metavar="PATH", help="Data directory for sources/crops (overrides DATA_PATH)")
+    parser.add_argument("--models-path", metavar="PATH", help="Models directory (overrides MODELS_PATH)")
     args = parser.parse_args()
+    if args.db_path:
+        os.environ["DB_PATH"] = args.db_path
+    if args.data_path:
+        os.environ["DATA_PATH"] = args.data_path
+    if args.models_path:
+        os.environ["MODELS_PATH"] = args.models_path
     uvicorn.run("app.main:app", host=args.host, port=args.port, log_config=_LOG_CONFIG)
 
 
