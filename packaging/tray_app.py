@@ -178,7 +178,10 @@ def _find_listening_pid(port: int) -> int | None:
                 if f":{port} " in line and "LISTENING" in line:
                     return int(line.split()[-1])
         else:
-            result = subprocess.run(["lsof", "-ti", f":{port}", "-sTCP:LISTEN"], capture_output=True, text=True, timeout=5)
+            result = subprocess.run(
+                ["lsof", "-ti", f":{port}", "-sTCP:LISTEN"],
+                capture_output=True, text=True, timeout=5,
+            )
             pids = result.stdout.split()
             if pids:
                 return int(pids[0])
@@ -213,9 +216,11 @@ def _set_launch_at_login_windows(enabled: bool) -> None:
         if FROZEN:
             content = f'@echo off\r\nstart "" "{sys.executable}"\r\n'
         else:
+            ps1 = f"{REPO_ROOT}\\packaging\\tray.ps1"
             content = (
                 "@echo off\r\n"
-                f'start "" powershell -NoProfile -WindowStyle Hidden -ExecutionPolicy Bypass -File "{REPO_ROOT}\\packaging\\tray.ps1"\r\n'
+                f'start "" powershell -NoProfile -WindowStyle Hidden'
+                f' -ExecutionPolicy Bypass -File "{ps1}"\r\n'
             )
         path.write_text(content)
     else:
@@ -406,9 +411,18 @@ class TrayApp:
                 pystray.Menu.SEPARATOR,
                 pystray.MenuItem(lambda _: f"Port: {self.config['port']}", self.change_port),
                 pystray.MenuItem(lambda _: f"Host: {self.config['host']}", self.change_host),
-                pystray.MenuItem(lambda _: "Data folder: " + (self.config["data_path"] or "default"), self.change_data_path),
-                pystray.MenuItem(lambda _: "Models folder: " + (self.config["models_path"] or "default"), self.change_models_path),
-                pystray.MenuItem(lambda _: "DB path: " + (self.config["db_path"] or "default"), self.change_db_path),
+                pystray.MenuItem(
+                    lambda _: "Data folder: " + (self.config["data_path"] or "default"),
+                    self.change_data_path,
+                ),
+                pystray.MenuItem(
+                    lambda _: "Models folder: " + (self.config["models_path"] or "default"),
+                    self.change_models_path,
+                ),
+                pystray.MenuItem(
+                    lambda _: "DB path: " + (self.config["db_path"] or "default"),
+                    self.change_db_path,
+                ),
                 pystray.MenuItem(
                     "Launch at startup",
                     self.toggle_launch_at_login,
