@@ -116,6 +116,20 @@ datas = [
     (repo_path("app", "db", "schema.sql"), "app/db"),
 ]
 
+# InsightFace package data files (meanshape_68.pkl etc.).
+# insightface/data/pickle_object.get_object() uses sys._MEIPASS as the base
+# when frozen, then looks for _MEIPASS/objects/<name>.pkl.  Without this entry
+# get_object() returns None, mean_lmk is None, and every image crashes in the
+# 3D landmark model.  Bundle insightface/data/objects/ at 'objects/' so the
+# path matches what the frozen app expects.
+try:
+    import insightface.data as _ifd
+    _insightface_objects = os.path.join(os.path.dirname(_ifd.__file__), "objects")
+    if os.path.isdir(_insightface_objects):
+        datas.append((_insightface_objects, "objects"))
+except Exception:
+    pass
+
 ICON_WIN = repo_path("packaging", "icon.ico")
 ICON_MAC = repo_path("packaging", "icon.icns")
 icon_path = None
