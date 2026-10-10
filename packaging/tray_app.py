@@ -62,6 +62,8 @@ DEFAULT_CONFIG = {
     "port": 8100,
     "host": "127.0.0.1",
     "launch_at_login": False,
+    "data_path": "",   # empty = use default per-user dir (frozen) or repo/data/ (source)
+    "db_path": "",     # empty = DATA_PATH/argus.db
 }
 
 
@@ -306,6 +308,30 @@ def _osascript_ask_string(prompt: str, initial: str) -> str | None:
     return out.split(marker, 1)[1].rsplit(", button returned:", 1)[0]
 
 
+def _ask_directory(root, prompt: str) -> str | None:
+    if platform.system() == "Darwin":
+        script = f'POSIX path of (choose folder with prompt "{_applescript_escape(prompt)}")'
+        result = subprocess.run(["osascript", "-e", script], capture_output=True, text=True)
+        if result.returncode != 0:
+            return None
+        return result.stdout.strip() or None
+    from tkinter import filedialog
+    path = filedialog.askdirectory(title=prompt, parent=root)
+    return path or None
+
+
+def _ask_open_file(root, prompt: str) -> str | None:
+    if platform.system() == "Darwin":
+        script = f'POSIX path of (choose file with prompt "{_applescript_escape(prompt)}")'
+        result = subprocess.run(["osascript", "-e", script], capture_output=True, text=True)
+        if result.returncode != 0:
+            return None
+        return result.stdout.strip() or None
+    from tkinter import filedialog
+    path = filedialog.askopenfilename(title=prompt, filetypes=[("SQLite DB", "*.db"), ("All files", "*")], parent=root)
+    return path or None
+
+
 def _ask_save_path(root, initial_name: str) -> str | None:
     if platform.system() == "Darwin":
         return _osascript_ask_save_path(initial_name)
@@ -379,6 +405,8 @@ class TrayApp:
                 pystray.Menu.SEPARATOR,
                 pystray.MenuItem(lambda _: f"Port: {self.config['port']}", self.change_port),
                 pystray.MenuItem(lambda _: f"Host: {self.config['host']}", self.change_host),
+                pystray.MenuItem(lambda _: "Data folder: " + (self.config["data_path"] or "default"), self.change_data_path),
+                pystray.MenuItem(lambda _: "DB path: " + (self.config["db_path"] or "default"), self.change_db_path),
                 pystray.MenuItem(
                     "Launch at startup",
                     self.toggle_launch_at_login,
@@ -450,12 +478,16 @@ class TrayApp:
 
         env = os.environ.copy()
         if FROZEN:
-            # Point the server subprocess at the per-user data directory
-            env["DATA_PATH"]   = str(_DATA_ROOT / "data")
+            # Point the server subprocess at the per-user data directory (overridable via config)
+            env["DATA_PATH"]   = self.config["data_path"] or str(_DATA_ROOT / "data")
             env["MODELS_PATH"] = str(_DATA_ROOT / "models")
             env["LOG_PATH"]    = str(_DATA_ROOT / "logs")
         else:
             env["PYTHONPATH"] = str(REPO_ROOT)
+            if self.config["data_path"]:
+                env["DATA_PATH"] = self.config["data_path"]
+        if self.config["db_path"]:
+            env["DB_PATH"] = self.config["db_path"]
 
         LOG_PATH.parent.mkdir(parents=True, exist_ok=True)
         self.log_file = open(LOG_PATH, "a", buffering=1)
@@ -568,6 +600,20 @@ class TrayApp:
         if not value:
             return
         self.config["host"] = value.strip()
+        self._apply_setting_change()
+
+    def change_data_path(self, _icon=None, _item=None) -> None:
+        path = self._run_on_main_thread(lambda: _ask_directory(self._tk_root, "Choose Argus data folder"))
+        if path is None:
+            return
+        self.config["data_path"] = path.rstrip("/\\")
+        self._apply_setting_change()
+
+    def change_db_path(self, _icon=None, _item=None) -> None:
+        path = self._run_on_main_thread(lambda: _ask_open_file(self._tk_root, "Choose Argus database file"))
+        if path is None:
+            return
+        self.config["db_path"] = path
         self._apply_setting_change()
 
     def toggle_launch_at_login(self, _icon=None, _item=None) -> None:
