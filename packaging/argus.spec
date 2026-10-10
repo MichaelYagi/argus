@@ -117,16 +117,24 @@ datas = [
 ]
 
 # InsightFace package data files (meanshape_68.pkl etc.).
-# insightface/data/pickle_object.get_object() uses sys._MEIPASS as the base
-# when frozen, then looks for _MEIPASS/objects/<name>.pkl.  Without this entry
-# get_object() returns None, mean_lmk is None, and every image crashes in the
-# 3D landmark model.  Bundle insightface/data/objects/ at 'objects/' so the
-# path matches what the frozen app expects.
+#
+# get_object() in pickle_object.py looks up meanshape_68.pkl at runtime.
+# The lookup path depends on the InsightFace version installed in the build venv:
+#
+#   InsightFace >= 1.0.1 (has sys.frozen check):
+#     base_dir = sys._MEIPASS  →  _MEIPASS/objects/<name>.pkl
+#
+#   InsightFace <= 0.7.x (no sys.frozen check, uses __file__):
+#     base_dir = Path(__file__).parent  →  _MEIPASS/insightface/data/objects/<name>.pkl
+#
+# Bundle the objects/ directory at BOTH destinations so the frozen app works
+# regardless of which version is installed in the macOS/Windows build venv.
 try:
     import insightface.data as _ifd
     _insightface_objects = os.path.join(os.path.dirname(_ifd.__file__), "objects")
     if os.path.isdir(_insightface_objects):
         datas.append((_insightface_objects, "objects"))
+        datas.append((_insightface_objects, os.path.join("insightface", "data", "objects")))
 except Exception:
     pass
 
