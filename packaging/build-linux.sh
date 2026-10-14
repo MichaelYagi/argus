@@ -17,14 +17,19 @@ fi
 echo "== Installing pyinstaller =="
 .venv/bin/pip install pyinstaller
 
-# onnxruntime-gpu bundles CUDA/cuDNN shared libraries (~500 MB on Linux),
-# bloating the frozen binary past GitHub's 2 GB release-asset limit.
-# Linux runners have no CUDA anyway; swap in the CPU-only wheel instead.
-# The app auto-detects GPU availability at runtime via
-# onnxruntime.get_available_providers(), so behaviour is unchanged.
-echo "== Swapping onnxruntime-gpu for CPU-only onnxruntime =="
+# The GitHub Actions ubuntu-latest runner has the CUDA toolkit, so pip
+# installs CUDA-enabled wheels by default:
+#   - onnxruntime-gpu  (~500 MB with CUDA/cuDNN libs)
+#   - torch            (~2.5 GB CUDA wheel)
+# Together they push the frozen binary past GitHub's 2 GB release-asset
+# limit.  Force CPU-only wheels instead; the app auto-detects GPU
+# availability at runtime via onnxruntime.get_available_providers(), so
+# behaviour on a CUDA machine is unchanged -- it just won't find a GPU.
+echo "== Swapping to CPU-only ML wheels (onnxruntime, torch) =="
 .venv/bin/pip uninstall -y onnxruntime-gpu 2>/dev/null || true
 .venv/bin/pip install onnxruntime
+# torch CPU wheel is ~200 MB installed vs ~2.5 GB for the CUDA wheel.
+.venv/bin/pip install torch torchvision --index-url https://download.pytorch.org/whl/cpu
 
 echo "== Installing UPX (binary compressor) =="
 sudo apt-get install -y upx-ucl 2>/dev/null || true
