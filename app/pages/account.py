@@ -16,11 +16,12 @@ from app.core.security import (
     key_hint,
     verify_password,
 )
+from app.core.paths import templates_dir
 from app.db import store
 from app.pages.main_pages import engine_flags as _engine_flags
 
 router = APIRouter()
-templates = Jinja2Templates(directory="app/templates")
+templates = Jinja2Templates(directory=str(templates_dir()))
 
 
 def _require(request: Request):

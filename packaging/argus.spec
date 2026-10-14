@@ -107,9 +107,9 @@ hidden_imports = [
 
 # Templates and static files must be bundled -- Jinja2 loads them from disk
 # at request time via FileSystemLoader, so they can't be discovered from
-# pyc bytecode alone.  The destination paths match the relative layout the
-# app already expects (app/templates/, app/static/, app/db/schema.sql), so
-# no path-resolution changes are needed in the app itself.
+# pyc bytecode alone.  The destination paths match the layout app/core/paths.py
+# expects when frozen: app/core/paths.templates_dir() returns
+# _MEIPASS/app/templates/ when sys.frozen is True.
 datas = [
     (repo_path("app", "templates"), "app/templates"),
     (repo_path("app", "static"),    "app/static"),

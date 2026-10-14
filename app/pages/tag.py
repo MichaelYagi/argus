@@ -11,11 +11,12 @@ from fastapi.templating import Jinja2Templates
 from app import __version__
 from app.core import settings_cache
 from app.core.auth import get_session_env, get_session_user, is_admin
+from app.core.paths import templates_dir
 from app.db import store
 from app.pages.main_pages import engine_flags as _engine_flags
 
 router = APIRouter()
-templates = Jinja2Templates(directory="app/templates")
+templates = Jinja2Templates(directory=str(templates_dir()))
 
 
 @router.get("/tag/{source_image_id}", response_class=HTMLResponse)

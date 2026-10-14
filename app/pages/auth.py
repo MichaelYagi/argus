@@ -9,6 +9,7 @@ from fastapi.responses import RedirectResponse
 from fastapi.templating import Jinja2Templates
 
 from app.core import settings_cache
+from app.core.paths import templates_dir
 from app.core.auth import get_session_user
 from app.core.security import (
     REMEMBER_MAX_AGE,
@@ -22,7 +23,7 @@ from app.core.security import (
 from app.db import store
 
 router = APIRouter()
-templates = Jinja2Templates(directory="app/templates")
+templates = Jinja2Templates(directory=str(templates_dir()))
 
 _COOKIE = "argus_remember"
 

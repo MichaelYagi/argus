@@ -6,10 +6,11 @@ from fastapi import APIRouter, Request
 from fastapi.responses import RedirectResponse
 from fastapi.templating import Jinja2Templates
 
+from app.core.paths import templates_dir
 from app.pages.main_pages import _base
 
 router = APIRouter()
-templates = Jinja2Templates(directory="app/templates")
+templates = Jinja2Templates(directory=str(templates_dir()))
 
 
 @router.get("/detect")

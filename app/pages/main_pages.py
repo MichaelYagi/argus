@@ -13,12 +13,13 @@ from fastapi.templating import Jinja2Templates
 from app import __version__
 from app.api._utils import delete_crops, delete_sources, gc_source_files
 from app.core.auth import get_session_env, get_session_user
+from app.core.paths import templates_dir
 from app.db import store
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
-templates = Jinja2Templates(directory="app/templates")
+templates = Jinja2Templates(directory=str(templates_dir()))
 
 
 def engine_flags() -> dict:
