@@ -8,6 +8,7 @@ from fastapi.templating import Jinja2Templates
 
 from app import __version__
 from app.core.auth import get_session_user
+from app.core.paths import templates_dir
 from app.core.security import (
     generate_api_key,
     generate_temp_password,
@@ -16,7 +17,6 @@ from app.core.security import (
     key_hint,
     verify_password,
 )
-from app.core.paths import templates_dir
 from app.db import store
 from app.pages.main_pages import engine_flags as _engine_flags
 

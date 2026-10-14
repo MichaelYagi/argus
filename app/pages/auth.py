@@ -9,8 +9,8 @@ from fastapi.responses import RedirectResponse
 from fastapi.templating import Jinja2Templates
 
 from app.core import settings_cache
-from app.core.paths import templates_dir
 from app.core.auth import get_session_user
+from app.core.paths import templates_dir
 from app.core.security import (
     REMEMBER_MAX_AGE,
     create_remember_token,
