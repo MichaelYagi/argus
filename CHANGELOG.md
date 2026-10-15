@@ -5,6 +5,127 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [0.1.0-beta.18] — 2026-10-15
+
+### Fixed
+
+- **macOS app "can't be opened" after download.** GitHub Actions' artifact download step strips Unix execute permissions. The release CI now restores `+x` on the macOS binary before zipping, so downloaded builds open without needing `chmod`.
+
+---
+
+## [0.1.0-beta.17] — 2026-10-13
+
+### Changed
+
+- **Linux dropped from release artifacts.** PyTorch (required by Ultralytics) ships a CUDA-enabled wheel on the GitHub Actions Linux runner, pushing the frozen binary past GitHub's 2 GB release-asset limit. Windows and macOS are the primary desktop targets; Linux users can build from source with `packaging/build-linux.sh`.
+
+---
+
+## [0.1.0-beta.14] — 2026-10-13
+
+### Fixed
+
+- **`TemplateNotFound` errors in the frozen desktop app.** Jinja2 templates were configured with the relative path `"app/templates"`, which resolves correctly when running via `python -m app` from the project root but fails in the PyInstaller frozen app where the working directory is not `sys._MEIPASS`. All five page modules now use `app.core.paths.templates_dir()`, which returns `sys._MEIPASS/app/templates/` when frozen and a `__file__`-relative path otherwise.
+
+---
+
+## [0.1.0-beta.12] — 2026-10-10
+
+### Changed
+
+- **Release artifacts now served from CDN.** Desktop builds (macOS Silicon, macOS Intel, Windows) are published as GitHub Release assets instead of GitHub Actions artifacts. Release assets are served by Fastly CDN (fast, no expiry); Actions artifacts required authenticated API downloads and expired after 30 days.
+
+---
+
+## [0.1.0-beta.11] — 2026-10-09
+
+### Fixed
+
+- **Face detection silently returning zero results in the frozen desktop app.** InsightFace requires `meanshape_68.pkl` (a 3D landmark shape prior) at runtime. The file was not bundled in the PyInstaller build, causing `get_object("meanshape_68")` to return `None` and the affine-matrix estimation step to crash. The crash is now caught and logged as a warning; the spec bundles `insightface/data/objects/` at both lookup paths (`_MEIPASS/objects/` for InsightFace ≥ 1.0.1 and `_MEIPASS/insightface/data/objects/` for ≤ 0.7.x) so detection works for all installed versions.
+
+---
+
+## [0.1.0-beta.8] — 2026-10-09
+
+### Added
+
+- **`--db-path`, `--data-path`, `--models-path` CLI arguments for `python -m app`.** Paths that were previously only configurable via environment variables can now be passed directly on the command line, making it easier to run multiple isolated Argus instances on the same machine.
+
+---
+
+## [0.1.0-beta.7] — 2026-10-09
+
+### Fixed
+
+- **False "not set up" banner on the dashboard when a model is activated.** `engine_flags()` was checking the in-process engine registry (which is empty on cold start before any detection) instead of the database's active-model record. It now checks the database only, so the "ready" state is shown as soon as a model is marked active regardless of whether it has been loaded into memory yet.
+
+---
+
+## [0.1.0-beta.6] — 2026-10-09
+
+### Changed
+
+- **Tray icon shows amber while the server is starting, turns green only when healthy.** The icon previously went green immediately on launch. It now stays amber until `GET /api/health` returns 200, giving accurate feedback on when the server is actually ready to accept requests.
+
+---
+
+## [0.1.0-beta.5] — 2026-10-09
+
+### Fixed
+
+- **Tray notifications silently failing on macOS.** macOS requires a specific `NSUserNotificationCenter` API path for tray notifications from non-App-Store apps; the previous approach was silently dropped by the OS.
+- **macOS build script failing when tray dependencies were not installed before icon generation.** `build-macos.sh` now installs tray requirements before attempting to generate the `.icns` icon file.
+
+---
+
+## [0.1.0-beta.4] — 2026-10-09
+
+### Added
+
+- **Configurable models folder in the tray app.** The tray config menu now includes a "Models folder" entry alongside the existing data folder and DB path options.
+
+### Fixed
+
+- **`Open data folder` tray menu item ignoring the configured data path.** It now opens the path set in the tray config rather than always opening the default.
+- **Hardcoded macOS bundle version.** The `CFBundleShortVersionString` in the macOS `.app` bundle is now read from `app/__init__.py` at build time instead of being hardcoded.
+
+---
+
+## [0.1.0-beta.3] — 2026-10-09
+
+### Added
+
+- **Configurable data folder and DB path in the tray app.** The tray icon menu exposes a config dialog where the data directory and SQLite database path can be set independently, stored in a per-user config file, and picked up on next server start.
+
+---
+
+## [0.1.0-beta.2] — 2026-10-09
+
+### Added
+
+- **Desktop tray app for macOS and Windows.** PyInstaller-based packaging produces a standalone `.app` (macOS Silicon and Intel) and `.exe` (Windows 10/11) with a system-tray icon. The tray menu provides start/stop/restart controls, one-click browser open, log access, and data folder navigation. No Python installation required.
+- **Documentation site.** A static HTML docs site (`docs/`) covers getting started, core concepts, settings reference, API reference, integration guide, and troubleshooting.
+
+### Fixed
+
+- **Double sidebar divider and missing Windows executable icon.**
+
+---
+
+## [0.1.0-beta.1] — 2026-08-28
+
+### Added
+
+- **Password reset flow.** Users can request a password-reset link from the login page; admins can also generate a temporary password from the account management page.
+- **Bulk reprocess endpoint (`POST /api/images/reprocess`).** Re-runs face and/or object detection on a set of previously ingested source images, optionally replacing existing detections. Runs as a background job with the same progress-tracking mechanism as bulk detect.
+- **Docker Hub as a second image registry.** The release workflow now pushes to both `ghcr.io/michaelyagi/argus` and Docker Hub when a version tag is pushed.
+
+### Fixed
+
+- **Autocomplete dropdown clipping.** The identity-name autocomplete on the tag page was clipped by the image container's `overflow: hidden`. It now renders above the clip boundary.
+
+---
+
 ## [0.1.0-alpha.24] — 2026-07-29
 
 ### Changed
