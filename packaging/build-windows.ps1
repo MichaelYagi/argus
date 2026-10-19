@@ -6,11 +6,13 @@
 # This script adds pyinstaller and the tray deps on top of that.
 #
 # Usage:
-#   packaging\build-windows.ps1              # single Argus.exe (default)
-#   packaging\build-windows.ps1 -Mode onedir # folder instead -- faster startup
+#   packaging\build-windows.ps1              # Argus.exe + _internal\ folder (default)
+#   packaging\build-windows.ps1 -Mode onefile # single Argus.exe
+# onedir is preferred: files live in dist\ permanently (no %TEMP% extraction),
+# faster startup, and lower antivirus false-positive rate than onefile.
 param(
     [ValidateSet("onefile", "onedir")]
-    [string]$Mode = "onefile"
+    [string]$Mode = "onedir"
 )
 $ErrorActionPreference = "Stop"
 Set-Location (Split-Path $PSScriptRoot -Parent)
