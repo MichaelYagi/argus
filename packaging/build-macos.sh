@@ -6,11 +6,14 @@
 # Prerequisite: a .venv already set up with requirements.txt installed.
 #
 # Usage:
-#   packaging/build-macos.sh            # single-file exe inside Argus.app (default)
-#   packaging/build-macos.sh onedir     # folder inside Argus.app instead
+#   packaging/build-macos.sh            # onedir bundle inside Argus.app (default)
+#   packaging/build-macos.sh onefile    # single-file exe inside Argus.app
+# onedir is preferred for long-running processes: files live permanently inside
+# the .app bundle rather than being extracted to /var/folders/tmp on each launch,
+# so macOS's temp-file cleaner cannot delete them while the app is running.
 set -euo pipefail
 cd "$(dirname "$0")/.."
-MODE="${1:-onefile}"
+MODE="${1:-onedir}"
 if [[ "$MODE" != "onefile" && "$MODE" != "onedir" ]]; then
   echo "Usage: $0 [onefile|onedir]" >&2
   exit 1
