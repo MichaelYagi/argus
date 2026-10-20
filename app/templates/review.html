@@ -39,8 +39,8 @@
       <input type="checkbox" id="sg-select-all" onchange="sgSelectAll(this)"> Select all
     </label>
     <span class="muted" style="font-size:13px"><span id="sg-count">0</span> selected</span>
-    <button id="sg-confirm-btn" class="btn btn-success" onclick="sgConfirm()" disabled>Confirm selected</button>
-    <button id="sg-dismiss-btn" class="btn btn-danger" onclick="sgDismiss()" disabled>Dismiss selected</button>
+    <button id="sg-confirm-btn" class="btn btn-success" onclick="sgConfirm(this)" disabled>Confirm selected</button>
+    <button id="sg-dismiss-btn" class="btn btn-danger" onclick="sgDismiss(this)" disabled>Dismiss selected</button>
   </div>
   <div id="suggested-list"></div>
 </div>
@@ -52,7 +52,7 @@
       <input type="checkbox" id="nm-select-all" onchange="nmSelectAll(this)"> Select all
     </label>
     <span class="muted" style="font-size:13px"><span id="nm-count">0</span> selected</span>
-    <button id="nm-dismiss-btn" class="btn btn-danger" onclick="nmDismiss()" disabled>Unassign selected</button>
+    <button id="nm-dismiss-btn" class="btn btn-danger" onclick="nmDismiss(this)" disabled>Unassign selected</button>
   </div>
   <div id="nomatch-list"></div>
 </div>
@@ -68,8 +68,8 @@
       <input type="checkbox" id="mm-select-all" onchange="mmSelectAll(this)"> Select all
     </label>
     <span class="muted" style="font-size:13px"><span id="mm-count">0</span> selected</span>
-    <button id="mm-confirm-btn" class="btn btn-success" onclick="mmConfirm()" disabled>Confirm selected</button>
-    <button id="mm-dismiss-btn" class="btn btn-danger" onclick="mmDismiss()" disabled>Unassign selected</button>
+    <button id="mm-confirm-btn" class="btn btn-success" onclick="mmConfirm(this)" disabled>Confirm selected</button>
+    <button id="mm-dismiss-btn" class="btn btn-danger" onclick="mmDismiss(this)" disabled>Unassign selected</button>
   </div>
   <div id="mismatch-list"></div>
 </div>

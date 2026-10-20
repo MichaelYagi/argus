@@ -205,9 +205,9 @@
     }
   }
 
-  window.sgConfirm = () => bulkAction([...selSg], 'confirm', selSg, sgAll);
-  window.sgDismiss = () => bulkAction([...selSg], 'reject',  selSg, sgAll);
-  window.nmDismiss = () => bulkAction([...selNm], 'unassign', selNm, nmAll);
+  window.sgConfirm = async btn => { await withSpinner(btn, () => bulkAction([...selSg], 'confirm', selSg, sgAll)); updateBars(); };
+  window.sgDismiss = async btn => { await withSpinner(btn, () => bulkAction([...selSg], 'reject',  selSg, sgAll)); updateBars(); };
+  window.nmDismiss = async btn => { await withSpinner(btn, () => bulkAction([...selNm], 'unassign', selNm, nmAll)); updateBars(); };
 
   function getActiveTab() {
     if (document.getElementById('panel-sg').style.display !== 'none') return 'sg';
@@ -238,36 +238,42 @@
   window.nmSelectAll = cb => toggleAll(nomatchList, selNm, cb.checked);
   window.mmSelectAll = cb => toggleAll(mismatchList, selMm, cb.checked);
 
-  window.mmConfirm = async () => {
-    const ids = [...selMm];
-    if (!ids.length) return;
-    const ok = await sendReview('/api/review/mismatches/dismiss', {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ detection_ids: ids }),
+  window.mmConfirm = async btn => {
+    await withSpinner(btn, async () => {
+      const ids = [...selMm];
+      if (!ids.length) return;
+      const ok = await sendReview('/api/review/mismatches/dismiss', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ detection_ids: ids }),
+      });
+      if (!ok) return;
+      ids.forEach(id => removeMismatchCard(id));
+      selMm.clear();
+      if (mmAll) mmAll.checked = false;
+      updateBars();
+      reloadOtherTabs('mm');
+      if (window.showToast) showToast(ids.length + ' confirmed', 'success');
     });
-    if (!ok) return;
-    ids.forEach(id => removeMismatchCard(id));
-    selMm.clear();
-    if (mmAll) mmAll.checked = false;
     updateBars();
-    reloadOtherTabs('mm');
-    if (window.showToast) showToast(ids.length + ' confirmed', 'success');
   };
 
-  window.mmDismiss = async () => {
-    const ids = [...selMm];
-    if (!ids.length) return;
-    const items = ids.map(id => ({ detection_id: id, action: 'unassign' }));
-    const ok = await sendReview('/api/review/bulk', {
-      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(items),
+  window.mmDismiss = async btn => {
+    await withSpinner(btn, async () => {
+      const ids = [...selMm];
+      if (!ids.length) return;
+      const items = ids.map(id => ({ detection_id: id, action: 'unassign' }));
+      const ok = await sendReview('/api/review/bulk', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(items),
+      });
+      if (!ok) return;
+      ids.forEach(id => removeMismatchCard(id));
+      selMm.clear();
+      if (mmAll) mmAll.checked = false;
+      updateBars();
+      reloadOtherTabs('mm');
+      if (window.showToast) showToast(ids.length + ' unassigned', 'success');
     });
-    if (!ok) return;
-    ids.forEach(id => removeMismatchCard(id));
-    selMm.clear();
-    if (mmAll) mmAll.checked = false;
     updateBars();
-    reloadOtherTabs('mm');
-    if (window.showToast) showToast(ids.length + ' unassigned', 'success');
   };
 
   function toggleAll(listEl, sel, on) {
@@ -365,7 +371,7 @@
     const suggestions = item.suggested_matches
       .filter(m => m.identity_id !== currentId)
       .map(m =>
-        `<button class="suggest-btn" onclick="doReassign(${item.detection_id},${m.identity_id})">
+        `<button class="suggest-btn" onclick="doReassign(this,${item.detection_id},${m.identity_id})">
            ${esc(m.label)} <span class="muted" style="font-size:11px">${(m.similarity*100).toFixed(0)}% match</span>
          </button>`
       ).join('');
@@ -402,12 +408,12 @@
 
           ${matched ? `
           <div style="display:flex;gap:6px;margin-bottom:10px;align-items:center">
-            <button class="btn btn-success" onclick="doConfirm(${item.detection_id})">Yes, this is ${name}</button>
-            <button class="btn btn-danger"  onclick="doReject(${item.detection_id})">No, not ${name}</button>
+            <button class="btn btn-success" onclick="doConfirm(this,${item.detection_id})">Yes, this is ${name}</button>
+            <button class="btn btn-danger"  onclick="doReject(this,${item.detection_id})">No, not ${name}</button>
             <a class="rc-tag-link" href="/tag/${item.source_image_id}?focus=${item.detection_id}" style="font-size:12px;margin-left:4px;white-space:nowrap">View in image</a>
           </div>` : `
           <div style="margin-bottom:10px;display:flex;align-items:center;gap:8px">
-            <button class="btn btn-ghost" onclick="doDismiss(${item.detection_id})">Unassign</button>
+            <button class="btn btn-ghost" onclick="doDismiss(this,${item.detection_id})">Unassign</button>
             <a class="rc-tag-link" href="/tag/${item.source_image_id}?focus=${item.detection_id}" style="font-size:12px;white-space:nowrap">View in image</a>
           </div>`}
 
@@ -424,7 +430,7 @@
             <span class="ra-wrap" style="display:inline-flex;gap:4px;position:relative;flex:1">
               <input type="text" id="ra-${item.detection_id}" placeholder="Type a name…"
                      style="width:100%;max-width:180px" autocomplete="off">
-              <button class="btn btn-ghost" onclick="doReassignLabel(${item.detection_id})">Assign</button>
+              <button class="btn btn-ghost" onclick="doReassignLabel(this,${item.detection_id})">Assign</button>
             </span>
           </div>
 
@@ -539,8 +545,8 @@
           </div>
 
           <div style="display:flex;gap:6px;margin-bottom:10px;align-items:center;flex-wrap:wrap">
-            <button class="btn btn-ghost" onclick="doMismatchOk(${item.detection_id})">Looks correct</button>
-            <button class="btn btn-ghost" onclick="doMismatchDismiss(${item.detection_id})">Unassign</button>
+            <button class="btn btn-ghost" onclick="doMismatchOk(this,${item.detection_id})">Looks correct</button>
+            <button class="btn btn-ghost" onclick="doMismatchDismiss(this,${item.detection_id})">Unassign</button>
             ${item.source_image_id
               ? `<a class="rc-tag-link" href="/tag/${item.source_image_id}?focus=${item.detection_id}" style="font-size:12px;white-space:nowrap">View in image</a>`
               : ''}
@@ -551,7 +557,7 @@
             <span class="ra-wrap" style="display:inline-flex;gap:4px;position:relative;flex:1">
               <input type="text" id="ra-mm-${item.detection_id}" placeholder="Type a name…"
                      style="width:100%;max-width:180px" autocomplete="off">
-              <button class="btn btn-ghost" onclick="doMismatchReassignLabel(${item.detection_id})">Assign</button>
+              <button class="btn btn-ghost" onclick="doMismatchReassignLabel(this,${item.detection_id})">Assign</button>
             </span>
           </div>
 
@@ -601,68 +607,76 @@
     data.items.forEach(renderMismatchItem);
   }
 
-  window.doMismatchOk = async id => {
-    const ok = await sendReview('/api/review/mismatches/' + id + '/dismiss', { method: 'POST' });
-    if (ok) {
-      removeMismatchCard(id);
-      reloadOtherTabs('mm');
-      if (window.showToast) showToast('Marked as correct', 'success');
-    }
+  window.doMismatchOk = async (btn, id) => {
+    await withSpinner(btn, async () => {
+      const ok = await sendReview('/api/review/mismatches/' + id + '/dismiss', { method: 'POST' });
+      if (ok) { removeMismatchCard(id); reloadOtherTabs('mm'); if (window.showToast) showToast('Marked as correct', 'success'); }
+    });
   };
 
-  window.doMismatchDismiss = async id => {
-    if (await sendReview('/api/review/' + id + '/unassign', { method: 'POST' })) {
-      removeMismatchCard(id);
-      reloadOtherTabs('mm');
-      if (window.showToast) showToast('Unassigned', 'success');
-    }
+  window.doMismatchDismiss = async (btn, id) => {
+    await withSpinner(btn, async () => {
+      if (await sendReview('/api/review/' + id + '/unassign', { method: 'POST' })) {
+        removeMismatchCard(id); reloadOtherTabs('mm'); if (window.showToast) showToast('Unassigned', 'success');
+      }
+    });
   };
 
-  window.doMismatchReassignLabel = async id => {
+  window.doMismatchReassignLabel = async (btn, id) => {
     const label = document.getElementById('ra-mm-' + id)?.value.trim();
     if (!label) return;
-    const ok = await sendReview('/api/review/' + id + '/reassign', {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ label }),
+    await withSpinner(btn, async () => {
+      const ok = await sendReview('/api/review/' + id + '/reassign', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ label }),
+      });
+      if (ok) { addFaceLabel(label); removeMismatchCard(id); reloadOtherTabs('mm'); }
     });
-    if (ok) { addFaceLabel(label); removeMismatchCard(id); reloadOtherTabs('mm'); }
   };
 
-  window.doConfirm = async id => {
-    if (await sendReview('/api/review/' + id + '/confirm', { method: 'POST' })) {
-      removeCard(id);
-      reloadOtherTabs(getActiveTab());
-    }
-  };
-  window.doReject = async id => {
-    if (!await sendReview('/api/review/' + id + '/reject', { method: 'POST' })) return;
-    removeCard(id);
-    const item = itemCache.get(id);
-    if (item) renderItem({ ...item, current_identity: null, suggested_matches: [] }, nmLoader);
-    nmLoader.checkEmpty();
-    reloadOtherTabs(getActiveTab());
-  };
-  window.doDismiss = async id => {
-    if (await sendReview('/api/review/' + id + '/unassign', { method: 'POST' })) {
-      removeCard(id);
-      reloadOtherTabs(getActiveTab());
-    }
-  };
-  window.doReassign = async (id, identityId) => {
-    const ok = await sendReview('/api/review/' + id + '/reassign', {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ identity_id: identityId }),
+  window.doConfirm = async (btn, id) => {
+    await withSpinner(btn, async () => {
+      if (await sendReview('/api/review/' + id + '/confirm', { method: 'POST' })) {
+        removeCard(id); reloadOtherTabs(getActiveTab());
+      }
     });
-    if (ok) { removeCard(id); reloadOtherTabs(getActiveTab()); }
   };
-  window.doReassignLabel = async id => {
+  window.doReject = async (btn, id) => {
+    await withSpinner(btn, async () => {
+      if (!await sendReview('/api/review/' + id + '/reject', { method: 'POST' })) return;
+      removeCard(id);
+      const item = itemCache.get(id);
+      if (item) renderItem({ ...item, current_identity: null, suggested_matches: [] }, nmLoader);
+      nmLoader.checkEmpty();
+      reloadOtherTabs(getActiveTab());
+    });
+  };
+  window.doDismiss = async (btn, id) => {
+    await withSpinner(btn, async () => {
+      if (await sendReview('/api/review/' + id + '/unassign', { method: 'POST' })) {
+        removeCard(id); reloadOtherTabs(getActiveTab());
+      }
+    });
+  };
+  window.doReassign = async (btn, id, identityId) => {
+    await withSpinner(btn, async () => {
+      const ok = await sendReview('/api/review/' + id + '/reassign', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ identity_id: identityId }),
+      });
+      if (ok) { removeCard(id); reloadOtherTabs(getActiveTab()); }
+    });
+  };
+  window.doReassignLabel = async (btn, id) => {
     const label = document.getElementById('ra-' + id)?.value.trim();
     if (!label) return;
-    const ok = await sendReview('/api/review/' + id + '/reassign', {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ label }),
+    await withSpinner(btn, async () => {
+      const ok = await sendReview('/api/review/' + id + '/reassign', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ label }),
+      });
+      if (ok) { addFaceLabel(label); removeCard(id); reloadOtherTabs(getActiveTab()); }
     });
-    if (ok) { addFaceLabel(label); removeCard(id); reloadOtherTabs(getActiveTab()); }
   };
 
   // ---------------------------------------------------------------------------
@@ -719,9 +733,9 @@
         <span class="sg-group-ct muted">${n} ${n === 1 ? 'face' : 'faces'}</span>
         <div class="sg-group-acts" onclick="event.stopPropagation()">
           <button class="btn btn-success" style="font-size:12px;padding:4px 10px"
-                  onclick="confirmGroup(${group.identity_id})">Confirm group</button>
+                  onclick="confirmGroup(this,${group.identity_id})">Confirm group</button>
           <button class="btn btn-danger" style="font-size:12px;padding:4px 10px"
-                  onclick="dismissGroup(${group.identity_id})">Dismiss group</button>
+                  onclick="dismissGroup(this,${group.identity_id})">Dismiss group</button>
         </div>
       </div>
       <div class="sg-group-bd" id="sg-group-bd-${group.identity_id}"></div>`;
@@ -736,53 +750,57 @@
     if (el) el.classList.toggle('collapsed');
   };
 
-  window.confirmGroup = async identityId => {
+  window.confirmGroup = async (btn, identityId) => {
     const group = document.getElementById('sg-group-' + identityId);
     if (!group) return;
     const ids = [...group.querySelectorAll('.rc-card')].map(c => parseInt(c.id.replace('rc-', '')));
     if (!ids.length) return;
-    const ok = await sendReview('/api/review/bulk', {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(ids.map(id => ({ detection_id: id, action: 'confirm' }))),
+    await withSpinner(btn, async () => {
+      const ok = await sendReview('/api/review/bulk', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(ids.map(id => ({ detection_id: id, action: 'confirm' }))),
+      });
+      if (!ok) return;
+      if (focusedCard && group.contains(focusedCard)) setFocusedCard(null);
+      ids.forEach(id => selSg.delete(id));
+      group.remove();
+      updateTabBadge('sg', -ids.length);
+      decrementBadge(ids.length);
+      updateBars();
+      checkSgEmpty();
+      setFocusedCard(getActivePanelCards()[0] || null);
+      reloadOtherTabs('sg');
+      if (window.showToast) showToast(ids.length + ' confirmed', 'success');
     });
-    if (!ok) return;
-    if (focusedCard && group.contains(focusedCard)) setFocusedCard(null);
-    ids.forEach(id => selSg.delete(id));
-    group.remove();
-    updateTabBadge('sg', -ids.length);
-    decrementBadge(ids.length);
-    updateBars();
-    checkSgEmpty();
-    setFocusedCard(getActivePanelCards()[0] || null);
-    reloadOtherTabs('sg');
-    if (window.showToast) showToast(ids.length + ' confirmed', 'success');
   };
 
-  window.dismissGroup = async identityId => {
+  window.dismissGroup = async (btn, identityId) => {
     const group = document.getElementById('sg-group-' + identityId);
     if (!group) return;
     const ids = [...group.querySelectorAll('.rc-card')].map(c => parseInt(c.id.replace('rc-', '')));
     if (!ids.length) return;
-    const ok = await sendReview('/api/review/bulk', {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(ids.map(id => ({ detection_id: id, action: 'reject' }))),
+    await withSpinner(btn, async () => {
+      const ok = await sendReview('/api/review/bulk', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(ids.map(id => ({ detection_id: id, action: 'reject' }))),
+      });
+      if (!ok) return;
+      if (focusedCard && group.contains(focusedCard)) setFocusedCard(null);
+      ids.forEach(id => selSg.delete(id));
+      group.remove();
+      updateTabBadge('sg', -ids.length);
+      decrementBadge(ids.length);
+      updateBars();
+      checkSgEmpty();
+      setFocusedCard(getActivePanelCards()[0] || null);
+      ids.forEach(id => {
+        const item = itemCache.get(id);
+        if (item) renderItem({ ...item, current_identity: null, suggested_matches: [] }, nmLoader);
+      });
+      nmLoader.checkEmpty();
+      reloadOtherTabs('sg');
+      if (window.showToast) showToast(ids.length + ' dismissed', 'success');
     });
-    if (!ok) return;
-    if (focusedCard && group.contains(focusedCard)) setFocusedCard(null);
-    ids.forEach(id => selSg.delete(id));
-    group.remove();
-    updateTabBadge('sg', -ids.length);
-    decrementBadge(ids.length);
-    updateBars();
-    checkSgEmpty();
-    setFocusedCard(getActivePanelCards()[0] || null);
-    ids.forEach(id => {
-      const item = itemCache.get(id);
-      if (item) renderItem({ ...item, current_identity: null, suggested_matches: [] }, nmLoader);
-    });
-    nmLoader.checkEmpty();
-    reloadOtherTabs('sg');
-    if (window.showToast) showToast(ids.length + ' dismissed', 'success');
   };
 
   // ---------------------------------------------------------------------------
@@ -816,8 +834,8 @@
     if (e.key === 'c' && !e.shiftKey && !e.ctrlKey && !e.metaKey && !e.altKey) {
       if (!id) return;
       e.preventDefault();
-      if (activeTab === 'sg') window.doConfirm(id);
-      else if (activeTab === 'mm') window.doMismatchOk(id);
+      if (activeTab === 'sg') window.doConfirm(null, id);
+      else if (activeTab === 'mm') window.doMismatchOk(null, id);
       return;
     }
 
@@ -825,9 +843,9 @@
     if (e.key === 'd' && !e.shiftKey && !e.ctrlKey && !e.metaKey && !e.altKey) {
       if (!id) return;
       e.preventDefault();
-      if (activeTab === 'sg') window.doReject(id);
-      else if (activeTab === 'nm') window.doDismiss(id);
-      else if (activeTab === 'mm') window.doMismatchDismiss(id);
+      if (activeTab === 'sg') window.doReject(null, id);
+      else if (activeTab === 'nm') window.doDismiss(null, id);
+      else if (activeTab === 'mm') window.doMismatchDismiss(null, id);
       return;
     }
 
@@ -850,7 +868,7 @@
       const group = focusedCard.closest('.sg-group');
       if (!group) return;
       e.preventDefault();
-      window.confirmGroup(parseInt(group.id.replace('sg-group-', '')));
+      window.confirmGroup(null, parseInt(group.id.replace('sg-group-', '')));
       return;
     }
 
@@ -860,24 +878,24 @@
       const group = focusedCard.closest('.sg-group');
       if (!group) return;
       e.preventDefault();
-      window.dismissGroup(parseInt(group.id.replace('sg-group-', '')));
+      window.dismissGroup(null, parseInt(group.id.replace('sg-group-', '')));
       return;
     }
 
     // Shift+C — confirm selected
     if (e.key === 'C' && e.shiftKey && !e.ctrlKey && !e.metaKey && !e.altKey) {
       e.preventDefault();
-      if (activeTab === 'sg') window.sgConfirm();
-      else if (activeTab === 'mm') window.mmConfirm();
+      if (activeTab === 'sg') window.sgConfirm(null);
+      else if (activeTab === 'mm') window.mmConfirm(null);
       return;
     }
 
     // Shift+D — dismiss selected
     if (e.key === 'D' && e.shiftKey && !e.ctrlKey && !e.metaKey && !e.altKey) {
       e.preventDefault();
-      if (activeTab === 'sg') window.sgDismiss();
-      else if (activeTab === 'nm') window.nmDismiss();
-      else if (activeTab === 'mm') window.mmDismiss();
+      if (activeTab === 'sg') window.sgDismiss(null);
+      else if (activeTab === 'nm') window.nmDismiss(null);
+      else if (activeTab === 'mm') window.mmDismiss(null);
       return;
     }
 
